@@ -4,6 +4,10 @@ A command-line interface for [The Blue Alliance](https://www.thebluealliance.com
 
 ## Installation
 
+### Download a release
+
+Download a prebuilt binary for your platform from the [Releases](https://github.com/the-blue-alliance/tba-cli/releases) page.
+
 ### From source
 
 ```
