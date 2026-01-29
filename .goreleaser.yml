@@ -1,7 +1,8 @@
 version: 2
 
 builds:
-  - binary: tba
+  - main: ./cmd/tba
+    binary: tba
     env:
       - CGO_ENABLED=0
     goos:
