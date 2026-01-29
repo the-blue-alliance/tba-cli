@@ -11,7 +11,7 @@ Download a prebuilt binary for your platform from the [Releases](https://github.
 ### From source
 
 ```
-go install github.com/the-blue-alliance/tba-cli@latest
+go install github.com/the-blue-alliance/tba-cli/cmd/tba@latest
 ```
 
 ## Authentication
