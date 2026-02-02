@@ -10,6 +10,7 @@ import (
 )
 
 const baseURL = "https://www.thebluealliance.com/api/v3"
+const userAgent = "tba-cli"
 
 type Client struct {
 	http   *http.Client
@@ -31,6 +32,7 @@ func (c *Client) Get(path string, result interface{}) error {
 		return err
 	}
 	req.Header.Set("X-TBA-Auth-Key", c.apiKey)
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -53,6 +55,7 @@ func (c *Client) GetRaw(path string) (json.RawMessage, error) {
 		return nil, err
 	}
 	req.Header.Set("X-TBA-Auth-Key", c.apiKey)
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
