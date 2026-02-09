@@ -37,6 +37,17 @@ tba insight leaderboards --year 2024
 tba status
 ```
 
+### Custom API server
+
+Use `--base-url` to point at a different API server (e.g. a local dev instance):
+
+```
+tba --base-url http://localhost:8080/api/v3 status
+tba --base-url http://localhost:8080/api/v3 auth login
+```
+
+Auth keys are stored separately per base URL, so prod and local credentials don't conflict.
+
 ### JSON output
 
 Use `--json` to get raw JSON, or `--jq` to filter with jq expressions:
