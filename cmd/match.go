@@ -19,7 +19,7 @@ var matchViewCmd = &cobra.Command{
 	Short: "View match info",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}

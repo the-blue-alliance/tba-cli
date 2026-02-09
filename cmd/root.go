@@ -14,6 +14,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("json", false, "Output as JSON")
 	rootCmd.PersistentFlags().String("jq", "", "Apply jq expression to JSON output")
 	rootCmd.PersistentFlags().Bool("no-pager", false, "Disable paging")
+	rootCmd.PersistentFlags().String("base-url", "", "Override API base URL (e.g. http://localhost:8080/api/v3)")
 
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(statusCmd)

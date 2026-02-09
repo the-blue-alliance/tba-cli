@@ -19,9 +19,10 @@ var authLoginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with TBA API",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		baseURL := getBaseURL(cmd)
 		key, _ := cmd.Flags().GetString("key")
 		if key == "" {
-			fmt.Print("Enter your TBA API key: ")
+			fmt.Printf("Enter your TBA API key for %s: ", baseURL)
 			reader := bufio.NewReader(os.Stdin)
 			input, err := reader.ReadString('\n')
 			if err != nil {
@@ -32,10 +33,10 @@ var authLoginCmd = &cobra.Command{
 		if key == "" {
 			return fmt.Errorf("API key cannot be empty")
 		}
-		if err := config.SaveAPIKey(key); err != nil {
+		if err := config.SaveAPIKey(key, baseURL); err != nil {
 			return err
 		}
-		fmt.Println("Authenticated successfully.")
+		fmt.Printf("Authenticated successfully for %s.\n", baseURL)
 		return nil
 	},
 }
@@ -44,14 +45,16 @@ var authStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		key, err := config.GetAPIKey()
+		baseURL := getBaseURL(cmd)
+		key, err := config.GetAPIKey(baseURL)
 		if err != nil {
-			fmt.Println("Not authenticated.")
+			fmt.Printf("Not authenticated for %s.\n", baseURL)
 			return nil
 		}
 		// Mask key
 		masked := key[:4] + strings.Repeat("*", len(key)-4)
 		fmt.Printf("Authenticated with key: %s\n", masked)
+		fmt.Printf("Base URL: %s\n", baseURL)
 		fmt.Printf("Config file: %s\n", config.AuthFile())
 		return nil
 	},
@@ -61,14 +64,12 @@ var authLogoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Remove stored API key",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := config.RemoveAPIKey(); err != nil {
-			if os.IsNotExist(err) {
-				fmt.Println("Not authenticated.")
-				return nil
-			}
-			return err
+		baseURL := getBaseURL(cmd)
+		if err := config.RemoveAPIKey(baseURL); err != nil {
+			fmt.Println(err)
+			return nil
 		}
-		fmt.Println("Logged out.")
+		fmt.Printf("Logged out from %s.\n", baseURL)
 		return nil
 	},
 }

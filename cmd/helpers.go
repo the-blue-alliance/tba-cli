@@ -2,8 +2,21 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
+
+func getBaseURL(cmd *cobra.Command) string {
+	baseURL, _ := cmd.Flags().GetString("base-url")
+	if baseURL == "" {
+		return api.DefaultBaseURL
+	}
+	return baseURL
+}
+
+func newClient(cmd *cobra.Command) (*api.Client, error) {
+	return api.NewClient(getBaseURL(cmd))
+}
 
 func wantJSON(cmd *cobra.Command) bool {
 	jsonFlag, _ := cmd.Flags().GetBool("json")

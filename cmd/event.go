@@ -19,7 +19,7 @@ var eventViewCmd = &cobra.Command{
 	Short: "View event info",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -49,7 +49,7 @@ var eventListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List events for a year",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -73,7 +73,7 @@ var eventTeamsCmd = &cobra.Command{
 	Short: "List teams at event",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ var eventMatchesCmd = &cobra.Command{
 	Short: "List matches at event",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ var eventRankingsCmd = &cobra.Command{
 	Short: "Show event rankings",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ var eventAlliancesCmd = &cobra.Command{
 	Short: "Show event alliances",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ var eventAwardsCmd = &cobra.Command{
 	Short: "Show event awards",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -223,7 +223,7 @@ var eventOPRsCmd = &cobra.Command{
 	Short: "Show event OPRs",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -248,7 +248,7 @@ var eventDistrictPointsCmd = &cobra.Command{
 	Short: "Show event district points",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -267,7 +267,7 @@ var eventPredictionsCmd = &cobra.Command{
 	Short: "Show event predictions",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -286,7 +286,7 @@ var eventInsightsCmd = &cobra.Command{
 	Short: "Show event insights",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}

@@ -18,7 +18,7 @@ var districtListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List districts for a year",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -42,7 +42,7 @@ var districtEventsCmd = &cobra.Command{
 	Short: "List district events",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -65,7 +65,7 @@ var districtTeamsCmd = &cobra.Command{
 	Short: "List district teams",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ var districtRankingsCmd = &cobra.Command{
 	Short: "Show district rankings",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}

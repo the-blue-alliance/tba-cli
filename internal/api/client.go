@@ -9,24 +9,28 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/config"
 )
 
-const baseURL = "https://www.thebluealliance.com/api/v3"
+const DefaultBaseURL = "https://www.thebluealliance.com/api/v3"
 const userAgent = "tba-cli"
 
 type Client struct {
-	http   *http.Client
-	apiKey string
+	http    *http.Client
+	apiKey  string
+	baseURL string
 }
 
-func NewClient() (*Client, error) {
-	key, err := config.GetAPIKey()
+func NewClient(baseURL string) (*Client, error) {
+	if baseURL == "" {
+		baseURL = DefaultBaseURL
+	}
+	key, err := config.GetAPIKey(baseURL)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{http: &http.Client{}, apiKey: key}, nil
+	return &Client{http: &http.Client{}, apiKey: key, baseURL: baseURL}, nil
 }
 
 func (c *Client) Get(path string, result interface{}) error {
-	url := baseURL + path
+	url := c.baseURL + path
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
@@ -49,7 +53,7 @@ func (c *Client) Get(path string, result interface{}) error {
 }
 
 func (c *Client) GetRaw(path string) (json.RawMessage, error) {
-	url := baseURL + path
+	url := c.baseURL + path
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err

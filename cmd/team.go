@@ -19,7 +19,7 @@ var teamViewCmd = &cobra.Command{
 	Short: "View team info",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -43,7 +43,7 @@ var teamListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List teams",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -79,7 +79,7 @@ var teamEventsCmd = &cobra.Command{
 	Short: "List team events",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ var teamMatchesCmd = &cobra.Command{
 	Short: "List team matches for a year",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ var teamAwardsCmd = &cobra.Command{
 	Short: "List team awards",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -155,7 +155,7 @@ var teamMediaCmd = &cobra.Command{
 	Short: "List team media",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -179,7 +179,7 @@ var teamRobotsCmd = &cobra.Command{
 	Short: "List team robots",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -202,7 +202,7 @@ var teamDistrictsCmd = &cobra.Command{
 	Short: "List team districts",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}

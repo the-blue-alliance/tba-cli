@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -17,7 +16,7 @@ var insightLeaderboardsCmd = &cobra.Command{
 	Use:   "leaderboards",
 	Short: "Show insight leaderboards for a year",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
@@ -38,7 +37,7 @@ var insightNotablesCmd = &cobra.Command{
 	Use:   "notables",
 	Short: "Show notable insights for a year",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := api.NewClient()
+		client, err := newClient(cmd)
 		if err != nil {
 			return err
 		}
