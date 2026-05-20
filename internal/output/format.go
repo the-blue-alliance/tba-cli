@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/csv"
 	"fmt"
 	"os"
 	"strings"
@@ -69,6 +70,42 @@ func PrintTable(headers []string, rows [][]string) {
 			} else {
 				fmt.Print(cell)
 			}
+		}
+		fmt.Println()
+	}
+}
+
+func PrintDelimited(headers []string, rows [][]string, delim rune) error {
+	w := csv.NewWriter(os.Stdout)
+	w.Comma = delim
+	if err := w.Write(headers); err != nil {
+		return err
+	}
+	if err := w.WriteAll(rows); err != nil {
+		return err
+	}
+	w.Flush()
+	return w.Error()
+}
+
+func PrintMarkdownTable(headers []string, rows [][]string) {
+	escape := func(s string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(s, "|", "\\|"), "\n", " ")
+	}
+	fmt.Print("|")
+	for _, h := range headers {
+		fmt.Printf(" %s |", escape(h))
+	}
+	fmt.Println()
+	fmt.Print("|")
+	for range headers {
+		fmt.Print(" --- |")
+	}
+	fmt.Println()
+	for _, row := range rows {
+		fmt.Print("|")
+		for _, cell := range row {
+			fmt.Printf(" %s |", escape(cell))
 		}
 		fmt.Println()
 	}

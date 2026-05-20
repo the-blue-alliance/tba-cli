@@ -60,17 +60,15 @@ var teamListCmd = &cobra.Command{
 			}
 			allTeams = append(allTeams, teams...)
 		}
-		return outputData(cmd, allTeams, func() {
-			rows := make([][]string, len(allTeams))
-			for i, t := range allTeams {
-				rows[i] = []string{
-					fmt.Sprintf("%d", t.TeamNumber),
-					t.Nickname,
-					output.FormatLocation(t.City, t.StateProv, t.Country),
-				}
+		rows := make([][]string, len(allTeams))
+		for i, t := range allTeams {
+			rows[i] = []string{
+				fmt.Sprintf("%d", t.TeamNumber),
+				t.Nickname,
+				output.FormatLocation(t.City, t.StateProv, t.Country),
 			}
-			output.PrintTable([]string{"Number", "Name", "Location"}, rows)
-		})
+		}
+		return outputTable(cmd, allTeams, []string{"Number", "Name", "Location"}, rows)
 	},
 }
 
@@ -88,13 +86,11 @@ var teamEventsCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/team/frc%s/events/%d", args[0], year), &events); err != nil {
 			return err
 		}
-		return outputData(cmd, events, func() {
-			rows := make([][]string, len(events))
-			for i, e := range events {
-				rows[i] = []string{e.Key, e.Name, e.StartDate, output.FormatLocation(e.City, e.StateProv, e.Country)}
-			}
-			output.PrintTable([]string{"Key", "Name", "Start Date", "Location"}, rows)
-		})
+		rows := make([][]string, len(events))
+		for i, e := range events {
+			rows[i] = []string{e.Key, e.Name, e.StartDate, output.FormatLocation(e.City, e.StateProv, e.Country)}
+		}
+		return outputTable(cmd, events, []string{"Key", "Name", "Start Date", "Location"}, rows)
 	},
 }
 
@@ -112,13 +108,11 @@ var teamMatchesCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/team/frc%s/matches/%d", args[0], year), &matches); err != nil {
 			return err
 		}
-		return outputData(cmd, matches, func() {
-			rows := make([][]string, len(matches))
-			for i, m := range matches {
-				rows[i] = []string{m.Key, m.CompLevel, m.WinningAlliance}
-			}
-			output.PrintTable([]string{"Key", "Level", "Winner"}, rows)
-		})
+		rows := make([][]string, len(matches))
+		for i, m := range matches {
+			rows[i] = []string{m.Key, m.CompLevel, m.WinningAlliance}
+		}
+		return outputTable(cmd, matches, []string{"Key", "Level", "Winner"}, rows)
 	},
 }
 
@@ -140,13 +134,11 @@ var teamAwardsCmd = &cobra.Command{
 		if err := client.Get(path, &awards); err != nil {
 			return err
 		}
-		return outputData(cmd, awards, func() {
-			rows := make([][]string, len(awards))
-			for i, a := range awards {
-				rows[i] = []string{a.EventKey, a.Name, strconv.Itoa(a.Year)}
-			}
-			output.PrintTable([]string{"Event", "Award", "Year"}, rows)
-		})
+		rows := make([][]string, len(awards))
+		for i, a := range awards {
+			rows[i] = []string{a.EventKey, a.Name, strconv.Itoa(a.Year)}
+		}
+		return outputTable(cmd, awards, []string{"Event", "Award", "Year"}, rows)
 	},
 }
 
@@ -164,13 +156,11 @@ var teamMediaCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/team/frc%s/media/%d", args[0], year), &media); err != nil {
 			return err
 		}
-		return outputData(cmd, media, func() {
-			rows := make([][]string, len(media))
-			for i, m := range media {
-				rows[i] = []string{m.Type, m.ForeignKey, m.ViewURL}
-			}
-			output.PrintTable([]string{"Type", "Key", "URL"}, rows)
-		})
+		rows := make([][]string, len(media))
+		for i, m := range media {
+			rows[i] = []string{m.Type, m.ForeignKey, m.ViewURL}
+		}
+		return outputTable(cmd, media, []string{"Type", "Key", "URL"}, rows)
 	},
 }
 
@@ -187,13 +177,11 @@ var teamRobotsCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/team/frc%s/robots", args[0]), &robots); err != nil {
 			return err
 		}
-		return outputData(cmd, robots, func() {
-			rows := make([][]string, len(robots))
-			for i, r := range robots {
-				rows[i] = []string{strconv.Itoa(r.Year), r.RobotName}
-			}
-			output.PrintTable([]string{"Year", "Robot Name"}, rows)
-		})
+		rows := make([][]string, len(robots))
+		for i, r := range robots {
+			rows[i] = []string{strconv.Itoa(r.Year), r.RobotName}
+		}
+		return outputTable(cmd, robots, []string{"Year", "Robot Name"}, rows)
 	},
 }
 
@@ -210,13 +198,11 @@ var teamDistrictsCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/team/frc%s/districts", args[0]), &districts); err != nil {
 			return err
 		}
-		return outputData(cmd, districts, func() {
-			rows := make([][]string, len(districts))
-			for i, d := range districts {
-				rows[i] = []string{d.Key, d.DisplayName, strconv.Itoa(d.Year)}
-			}
-			output.PrintTable([]string{"Key", "Name", "Year"}, rows)
-		})
+		rows := make([][]string, len(districts))
+		for i, d := range districts {
+			rows[i] = []string{d.Key, d.DisplayName, strconv.Itoa(d.Year)}
+		}
+		return outputTable(cmd, districts, []string{"Key", "Name", "Year"}, rows)
 	},
 }
 
