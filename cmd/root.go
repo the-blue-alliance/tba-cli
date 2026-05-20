@@ -5,9 +5,11 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "tba",
-	Short: "The Blue Alliance CLI",
-	Long:  "A command-line interface for The Blue Alliance API v3.",
+	Use:           "tba",
+	Short:         "The Blue Alliance CLI",
+	Long:          "A command-line interface for The Blue Alliance API v3.",
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 func init() {
