@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
@@ -38,5 +40,5 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 }
 
 func currentYear() int {
-	return 2025 // Could be dynamic, but keeping simple
+	return time.Now().Year()
 }
