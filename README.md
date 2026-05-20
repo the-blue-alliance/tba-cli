@@ -60,6 +60,21 @@ tba --no-cache <command>   # skip cache and conditional headers for this invocat
 
 `TBA_CACHE_DIR` overrides the cache location.
 
+### Shell completion
+
+`tba completion <shell>` prints a completion script for `bash`, `zsh`, `fish`, or `powershell`. Common install paths:
+
+```
+# bash
+tba completion bash > /etc/bash_completion.d/tba
+
+# zsh
+tba completion zsh > "${fpath[1]}/_tba"
+
+# fish
+tba completion fish > ~/.config/fish/completions/tba.fish
+```
+
 ### Output formats
 
 `--format` selects the output format for any command:
