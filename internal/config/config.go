@@ -22,6 +22,23 @@ func AuthFile() string {
 	return filepath.Join(configDir(), "auth.yaml")
 }
 
+// secureAuthFile sets the auth file mode to 0600 if it exists and is broader.
+// Best-effort: errors from Stat/Chmod are returned to the caller but the file
+// may not exist yet (first login), which is not an error.
+func secureAuthFile() error {
+	info, err := os.Stat(AuthFile())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode().Perm() != 0600 {
+		return os.Chmod(AuthFile(), 0600)
+	}
+	return nil
+}
+
 func GetAPIKey(baseURL string) (string, error) {
 	if key := os.Getenv("TBA_AUTH_KEY"); key != "" {
 		return key, nil
@@ -36,6 +53,7 @@ func GetAPIKey(baseURL string) (string, error) {
 	if err := v.ReadInConfig(); err != nil {
 		return "", fmt.Errorf("not authenticated for %s. Run 'tba auth login' first", baseURL)
 	}
+	_ = secureAuthFile() // remediate legacy files written with wider perms; ignore errors
 
 	// Try new per-URL format first
 	keys := v.GetStringMapString("keys")
@@ -87,7 +105,10 @@ func SaveAPIKey(key string, baseURL string) error {
 	keys[baseURL] = key
 	v.Set("keys", keys)
 
-	return v.WriteConfigAs(AuthFile())
+	if err := v.WriteConfigAs(AuthFile()); err != nil {
+		return err
+	}
+	return os.Chmod(AuthFile(), 0600)
 }
 
 func RemoveAPIKey(baseURL string) error {
@@ -121,5 +142,8 @@ func RemoveAPIKey(baseURL string) error {
 	delete(keys, baseURL)
 	v.Set("keys", keys)
 
-	return v.WriteConfigAs(AuthFile())
+	if err := v.WriteConfigAs(AuthFile()); err != nil {
+		return err
+	}
+	return os.Chmod(AuthFile(), 0600)
 }
