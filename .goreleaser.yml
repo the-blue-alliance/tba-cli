@@ -25,3 +25,12 @@ checksum:
 
 changelog:
   sort: asc
+
+announce:
+  slack:
+    enabled: true
+    message_template: |
+      Released *tba-cli* `{{ .Tag }}` :tada:
+      https://github.com/{{ .Env.GITHUB_REPOSITORY }}/releases/tag/{{ .Tag }}
+    username: release-bot
+    icon_emoji: ":tba:"
