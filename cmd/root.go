@@ -16,6 +16,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("json", false, "Output as JSON")
 	rootCmd.PersistentFlags().String("jq", "", "Apply jq expression to JSON output")
 	rootCmd.PersistentFlags().String("base-url", "", "Override API base URL (e.g. http://localhost:8080/api/v3)")
+	rootCmd.PersistentFlags().Bool("no-cache", false, "Disable HTTP response cache for this invocation")
 
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(statusCmd)

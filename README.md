@@ -48,6 +48,18 @@ tba --base-url http://localhost:8080/api/v3 auth login
 
 Auth keys are stored separately per base URL, so prod and local credentials don't conflict.
 
+### Caching
+
+Responses are cached locally and revalidated with `If-None-Match` / `If-Modified-Since` on each request. When the server returns `304 Not Modified`, the cached body is used. Cache files live in `$XDG_CACHE_HOME/tba` (defaults to `~/.cache/tba`).
+
+```
+tba cache info    # show directory, entry count, total size
+tba cache clear   # remove all cached responses
+tba --no-cache <command>   # skip cache and conditional headers for this invocation
+```
+
+`TBA_CACHE_DIR` overrides the cache location.
+
 ### JSON output
 
 Use `--json` to get raw JSON, or `--jq` to filter with jq expressions:

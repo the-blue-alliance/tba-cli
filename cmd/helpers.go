@@ -17,7 +17,14 @@ func getBaseURL(cmd *cobra.Command) string {
 }
 
 func newClient(cmd *cobra.Command) (*api.Client, error) {
-	return api.NewClient(getBaseURL(cmd))
+	c, err := api.NewClient(getBaseURL(cmd))
+	if err != nil {
+		return nil, err
+	}
+	if noCache, _ := cmd.Flags().GetBool("no-cache"); noCache {
+		c.SetUseCache(false)
+	}
+	return c, nil
 }
 
 func wantJSON(cmd *cobra.Command) bool {
