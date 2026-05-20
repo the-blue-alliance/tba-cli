@@ -58,13 +58,11 @@ var eventListCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/events/%d", year), &events); err != nil {
 			return err
 		}
-		return outputData(cmd, events, func() {
-			rows := make([][]string, len(events))
-			for i, e := range events {
-				rows[i] = []string{e.Key, e.Name, e.StartDate, e.EventTypeStr, output.FormatLocation(e.City, e.StateProv, e.Country)}
-			}
-			output.PrintTable([]string{"Key", "Name", "Start", "Type", "Location"}, rows)
-		})
+		rows := make([][]string, len(events))
+		for i, e := range events {
+			rows[i] = []string{e.Key, e.Name, e.StartDate, e.EventTypeStr, output.FormatLocation(e.City, e.StateProv, e.Country)}
+		}
+		return outputTable(cmd, events, []string{"Key", "Name", "Start", "Type", "Location"}, rows)
 	},
 }
 
@@ -81,13 +79,11 @@ var eventTeamsCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/event/%s/teams", args[0]), &teams); err != nil {
 			return err
 		}
-		return outputData(cmd, teams, func() {
-			rows := make([][]string, len(teams))
-			for i, t := range teams {
-				rows[i] = []string{fmt.Sprintf("%d", t.TeamNumber), t.Nickname, output.FormatLocation(t.City, t.StateProv, t.Country)}
-			}
-			output.PrintTable([]string{"Number", "Name", "Location"}, rows)
-		})
+		rows := make([][]string, len(teams))
+		for i, t := range teams {
+			rows[i] = []string{fmt.Sprintf("%d", t.TeamNumber), t.Nickname, output.FormatLocation(t.City, t.StateProv, t.Country)}
+		}
+		return outputTable(cmd, teams, []string{"Number", "Name", "Location"}, rows)
 	},
 }
 
@@ -104,20 +100,18 @@ var eventMatchesCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/event/%s/matches", args[0]), &matches); err != nil {
 			return err
 		}
-		return outputData(cmd, matches, func() {
-			rows := make([][]string, len(matches))
-			for i, m := range matches {
-				blueScore, redScore := "", ""
-				if a, ok := m.Alliances["blue"]; ok {
-					blueScore = strconv.Itoa(a.Score)
-				}
-				if a, ok := m.Alliances["red"]; ok {
-					redScore = strconv.Itoa(a.Score)
-				}
-				rows[i] = []string{m.Key, m.CompLevel, redScore, blueScore, m.WinningAlliance}
+		rows := make([][]string, len(matches))
+		for i, m := range matches {
+			blueScore, redScore := "", ""
+			if a, ok := m.Alliances["blue"]; ok {
+				blueScore = strconv.Itoa(a.Score)
 			}
-			output.PrintTable([]string{"Key", "Level", "Red", "Blue", "Winner"}, rows)
-		})
+			if a, ok := m.Alliances["red"]; ok {
+				redScore = strconv.Itoa(a.Score)
+			}
+			rows[i] = []string{m.Key, m.CompLevel, redScore, blueScore, m.WinningAlliance}
+		}
+		return outputTable(cmd, matches, []string{"Key", "Level", "Red", "Blue", "Winner"}, rows)
 	},
 }
 
@@ -134,17 +128,15 @@ var eventRankingsCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/event/%s/rankings", args[0]), &rankings); err != nil {
 			return err
 		}
-		return outputData(cmd, rankings, func() {
-			rows := make([][]string, len(rankings.Rankings))
-			for i, r := range rankings.Rankings {
-				record := ""
-				if r.Record != nil {
-					record = fmt.Sprintf("%d-%d-%d", r.Record.Wins, r.Record.Losses, r.Record.Ties)
-				}
-				rows[i] = []string{strconv.Itoa(r.Rank), output.TeamNumberFromKey(r.TeamKey), record, strconv.Itoa(r.MatchesPlayed)}
+		rows := make([][]string, len(rankings.Rankings))
+		for i, r := range rankings.Rankings {
+			record := ""
+			if r.Record != nil {
+				record = fmt.Sprintf("%d-%d-%d", r.Record.Wins, r.Record.Losses, r.Record.Ties)
 			}
-			output.PrintTable([]string{"Rank", "Team", "Record", "Played"}, rows)
-		})
+			rows[i] = []string{strconv.Itoa(r.Rank), output.TeamNumberFromKey(r.TeamKey), record, strconv.Itoa(r.MatchesPlayed)}
+		}
+		return outputTable(cmd, rankings, []string{"Rank", "Team", "Record", "Played"}, rows)
 	},
 }
 
@@ -161,24 +153,22 @@ var eventAlliancesCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/event/%s/alliances", args[0]), &alliances); err != nil {
 			return err
 		}
-		return outputData(cmd, alliances, func() {
-			rows := make([][]string, len(alliances))
-			for i, a := range alliances {
-				name := fmt.Sprintf("Alliance %d", i+1)
-				if a.Name != nil {
-					name = *a.Name
-				}
-				picks := ""
-				for j, p := range a.Picks {
-					if j > 0 {
-						picks += ", "
-					}
-					picks += output.TeamNumberFromKey(p)
-				}
-				rows[i] = []string{name, picks}
+		rows := make([][]string, len(alliances))
+		for i, a := range alliances {
+			name := fmt.Sprintf("Alliance %d", i+1)
+			if a.Name != nil {
+				name = *a.Name
 			}
-			output.PrintTable([]string{"Alliance", "Picks"}, rows)
-		})
+			picks := ""
+			for j, p := range a.Picks {
+				if j > 0 {
+					picks += ", "
+				}
+				picks += output.TeamNumberFromKey(p)
+			}
+			rows[i] = []string{name, picks}
+		}
+		return outputTable(cmd, alliances, []string{"Alliance", "Picks"}, rows)
 	},
 }
 
@@ -195,26 +185,24 @@ var eventAwardsCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/event/%s/awards", args[0]), &awards); err != nil {
 			return err
 		}
-		return outputData(cmd, awards, func() {
-			rows := make([][]string, len(awards))
-			for i, a := range awards {
-				recipient := ""
-				if len(a.Recipients) > 0 {
-					r := a.Recipients[0]
-					if r.TeamKey != nil {
-						recipient = output.TeamNumberFromKey(*r.TeamKey)
-					}
-					if r.Awardee != nil {
-						if recipient != "" {
-							recipient += " - "
-						}
-						recipient += *r.Awardee
-					}
+		rows := make([][]string, len(awards))
+		for i, a := range awards {
+			recipient := ""
+			if len(a.Recipients) > 0 {
+				r := a.Recipients[0]
+				if r.TeamKey != nil {
+					recipient = output.TeamNumberFromKey(*r.TeamKey)
 				}
-				rows[i] = []string{a.Name, recipient}
+				if r.Awardee != nil {
+					if recipient != "" {
+						recipient += " - "
+					}
+					recipient += *r.Awardee
+				}
 			}
-			output.PrintTable([]string{"Award", "Recipient"}, rows)
-		})
+			rows[i] = []string{a.Name, recipient}
+		}
+		return outputTable(cmd, awards, []string{"Award", "Recipient"}, rows)
 	},
 }
 
@@ -231,15 +219,13 @@ var eventOPRsCmd = &cobra.Command{
 		if err := client.Get(fmt.Sprintf("/event/%s/oprs", args[0]), &oprs); err != nil {
 			return err
 		}
-		return outputData(cmd, oprs, func() {
-			var rows [][]string
-			for team, opr := range oprs.OPRs {
-				dpr := oprs.DPRs[team]
-				ccwm := oprs.CCWMs[team]
-				rows = append(rows, []string{output.TeamNumberFromKey(team), fmt.Sprintf("%.2f", opr), fmt.Sprintf("%.2f", dpr), fmt.Sprintf("%.2f", ccwm)})
-			}
-			output.PrintTable([]string{"Team", "OPR", "DPR", "CCWM"}, rows)
-		})
+		var rows [][]string
+		for team, opr := range oprs.OPRs {
+			dpr := oprs.DPRs[team]
+			ccwm := oprs.CCWMs[team]
+			rows = append(rows, []string{output.TeamNumberFromKey(team), fmt.Sprintf("%.2f", opr), fmt.Sprintf("%.2f", dpr), fmt.Sprintf("%.2f", ccwm)})
+		}
+		return outputTable(cmd, oprs, []string{"Team", "OPR", "DPR", "CCWM"}, rows)
 	},
 }
 

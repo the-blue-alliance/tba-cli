@@ -60,16 +60,26 @@ tba --no-cache <command>   # skip cache and conditional headers for this invocat
 
 `TBA_CACHE_DIR` overrides the cache location.
 
-### JSON output
+### Output formats
 
-Use `--json` to get raw JSON, or `--jq` to filter with jq expressions:
+`--format` selects the output format for any command:
+
+| Format | Description |
+|--------|-------------|
+| `table` | Aligned text columns (default when stdout is a TTY) |
+| `json` | Pretty-printed JSON (default when stdout is piped); `--json` is a shorthand |
+| `csv` | Comma-separated values |
+| `tsv` | Tab-separated values |
+| `markdown` (`md`) | GitHub-flavored markdown table |
 
 ```
 tba team view 177 --json
 tba event matches 2024necmp --jq '.[].key'
+tba district list --year 2024 --format csv
+tba event rankings 2024necmp --format markdown
 ```
 
-Output is automatically JSON when stdout is piped.
+For single-object commands (e.g. `team view`), tabular formats like `csv`/`tsv`/`markdown` fall back to `json`. Use `--jq` to filter with jq expressions.
 
 ## Commands
 
