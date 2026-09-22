@@ -47,16 +47,31 @@ func TestEventTeamStatusesOverallIsOptIn(t *testing.T) {
 }
 
 // A pre-2023 bracket has no double_elim_round, so no team at the event has a
-// Round; the column is left out rather than printed empty for everybody.
+// Round; the table leaves the column out rather than printing it empty for
+// everybody.
 func TestEventTeamStatusesRoundIsDroppedWithoutADoubleElimBracket(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2019cthar/teams/statuses": teamStatuses2019ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "event", "team-statuses", "2019cthar", "--format", "table")
+	requireNoError(t, err, "")
+
+	if got := lines(out)[0]; strings.Contains(got, "Round") {
+		t.Errorf("header = %q, want no Round column", got)
+	}
+}
+
+// csv keeps it, so that the columns of a file are the same whether the event
+// it describes ran a double-elimination bracket or not.
+func TestEventTeamStatusesCSVKeepsTheRoundColumn(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2019cthar/teams/statuses": teamStatuses2019ctharJSON,
 	})
 	out, _, err := runCmd(t, srv, "event", "team-statuses", "2019cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
-	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Playoff Status\n" +
-		"177,1,10-2-0,Alliance 1,Captain,F,won\n"
+	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Round,Playoff Status\n" +
+		"177,1,10-2-0,Alliance 1,Captain,F,,won\n"
 	if out != want {
 		t.Errorf("csv =\n%s\nwant\n%s", out, want)
 	}

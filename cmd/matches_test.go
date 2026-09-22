@@ -622,14 +622,14 @@ func TestEventMatchesFor2015(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "matches", "2015ctwat", "--format", "csv")
 	requireNoError(t, err, "")
 
-	// The one match is played, so When counts down to nothing and the column
-	// is left out of the listing altogether. 2015 is not today, so the time
-	// carries its date.
+	// The one match is played, so When counts down to nothing -- and stays,
+	// empty, because a file keeps every column. 2015 is not today, so the time
+	// carries its date, and not this season either, so it carries its year.
 	want := []string{
 		"Qual 7", "2015ctwat_qm7",
 		"177, 1071, 2168", "230, 195, 558",
 		"44-44", "tie",
-		localDateTime(1427464800), "scheduled", "Played",
+		localDateTime(1427464800), "", "scheduled", "Played",
 	}
 	if got := findRow(t, parseCSV(t, out), "2015ctwat_qm7"); !equalStrings(got, want) {
 		t.Errorf("row =\n%v\nwant\n%v", got, want)
@@ -637,20 +637,43 @@ func TestEventMatchesFor2015(t *testing.T) {
 }
 
 // Nothing counts down in a listing of matches that are all played, so When is
-// blank the whole way down. A header with nothing under it is not a column.
+// blank the whole way down. A header with nothing under it is not a column --
+// on screen. In csv it is: the header of a file is a schema, and a column that
+// comes and goes with the event asked about is not one.
 func TestEventMatchesDropsTheEmptyWhenColumn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":         event2024ctharJSON,
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	header := lines(out)[0]
+	if strings.Contains(header, "When") {
+		t.Errorf("header = %q, want no When column", header)
+	}
+	if !strings.Contains(header, "Time") || !strings.Contains(header, "Status") {
+		t.Errorf("header = %q, want the columns that do carry something", header)
+	}
+}
+
+func TestEventMatchesCSVKeepsTheEmptyWhenColumn(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
 	})
-	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
-	requireNoError(t, err, errOut)
-
-	header := parseCSV(t, out)[0]
-	if contains(header, "When") {
-		t.Errorf("header = %v, want no When column", header)
-	}
-	if !contains(header, "Time") || !contains(header, "Status") {
-		t.Errorf("header = %v, want the columns that do carry something", header)
+	for _, format := range []string{"csv", "tsv"} {
+		t.Run(format, func(t *testing.T) {
+			out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", format)
+			requireNoError(t, err, errOut)
+			want := []string{
+				"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner",
+				"Time", "When", "Time Source", "Status",
+			}
+			got := strings.Split(lines(out)[0], map[string]string{"csv": ",", "tsv": "\t"}[format])
+			if !equalStrings(got, want) {
+				t.Errorf("header = %v, want %v", got, want)
+			}
+		})
 	}
 }
 

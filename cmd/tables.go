@@ -56,6 +56,27 @@ func outputTableWith(cmd *cobra.Command, data interface{}, table output.Table) e
 	})
 }
 
+// dropEmptyColumnsFor removes the columns nothing in the table filled in —
+// but only from the formats a person reads.
+//
+// A blank stripe down a whole table is a header pretending to be data: 2015
+// had no win/loss record, so its rankings have nothing in Record, and a
+// finished event has nothing to count down to in When. Dropping the column is
+// right for a table on screen and for the markdown that is a table on a page.
+//
+// csv and tsv keep every column, because what they produce is a file, and a
+// file's header is a schema. Dropping a column there made the shape of the
+// data depend on which event was asked for: a script that read Record off
+// column four got a different column four from a 2015 event, and two exports
+// concatenated did not line up. An empty column is the honest answer that the
+// season never had that statistic.
+func dropEmptyColumnsFor(format string, table output.Table) output.Table {
+	if format == "table" || format == "markdown" {
+		return table.DropEmptyColumns()
+	}
+	return table
+}
+
 // playoffStatus renders an alliance's playoff standing.
 //
 // TBA marks the alliance that lost the final "eliminated", the same word it

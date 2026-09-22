@@ -149,13 +149,15 @@ func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor f
 
 	// A column no row has anything in is not a column: a listing of an event
 	// that finished years ago has nothing to count down to, and a blank When
-	// down the whole table is a header pretending to be data.
+	// down the whole table is a header pretending to be data. csv and tsv keep
+	// it, so that a file's header is the same schema whichever event it came
+	// from.
 	//
 	// `event watch` deliberately does not do this. It prints one table and
 	// then appends rows to it for hours, so its columns are fixed by the first
 	// poll; a column dropped then could not come back when the next poll
 	// filled it in.
-	table := output.Table{Headers: headers, Rows: rows}.DropEmptyColumns()
+	table := dropEmptyColumnsFor(format, output.Table{Headers: headers, Rows: rows})
 	if err := outputTable(cmd, matches, table.Headers, table.Rows); err != nil {
 		return err
 	}
