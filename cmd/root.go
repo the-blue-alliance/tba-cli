@@ -63,6 +63,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newInsightCmd())
 	rootCmd.AddCommand(newCacheCmd())
 	rootCmd.AddCommand(newVersionCmd())
+	rootCmd.AddCommand(newDocsCmd())
 
 	return rootCmd
 }
