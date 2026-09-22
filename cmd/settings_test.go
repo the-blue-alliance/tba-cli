@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -45,20 +44,6 @@ func emptyConfigDir(t *testing.T) string {
 	return dir
 }
 
-// devNull is a character device, which is as close to a terminal as a test
-// can get without one.
-func devNull(t *testing.T) *os.File {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("no character-device stand-in for a terminal on Windows")
-	}
-	f, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Fatalf("opening %s: %v", os.DevNull, err)
-	}
-	t.Cleanup(func() { f.Close() })
-	return f
-}
 
 func TestConfigFileSuppliesADefault(t *testing.T) {
 	writeConfig(t, "retries: 0\n")
@@ -224,7 +209,9 @@ func TestFormatFromTheConfigFileAppliesOnATerminal(t *testing.T) {
 	if got := s.Format(&bytes.Buffer{}); got != "" {
 		t.Errorf("Format(pipe) = %q, want the file value to be ignored", got)
 	}
-	if got := s.Format(devNull(t)); got != "table" {
+	// /dev/null used to stand in for a terminal here, which is exactly the
+	// mistake IsTTY made: it is a character device that nobody reads.
+	if got := s.Format(&terminalBuffer{}); got != "table" {
 		t.Errorf("Format(terminal) = %q, want %q", got, "table")
 	}
 }

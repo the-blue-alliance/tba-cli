@@ -113,18 +113,17 @@ func TestIsTTYIsFalseForAClosedFile(t *testing.T) {
 	}
 }
 
-func TestIsTTYIsTrueForADeviceFile(t *testing.T) {
+// /dev/null is a character device, which is what IsTTY used to test for, so
+// `tba ... > /dev/null` rendered a table and coloured it. Nobody is reading
+// it: it is a pipe to nowhere, not a terminal.
+func TestIsTTYIsFalseForDevNull(t *testing.T) {
 	f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
 		t.Skipf("cannot open %s: %v", os.DevNull, err)
 	}
 	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
-		t.Skipf("%s is not a character device here", os.DevNull)
-	}
-	if !IsTTY(f) {
-		t.Errorf("%s is a character device, so IsTTY should be true", os.DevNull)
+	if IsTTY(f) {
+		t.Errorf("%s is not a terminal", os.DevNull)
 	}
 }
 
@@ -178,9 +177,9 @@ func TestIsTTYSeesThroughWrappers(t *testing.T) {
 		t.Skipf("cannot open %s: %v", os.DevNull, err)
 	}
 	defer f.Close()
-	// Whatever the device answers, a wrapper around it must answer the same.
+	// Whatever the file answers, a wrapper around it must answer the same.
 	if got, want := IsTTY(wrapped{wrapped{f}}), IsTTY(f); got != want {
-		t.Errorf("IsTTY(wrapped device) = %v, want %v", got, want)
+		t.Errorf("IsTTY(wrapped file) = %v, want %v", got, want)
 	}
 	if IsTTY(wrapped{&bytes.Buffer{}}) {
 		t.Error("a wrapped buffer is still not a TTY")
