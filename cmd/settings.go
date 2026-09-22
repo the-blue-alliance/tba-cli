@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
@@ -85,12 +86,42 @@ func initSettings(cmd *cobra.Command) error {
 	for _, name := range s.file.Unknown {
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown key %q in %s\n", name, s.file.Path)
 	}
+	if err := s.validate(); err != nil {
+		return err
+	}
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	cmd.SetContext(context.WithValue(ctx, settingsCtxKey{}, s))
 	return nil
+}
+
+// validate checks the settings whose values have to make sense whatever layer
+// they came from.
+//
+// `tba config set retries -1` was refused while `--retries -1` and
+// TBA_RETRIES=-1 were accepted without a word, so the same nonsense was an
+// error in one place and silently something else in another. The wording is
+// the config file's, with the layer named when it is not the flag the user
+// would otherwise go looking for.
+func (s *settingsSet) validate() error {
+	if s.Int("retries") < 0 {
+		return s.settingError("retries", "retries cannot be negative")
+	}
+	if s.Duration("timeout") <= 0 {
+		return s.settingError("timeout", "timeout must be positive")
+	}
+	return nil
+}
+
+// settingError reports a bad value, naming where it came from unless it came
+// from the flag the message already mentions.
+func (s *settingsSet) settingError(name, message string) error {
+	if s.Source(name) == sourceFlag || s.Source(name) == sourceDefault {
+		return clierr.Usage("%s", message)
+	}
+	return clierr.Usage("%s (from %s)", message, s.origin(name))
 }
 
 // settings returns the layered settings for this invocation, building them if
