@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# One release at a time, and never cancel one: a half-finished release has
+# already published artifacts. Two tags pushed together queue up instead.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
