@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -287,7 +286,7 @@ func CompareBreakdowns(m api.Match, full bool) []BreakdownRow {
 			}
 		}
 	}
-	sort.Slice(keys, func(i, j int) bool { return lessBreakdownKey(keys[i], keys[j]) })
+	slices.SortFunc(keys, CompareBreakdownOrder)
 
 	rows := make([]BreakdownRow, 0, len(keys))
 	for _, key := range keys {
@@ -347,15 +346,18 @@ func isNothing(value string) bool {
 	}
 }
 
-func lessBreakdownKey(a, b string) bool {
-	ra, rb := breakdownRank(a), breakdownRank(b)
-	if ra != rb {
-		return ra < rb
+// CompareBreakdownOrder orders two breakdown keys the way a reader wants to
+// see them: the total first, then ranking points, then anything scored in
+// points, then the penalties in their fixed order, then everything else
+// alphabetically. It is a cmp-style comparator for slices.SortFunc.
+func CompareBreakdownOrder(a, b string) int {
+	if c := cmp.Compare(breakdownRank(a), breakdownRank(b)); c != 0 {
+		return c
 	}
-	if ra == rankPenalty {
-		return penaltyIndex(a) < penaltyIndex(b)
+	if breakdownRank(a) == rankPenalty {
+		return cmp.Compare(penaltyIndex(a), penaltyIndex(b))
 	}
-	return a < b
+	return cmp.Compare(a, b)
 }
 
 // The bands a breakdown key falls into, in printing order.
