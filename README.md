@@ -134,7 +134,9 @@ prints everything still to play as the match table below.
 
 Having nothing to report is an answer, not a failure: a team with no event left
 this season, or no match left at the event it is at, exits 0 with the reason on
-stderr and nothing on stdout (`--json` prints `null`). When the event is over,
+stderr and nothing on stdout (`--json` prints `null`). A team that is not at the
+event you named is a different answer: there is no such thing to report, which
+is exit 5, the same as `team standing`. When the event is over,
 the note says so and, if the API will tell it, how the event ended —
 `note: 2024cthar ended 2024-03-24; no matches left for 177; 177 won the event`.
 Asked after August, when the season being searched is done, it points at the
@@ -313,8 +315,16 @@ The fields change every season and are documented nowhere, so they are ordered
 rather than interpreted: the total, the ranking points, everything else that
 scores, the penalties, then the rest alphabetically, with the API's names
 written as words (`autoAmpNoteCount` becomes `Auto Amp Note Count`) and nested
-values flattened into dotted paths. A field both alliances left at zero is
-dropped, since most of a modern breakdown is zero; `--full` keeps every one. A
+values flattened into dotted paths. A blank line separates that scoring summary
+from the game's own detail below it, so forty rows of detail do not read as a
+continuation of the totals.
+
+A row neither alliance did anything in is dropped, since most of a modern
+breakdown is nothing: that means zero on both sides, and equally `None`, `no`
+or absent on both sides, which is how recent seasons spell an unfilled slot. So
+are the season's own constants — the thresholds a bonus is measured against,
+whose names carry `Threshold` — because they are the same in every match of the
+season and both columns always agree on them. `--full` keeps every one. A
 match with no breakdown — anything before 2015, or anything not yet played —
 simply has no such section, and `--format json` is always the API's own answer,
 whole and unordered.
