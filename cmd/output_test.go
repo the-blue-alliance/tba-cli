@@ -263,6 +263,34 @@ func TestBadPresentationFlagsExitTwo(t *testing.T) {
 	}
 }
 
+// --sort must never be a silent no-op: either it orders the JSON, or it says
+// it cannot.
+func TestSortPermutesAPlainJSONList(t *testing.T) {
+	out := districtsCmd(t, "--json", "--sort", "-key")
+	arr := decodeJSON(t, out).([]any)
+	if len(arr) != 2 {
+		t.Fatalf("want 2 districts, got %d:\n%s", len(arr), out)
+	}
+	if got := arr[0].(map[string]any)["key"]; got != "2024ne" {
+		t.Errorf("first key = %v, want 2024ne (descending)", got)
+	}
+}
+
+func TestSortOnANonListJSONPayloadIsAUsageError(t *testing.T) {
+	// event oprs answers with an object keyed by team, which carries no row
+	// order for --sort to apply.
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "oprs", "2024cthar", "--json", "--sort", "-opr")
+	requireErrorContains(t, err, "--sort cannot reorder this JSON payload")
+
+	// The same command in a tabular format still sorts.
+	out, stderr, runErr := runCmd(t, srv, "event", "oprs", "2024cthar", "--format", "csv", "--sort", "-opr")
+	requireNoError(t, runErr, stderr)
+	if len(lines(out)) < 2 {
+		t.Fatalf("want a sorted csv table, got:\n%s", out)
+	}
+}
+
 func TestColorAlwaysDoesNotTouchDataFormats(t *testing.T) {
 	for _, format := range []string{"csv", "tsv", "markdown", "json"} {
 		out := districtsCmd(t, "--format", format, "--color", "always")

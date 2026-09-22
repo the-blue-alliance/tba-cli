@@ -1,6 +1,10 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+)
 
 func TestEventDistrictPointsTable(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
@@ -95,13 +99,21 @@ func TestEventDistrictPointsSortReordersTheTable(t *testing.T) {
 	}
 }
 
-func TestEventDistrictPointsSortLeavesJSONAlone(t *testing.T) {
+// The JSON here is the API's object keyed by team, not the table's rows, so
+// there is no row order to apply to it. Rather than print an unsorted answer to
+// a command that asked for a sorted one, --sort says so and exits 2.
+func TestEventDistrictPointsSortCannotReorderTheJSONObject(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2024cthar/district_points": districtPoints2024ctharJSON,
 	})
-	out, _, err := runCmd(t, srv, "event", "district-points", "2024cthar",
+	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "district-points", "2024cthar",
 		"--json", "--sort", "total")
-	requireNoError(t, err, "")
+	requireErrorContains(t, err, "--sort cannot reorder this JSON payload")
+	requireErrorContains(t, err, "--jq")
+
+	// Without --sort the object is printed as the API returned it.
+	out, stderr, err := runCmd(t, srv, "event", "district-points", "2024cthar", "--json")
+	requireNoError(t, err, stderr)
 	obj := decodeJSON(t, out).(map[string]any)
 	if _, ok := obj["points"]; !ok {
 		t.Errorf("want the API object, got %v", obj)

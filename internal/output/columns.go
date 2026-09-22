@@ -123,35 +123,48 @@ func (t Table) Reorder(order []int) Table {
 	return Table{Headers: t.Headers, Rows: rows}
 }
 
-// PermuteSlice applies a row permutation to the data behind a table so that
-// JSON output matches the order the table would have been printed in. Data that
-// is not a slice of the same length is returned untouched: --sort then only
-// affects the tabular formats, which is better than reshaping a payload we do
-// not understand.
-func PermuteSlice(data interface{}, order []int) interface{} {
-	if len(order) == 0 {
-		return data
-	}
+// CanPermute reports whether PermuteSlice would actually apply order to data.
+//
+// It is the shape check PermuteSlice makes, exposed separately so that a caller
+// can tell a sorted payload from one that was quietly left alone: a JSON
+// document that is not a list of rows (an object, or a list whose elements are
+// not the table's rows) cannot carry a row order, and the caller usually wants
+// to say so rather than print an unsorted answer.
+func CanPermute(data interface{}, order []int) bool {
 	v := reflect.ValueOf(data)
 	if !v.IsValid() {
-		return data
+		return false
 	}
 	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
-		return data
+		return false
 	}
 	// A []byte (json.RawMessage) is a slice too, but its elements are bytes of
 	// an encoded document, not rows; shuffling them would corrupt the JSON.
 	if v.Type().Elem().Kind() == reflect.Uint8 {
-		return data
+		return false
 	}
 	if v.Len() != len(order) {
-		return data
+		return false
 	}
-	out := make([]interface{}, 0, len(order))
 	for _, i := range order {
 		if i < 0 || i >= v.Len() {
-			return data
+			return false
 		}
+	}
+	return true
+}
+
+// PermuteSlice applies a row permutation to the data behind a table so that
+// JSON output matches the order the table would have been printed in. Data that
+// is not a slice of the same length is returned untouched; callers that care
+// ask CanPermute first.
+func PermuteSlice(data interface{}, order []int) interface{} {
+	if len(order) == 0 || !CanPermute(data, order) {
+		return data
+	}
+	v := reflect.ValueOf(data)
+	out := make([]interface{}, 0, len(order))
+	for _, i := range order {
 		out = append(out, v.Index(i).Interface())
 	}
 	return out

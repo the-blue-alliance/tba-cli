@@ -184,7 +184,14 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 			return clierr.Usage("--columns applies to tabular formats; use --jq to shape JSON")
 		}
 		// --sort is about the order of the result, not its shape, so it also
-		// reorders the JSON array the table was built from.
+		// reorders the JSON array the table was built from. When the payload is
+		// not that array — an object keyed by team, a document with the rows
+		// nested inside — there is no order to apply, and saying so beats
+		// printing an unsorted answer to a command that asked for a sorted one.
+		if sortSpec != "" && !output.CanPermute(data, order) {
+			return clierr.Usage("--sort cannot reorder this JSON payload (it is not a list of rows); " +
+				"use --jq to sort it, or drop --format json")
+		}
 		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
 	}
 	if columns != "" {
