@@ -648,7 +648,21 @@ Blue Score:  61
 Winner:      red
 ```
 
-The score breakdown's fields change every season and are documented nowhere, so they are listed as the API gives them, sorted, with nested values flattened into dotted names. A match with no breakdown — anything before 2015, or anything not yet played — simply has no such section.
+The score breakdown follows, as one table with a column per alliance, because what a breakdown is for is comparing the two:
+
+```
+Score breakdown
+Stat                     Red  Blue
+-----------------------  ---  ----
+Total Points             88   61
+RP                       5    1
+Auto Points              23   14
+Teleop Points            57   43
+Foul Count               1    0
+Auto Amp Note Count      1    0
+```
+
+The fields change every season and are documented nowhere, so they are ordered rather than interpreted: the total, the ranking points, everything else that scores, the penalties, then the rest alphabetically, with the API's names written as words (`autoAmpNoteCount` becomes `Auto Amp Note Count`) and nested values flattened into dotted paths. A field both alliances left at zero is dropped, since most of a modern breakdown is zero; `--full` keeps every one. A match with no breakdown — anything before 2015, or anything not yet played — simply has no such section, and `--format json` is always the API's own answer, whole and unordered.
 
 `tba team next <team> [event]` finds the next match a team has not played. With no event it uses the one the team is at today, or the next one it is going to:
 

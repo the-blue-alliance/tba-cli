@@ -34,14 +34,12 @@ func TestMatchViewTable(t *testing.T) {
 		"Blue Score:  61\n" +
 		"Winner:      red\n" +
 		"\n" + frc.Legend + "\n" +
-		"\nScore breakdown — Red\n" +
-		"  autoPoints:   20\n" +
-		"  melody:       yes\n" +
-		"  totalPoints:  88\n" +
-		"\nScore breakdown — Blue\n" +
-		"  autoPoints:   10\n" +
-		"  melody:       no\n" +
-		"  totalPoints:  61\n" +
+		"\nScore breakdown\n" +
+		"Stat          Red  Blue\n" +
+		"------------  ---  ----\n" +
+		"Total Points  88   61  \n" +
+		"Auto Points   20   10  \n" +
+		"Melody        yes  no  \n" +
 		"\nVideos\n" +
 		"  https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
 	if out != want {
@@ -214,5 +212,108 @@ func TestMatchViewRequiresAKey(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
 	if _, _, err := runCmd(t, srv, "match", "view"); err == nil {
 		t.Error("want an error with no match key")
+	}
+}
+
+// The breakdown is one table, an alliance to a column, in the order a
+// breakdown is read: the total, the ranking points, the scoring columns, the
+// penalties, then the detail.
+func TestMatchViewBreakdownIsSideBySide(t *testing.T) {
+	withNow(t, time.Unix(1711136640, 0))
+	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm18": matchViewBreakdown2024JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	body := out[strings.Index(out, "Score breakdown"):]
+	requireContains(t, body, "Stat")
+	for label, want := range map[string][]string{
+		"Total Points":        {"88", "61"},
+		"RP":                  {"5", "1"},
+		"Foul Count":          {"1", "0"},
+		"Auto Amp Note Count": {"1", "0"},
+	} {
+		row := breakdownRow(t, body, label)
+		if row[1] != want[0] || row[2] != want[1] {
+			t.Errorf("%s = %v, want %v", label, row[1:], want)
+		}
+	}
+
+	total := strings.Index(body, "Total Points")
+	rp := strings.Index(body, "RP ")
+	teleop := strings.Index(body, "Teleop Points")
+	fouls := strings.Index(body, "Foul Count")
+	detail := strings.Index(body, "Auto Amp Note Count")
+	if !(total < rp && rp < teleop && teleop < fouls && fouls < detail) {
+		t.Errorf("breakdown rows are out of order:\n%s", body)
+	}
+}
+
+// breakdownRow finds a row of the side-by-side breakdown table and returns its
+// three cells.
+func breakdownRow(t *testing.T, body, label string) []string {
+	t.Helper()
+	for _, line := range lines(body) {
+		if !strings.HasPrefix(line, label+" ") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(line, label))
+		if len(fields) < 2 {
+			t.Fatalf("row %q has no values: %q", label, line)
+		}
+		return []string{label, fields[0], fields[1]}
+	}
+	t.Fatalf("no %q row in\n%s", label, body)
+	return nil
+}
+
+// Most of a 2024 breakdown is zero on both sides. Those rows are dropped, and
+// --full brings them back.
+func TestMatchViewBreakdownDropsEmptyRowsUnlessFull(t *testing.T) {
+	withNow(t, time.Unix(1711136640, 0))
+	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm18": matchViewBreakdown2024JSON})
+
+	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18", "--format", "table")
+	requireNoError(t, err, errOut)
+	for _, gone := range []string{"Trap Center Stage", "Adjust Points", "Tech Foul Count", "G424 Penalty"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("%q is zero on both sides and should have been dropped:\n%s", gone, out)
+		}
+	}
+
+	full, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18", "--format", "table", "--full")
+	requireNoError(t, err, errOut)
+	for _, want := range []string{"Trap Center Stage", "Adjust Points", "Tech Foul Count", "G424 Penalty"} {
+		requireContains(t, full, want)
+	}
+}
+
+func TestMatchViewBreakdownColorsTheAllianceColumns(t *testing.T) {
+	withNow(t, time.Unix(1711136640, 0))
+	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm18": matchViewBreakdown2024JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18",
+		"--format", "table", "--color", "always")
+	requireNoError(t, err, errOut)
+
+	for _, want := range []string{"\x1b[31mRed\x1b[0m", "\x1b[34mBlue\x1b[0m"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output is missing %q:\n%q", want, out)
+		}
+	}
+}
+
+// The JSON form is the API's own answer; the table is the only thing that
+// reorders or hides anything.
+func TestMatchViewBreakdownJSONIsUntouched(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm18": matchViewBreakdown2024JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18", "--json", "--full")
+	requireNoError(t, err, errOut)
+
+	breakdown := decodeJSON(t, out).(map[string]any)["score_breakdown"].(map[string]any)
+	red := breakdown["red"].(map[string]any)
+	if red["trapCenterStage"] != false {
+		t.Errorf("a dropped table row must still be in the JSON: %v", red["trapCenterStage"])
+	}
+	if red["autoAmpNoteCount"] != float64(1) {
+		t.Errorf("autoAmpNoteCount = %v", red["autoAmpNoteCount"])
 	}
 }
