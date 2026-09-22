@@ -415,9 +415,6 @@ func (e *httpError) Error() string {
 	return fmt.Sprintf("API error %d: %s", e.status, e.body)
 }
 
-// StatusCode reports the HTTP status that produced the error.
-func (e *httpError) StatusCode() int { return e.status }
-
 // netError is a transport-level failure: DNS, connection refused, a timeout.
 type netError struct {
 	err      error
