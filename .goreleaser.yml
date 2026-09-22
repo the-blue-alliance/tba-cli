@@ -39,6 +39,7 @@ archives:
         formats: [zip]
     files:
       - README.md
+      - LICENSE
       - src: manpages/*
         dst: man
       - src: completions/*
