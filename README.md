@@ -69,6 +69,77 @@ tba insight leaderboards --year 2024
 tba status
 ```
 
+### Finding events
+
+`event list` fetches one season's events and filters them locally, so any
+combination of filters costs a single request:
+
+```
+tba event list --year 2024 --week 3
+tba event list --year 2024 --type regional
+tba event list --year 2024 --type dcmp,cmp-division
+tba event list --year 2024 --district ne
+tba event list --year 2024 --state CT --country USA
+tba event list --year 2024 --team 177
+```
+
+| Filter | Matches |
+|--------|---------|
+| `--week N` | The **1-based** week number, as thebluealliance.com shows it. The API's own `week` field counts from 0; `--week 1` is week 1. Events with no week (championships, offseasons) never match. |
+| `--type` | One or more event types, comma-separated: `regional`, `district`, `dcmp`, `dcmp-division`, `cmp-division`, `cmp-finals`, `foc`, `offseason`, `preseason`, `remote`, `unlabeled`, `all`. An unknown value is a usage error listing the valid ones. `all` cancels the filter. |
+| `--district` | The district abbreviation (`ne`, `fim`, `isr`), case-insensitive. |
+| `--state` | `state_prov` exactly as the API spells it, case-insensitive (`CT`, `Ontario`). |
+| `--country` | `country`, case-insensitive (`USA`, `Israel`). |
+| `--team` | Only the events a team attends; switches the request to that team's schedule and then applies the other filters. Takes `177` or `frc177`. |
+
+Rows are sorted by start date, then event key. The columns are `Key`, `Name`,
+`Type`, `Week`, `Start`, `End`, `Location` and `District`; `--week` and the
+`Week` column are 1-based, while `--json` keeps the API's raw 0-based value.
+
+`event view` adds the district, the playoff format ("Double elimination (8
+alliances)"), the event website, timezone and FIRST event code, and one line
+per webcast rendered as a link you can open. Anything the API does not supply
+is left out rather than printed empty.
+
+### Team history
+
+```
+tba team years 177
+tba team awards 177
+tba team awards 177 --year 2024
+tba team awards 177 --type 0
+```
+
+`team years` lists the seasons a team has competed in, newest first, as a
+single `Year` column; `--json` gives the plain array of years.
+
+`team awards` lists a team's awards as `Year | Event | Award | Recipient`,
+newest season first and grouped by event. The event column shows the event's
+name, which costs one extra request for the team's event list; if that request
+fails the awards are still listed with the name left blank. `Recipient` names
+the individual for awards that go to a person rather than to the team, and
+`--type` filters by TBA's numeric `award_type`.
+
+### Opening the website
+
+```
+tba open 177
+tba open 177 --year 2024
+tba open 2024cthar
+tba open 2024cthar_qm12 --print
+```
+
+`tba open` takes a team number (`177` or `frc177`), an event key or a match key
+and opens that page on thebluealliance.com — `open` on macOS, `xdg-open` on
+Linux, `rundll32 url.dll,FileProtocolHandler` on Windows. `--year` picks a
+team's season page. The target is resolved locally, so no API key and no
+network round trip are needed.
+
+`--print` (`-n`) writes the URL to stdout instead of opening it, for scripts
+and for sessions with no browser. A printed URL stays a bare URL even when
+piped, since that is already its machine-readable form; `--json` wraps it in
+`{"url": ...}` if you want that.
+
 ### Custom API server
 
 Use `--base-url` to point at a different API server (e.g. a local dev instance):
@@ -140,6 +211,20 @@ tba completion zsh > "${fpath[1]}/_tba"
 # fish
 tba completion fish > ~/.config/fish/completions/tba.fish
 ```
+
+Event keys, match keys and `--district` values are completed **from the local
+response cache only** — completion never makes a request. A shell asks on
+every Tab, so going to the network would mean rate limits and a stalled
+prompt. Run a command once and its keys complete afterwards:
+
+```
+tba event list --year 2024      # fills the cache
+tba event view 2024c<Tab>       # 2024casj, 2024cthar, ...
+```
+
+Completions carry the event's name as the description. An empty (or cleared)
+cache completes nothing. Team arguments are not completed at all: they are
+numbers, and a list of file names would be worse than nothing.
 
 ### Output formats
 
@@ -385,13 +470,14 @@ identical archives.
 | `tba team view <number>` | View team info |
 | `tba team list` | List all teams (defaults to the current year) |
 | `tba team events <number>` | List team events |
+| `tba team years <number>` | List the seasons a team competed in |
 | `tba team matches <number>` | List team matches |
 | `tba team awards <number>` | List team awards |
 | `tba team media <number>` | List team media |
 | `tba team robots <number>` | List team robots |
 | `tba team districts <number>` | List team districts |
 | `tba event view <key>` | View event details |
-| `tba event list` | List events (defaults to the current year) |
+| `tba event list` | List events (defaults to the current year), with `--week`, `--type`, `--district`, `--state`, `--country` and `--team` filters |
 | `tba event teams <key>` | List teams at event |
 | `tba event matches <key>` | List event matches |
 | `tba event rankings <key>` | Show event rankings |
@@ -409,6 +495,7 @@ identical archives.
 | `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--detail`) |
 | `tba insight leaderboards` | Show leaderboards |
 | `tba insight notables` | Show notable insights |
+| `tba open <target>` | Open a team, event or match on thebluealliance.com |
 
 The group commands also answer to their plurals: `teams`, `events`, `matches`,
 `districts`, `insights`. Every command carries examples, so `tba event matches
