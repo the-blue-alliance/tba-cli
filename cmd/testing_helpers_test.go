@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -188,7 +189,7 @@ func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...strin
 	}
 	root.SetArgs(full)
 
-	err = root.Execute()
+	err = Run(context.Background(), root)
 	return outBuf.String(), errBuf.String(), err
 }
 

@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
@@ -64,7 +66,7 @@ func TestExitCodeFourOnHTTP401(t *testing.T) {
 	root.SetOut(nopWriter{})
 	root.SetErr(nopWriter{})
 	root.SetArgs([]string{"--base-url", srv.URL, "status"})
-	err := root.Execute()
+	err := Run(context.Background(), root)
 	if got := clierr.ExitCode(err); got != clierr.ExitAuth {
 		t.Fatalf("exit code = %d (err %v), want %d", got, err, clierr.ExitAuth)
 	}
@@ -94,7 +96,7 @@ func TestExitCodeOneOnServerError(t *testing.T) {
 	root.SetOut(nopWriter{})
 	root.SetErr(nopWriter{})
 	root.SetArgs([]string{"--base-url", srv.URL, "status"})
-	err := root.Execute()
+	err := Run(context.Background(), root)
 	if got := clierr.ExitCode(err); got != clierr.ExitFailure {
 		t.Fatalf("exit code = %d (err %v), want %d", got, err, clierr.ExitFailure)
 	}
@@ -103,3 +105,56 @@ func TestExitCodeOneOnServerError(t *testing.T) {
 type nopWriter struct{}
 
 func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestUsageErrorsPrintUsage(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		command string
+	}{
+		{"unknown flag", []string{"status", "--frmat", "json"}, "tba status"},
+		{"bad format", []string{"status", "--format", "xml"}, "tba status"},
+		{"too many args", []string{"team", "view", "177", "1073"}, "tba team view"},
+		{"malformed event key", []string{"event", "view", "not-a-key"}, "tba event view"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
+			stdout, stderr, err := runCmd(t, srv, tc.args...)
+			if err == nil {
+				t.Fatalf("want an error for %v", tc.args)
+			}
+			if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+				t.Fatalf("exit code = %d, want %d", got, clierr.ExitUsage)
+			}
+			requireContains(t, stderr, "Usage:")
+			requireContains(t, stderr, "Run '"+tc.command+" --help' for usage.")
+			if stdout != "" {
+				t.Errorf("usage must not go to stdout, got:\n%s", stdout)
+			}
+		})
+	}
+}
+
+func TestRuntimeErrorsPrintNoUsage(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{})
+	stdout, stderr, err := runCmd(t, srv, "team", "view", "999999")
+	if err == nil {
+		t.Fatal("want a 404 error")
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Fatalf("exit code = %d, want %d", got, clierr.ExitNotFound)
+	}
+	if strings.Contains(stderr, "Usage:") {
+		t.Errorf("a 404 should not print usage:\n%s", stderr)
+	}
+	if stdout != "" {
+		t.Errorf("nothing should reach stdout, got:\n%s", stdout)
+	}
+}
+
+func TestHelpIsNotAnError(t *testing.T) {
+	stdout, _, err := runCmd(t, nil, "team", "view", "--help")
+	requireNoError(t, err, "")
+	requireContains(t, stdout, "Usage:")
+}

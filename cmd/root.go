@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
@@ -47,7 +50,30 @@ func NewRootCmd() *cobra.Command {
 	return rootCmd
 }
 
+// Run executes an already-built command tree.
+//
+// Cobra's own usage printing is off (SilenceUsage), so that usage is shown
+// exactly when the failure is a mistake in how the command was invoked: a bad
+// flag, a bad argument, a malformed key. A failure that happened while doing
+// the work — a 404, a timeout — prints only its message, because a wall of
+// usage text buries it.
+func Run(ctx context.Context, root *cobra.Command) error {
+	cmd, err := root.ExecuteContextC(ctx)
+	if err == nil {
+		return nil
+	}
+	if clierr.ExitCode(err) == clierr.ExitUsage {
+		if cmd == nil {
+			cmd = root
+		}
+		w := cmd.ErrOrStderr()
+		fmt.Fprint(w, cmd.UsageString())
+		fmt.Fprintf(w, "Run '%s --help' for usage.\n", cmd.CommandPath())
+	}
+	return err
+}
+
 // Execute runs the CLI with the process's standard streams.
 func Execute() error {
-	return NewRootCmd().Execute()
+	return Run(context.Background(), NewRootCmd())
 }
