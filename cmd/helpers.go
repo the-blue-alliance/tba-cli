@@ -49,7 +49,7 @@ func resolveFormat(cmd *cobra.Command) (string, error) {
 	if jsonFlag || jqFlag != "" {
 		return "json", nil
 	}
-	if !output.IsTTY() {
+	if !output.IsTTY(cmd.OutOrStdout()) {
 		return "json", nil
 	}
 	return "table", nil
@@ -77,7 +77,7 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 		humanFn()
 		return nil
 	default:
-		return output.PrintJSONWithFilter(data, jqExpr(cmd))
+		return output.PrintJSONWithFilter(cmd.OutOrStdout(), data, jqExpr(cmd))
 	}
 }
 
@@ -87,18 +87,19 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	if err != nil {
 		return err
 	}
+	w := cmd.OutOrStdout()
 	switch format {
 	case "json":
-		return output.PrintJSONWithFilter(data, jqExpr(cmd))
+		return output.PrintJSONWithFilter(w, data, jqExpr(cmd))
 	case "csv":
-		return output.PrintDelimited(headers, rows, ',')
+		return output.PrintDelimited(w, headers, rows, ',')
 	case "tsv":
-		return output.PrintDelimited(headers, rows, '\t')
+		return output.PrintDelimited(w, headers, rows, '\t')
 	case "markdown":
-		output.PrintMarkdownTable(headers, rows)
+		output.PrintMarkdownTable(w, headers, rows)
 		return nil
 	default:
-		output.PrintTable(headers, rows)
+		output.PrintTable(w, headers, rows)
 		return nil
 	}
 }

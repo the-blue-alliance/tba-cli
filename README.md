@@ -96,6 +96,30 @@ tba event rankings 2024necmp --format markdown
 
 For single-object commands (e.g. `team view`), tabular formats like `csv`/`tsv`/`markdown` fall back to `json`. Use `--jq` to filter with jq expressions.
 
+## Development
+
+```
+go build ./cmd/tba     # build the binary
+go test ./...          # run the test suite
+go test -race ./...    # run it the way CI does
+go vet ./...           # vet
+gofmt -l .             # must print nothing
+```
+
+Tests are pure Go with no network access: `cmd` builds a fresh command tree per
+test with `cmd.NewRootCmd()` and points `--base-url` at an `httptest` server, so
+commands can be exercised end to end against canned TBA responses.
+
+CI runs on every pull request and on pushes to `main`
+(`.github/workflows/ci.yml`). It checks `gofmt -l .` is empty, runs `go vet`,
+`go test -race` on Linux and Windows, verifies `go mod tidy` leaves `go.mod` and
+`go.sum` unchanged, builds all packages, and runs
+[golangci-lint](https://golangci-lint.run) with the config in `.golangci.yml`.
+Dependency and action updates arrive weekly via Dependabot.
+
+Releases are cut by pushing a `v*` tag, which runs GoReleaser
+(`.github/workflows/release.yml` and `.goreleaser.yml`).
+
 ## Commands
 
 | Command | Description |
@@ -105,7 +129,7 @@ For single-object commands (e.g. `team view`), tabular formats like `csv`/`tsv`/
 | `tba auth logout` | Remove stored API key |
 | `tba status` | Show API status |
 | `tba team view <number>` | View team info |
-| `tba team list --year <year>` | List all teams |
+| `tba team list` | List all teams (defaults to the current year) |
 | `tba team events <number>` | List team events |
 | `tba team matches <number>` | List team matches |
 | `tba team awards <number>` | List team awards |
@@ -113,7 +137,7 @@ For single-object commands (e.g. `team view`), tabular formats like `csv`/`tsv`/
 | `tba team robots <number>` | List team robots |
 | `tba team districts <number>` | List team districts |
 | `tba event view <key>` | View event details |
-| `tba event list --year <year>` | List events |
+| `tba event list` | List events (defaults to the current year) |
 | `tba event teams <key>` | List teams at event |
 | `tba event matches <key>` | List event matches |
 | `tba event rankings <key>` | Show event rankings |
@@ -124,7 +148,7 @@ For single-object commands (e.g. `team view`), tabular formats like `csv`/`tsv`/
 | `tba event predictions <key>` | Show predictions |
 | `tba event insights <key>` | Show event insights |
 | `tba match view <key>` | View match details |
-| `tba district list --year <year>` | List districts |
+| `tba district list` | List districts (defaults to the current year) |
 | `tba district events <key>` | List district events |
 | `tba district teams <key>` | List district teams |
 | `tba district rankings <key>` | Show district rankings |

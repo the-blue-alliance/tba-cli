@@ -71,6 +71,25 @@ func GetAPIKey(baseURL string) (string, error) {
 	return "", fmt.Errorf("not authenticated for %s. Run 'tba auth login --base-url %s' first", baseURL, baseURL)
 }
 
+// migrateLegacyKey folds a pre-per-URL "api_key" entry into the "keys" map.
+// The legacy entry is blanked rather than deleted because viper has no way to
+// unset a key; GetAPIKey treats an empty api_key as absent.
+func migrateLegacyKey(v *viper.Viper) {
+	legacyKey := v.GetString("api_key")
+	if legacyKey == "" {
+		return
+	}
+	keys := v.GetStringMapString("keys")
+	if keys == nil {
+		keys = make(map[string]string)
+	}
+	if _, exists := keys[DefaultBaseURL]; !exists {
+		keys[DefaultBaseURL] = legacyKey
+	}
+	v.Set("keys", keys)
+	v.Set("api_key", "")
+}
+
 func SaveAPIKey(key string, baseURL string) error {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -85,18 +104,7 @@ func SaveAPIKey(key string, baseURL string) error {
 	v.SetConfigFile(AuthFile())
 	_ = v.ReadInConfig() // load existing keys, ignore error if file doesn't exist
 
-	// Migrate legacy api_key if present
-	if legacyKey := v.GetString("api_key"); legacyKey != "" {
-		keys := v.GetStringMapString("keys")
-		if keys == nil {
-			keys = make(map[string]string)
-		}
-		if _, exists := keys[DefaultBaseURL]; !exists {
-			keys[DefaultBaseURL] = legacyKey
-		}
-		v.Set("keys", keys)
-		v.Set("api_key", nil)
-	}
+	migrateLegacyKey(v)
 
 	keys := v.GetStringMapString("keys")
 	if keys == nil {
@@ -122,18 +130,7 @@ func RemoveAPIKey(baseURL string) error {
 		return fmt.Errorf("not authenticated")
 	}
 
-	// Migrate legacy api_key if present
-	if legacyKey := v.GetString("api_key"); legacyKey != "" {
-		keys := v.GetStringMapString("keys")
-		if keys == nil {
-			keys = make(map[string]string)
-		}
-		if _, exists := keys[DefaultBaseURL]; !exists {
-			keys[DefaultBaseURL] = legacyKey
-		}
-		v.Set("keys", keys)
-		v.Set("api_key", nil)
-	}
+	migrateLegacyKey(v)
 
 	keys := v.GetStringMapString("keys")
 	if _, ok := keys[baseURL]; !ok {
