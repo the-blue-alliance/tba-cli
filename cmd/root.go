@@ -45,6 +45,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().BoolP("raw-output", "r", false, "With --jq, print string results without quotes (like jq -r)")
 	rootCmd.PersistentFlags().String("base-url", "", "Override API base URL (e.g. http://localhost:8080/api/v3)")
 	rootCmd.PersistentFlags().Bool("no-cache", false, "Disable HTTP response cache for this invocation")
+	rootCmd.PersistentFlags().Bool("offline", false, "Never contact the API; answer from the local cache only")
 	rootCmd.PersistentFlags().String("format", "", "Output format: auto, table, json, csv, tsv, markdown (auto: table on TTY, json otherwise)")
 	rootCmd.PersistentFlags().Duration("timeout", api.DefaultTimeout, "Per-request timeout (e.g. 10s, 1m)")
 	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")

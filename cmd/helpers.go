@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -21,6 +22,12 @@ func getBaseURL(cmd *cobra.Command) string {
 }
 
 func newClient(cmd *cobra.Command) (*api.Client, error) {
+	offline, _ := cmd.Flags().GetBool("offline")
+	noCache, _ := cmd.Flags().GetBool("no-cache")
+	if offline && noCache {
+		return nil, clierr.Usage("--offline and --no-cache contradict each other: offline mode has only the cache to serve from")
+	}
+
 	var opts []api.Option
 	if d, err := cmd.Flags().GetDuration("timeout"); err == nil {
 		opts = append(opts, api.WithTimeout(d))
@@ -28,11 +35,14 @@ func newClient(cmd *cobra.Command) (*api.Client, error) {
 	if n, err := cmd.Flags().GetInt("retries"); err == nil {
 		opts = append(opts, api.WithRetries(n))
 	}
+	opts = append(opts, api.WithOffline(offline), api.WithNotifier(func(note string) {
+		fmt.Fprintln(cmd.ErrOrStderr(), note)
+	}))
 	c, err := api.NewClient(getBaseURL(cmd), opts...)
 	if err != nil {
 		return nil, err
 	}
-	if noCache, _ := cmd.Flags().GetBool("no-cache"); noCache {
+	if noCache {
 		c.SetUseCache(false)
 	}
 	return c, nil
