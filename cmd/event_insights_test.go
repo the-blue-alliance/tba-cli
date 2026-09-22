@@ -51,6 +51,35 @@ func TestEventPredictionsTable(t *testing.T) {
 	}
 }
 
+// A model that cannot separate the two alliances has not predicted a winner.
+// "Red / 50%" reads as a prediction; it is the model declining to make one,
+// whether it says so with an exact half or with two equal scores.
+func TestEventPredictionsNameNoWinnerOnATie(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/predictions": predictionsTied2024ctharJSON,
+		"/event/2024cthar/matches":     "[]",
+	})
+	out, errOut, err := runCmd(t, srv, "event", "predictions", "2024cthar",
+		"--format", "csv", "--columns", "key,predicted winner,confidence")
+	requireNoError(t, err, errOut)
+
+	want := []string{
+		"Key,Predicted Winner,Confidence",
+		"2024cthar_qm20,,",
+		"2024cthar_qm21,,",
+		"2024cthar_qm22,Red,78.53%",
+	}
+	got := lines(out)
+	if len(got) != len(want) {
+		t.Fatalf("got %d lines, want %d:\n%s", len(got), len(want), out)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 // The order is play order, not the alphabetical order the match keys are in
 // and not the random order a Go map hands them out in.
 func TestEventPredictionsAreInPlayOrder(t *testing.T) {
