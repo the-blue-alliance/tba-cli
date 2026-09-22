@@ -341,3 +341,62 @@ func TestInsightCommandsCarryExamples(t *testing.T) {
 		}
 	}
 }
+
+// The real blue banner board ties hundreds of teams on one value. The cell has
+// to stay readable: the first few keys, then a count of the rest.
+func TestInsightLeaderboardsCapABigTie(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/insights/leaderboards/2024": leaderboardsBigTie2024JSON,
+	})
+	out, _, err := runCmd(t, srv, "insight", "leaderboards", "--year", "2024",
+		"--format", "csv", "--columns", "key", "--no-headers")
+	requireNoError(t, err, "")
+
+	got := lines(out)
+	want := `"177, 254, 1114, 118, 2056, 971, 1678, 2767, 1323, 180 … +4 more"`
+	if got[0] != want {
+		t.Errorf("key cell = %s, want %s", got[0], want)
+	}
+	// A tie that fits is untouched.
+	if got[1] != `"1073, 230"` {
+		t.Errorf("short tie = %s", got[1])
+	}
+}
+
+func TestInsightLeaderboardsExpandShowsEveryKey(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/insights/leaderboards/2024": leaderboardsBigTie2024JSON,
+	})
+	out, _, err := runCmd(t, srv, "insight", "leaderboards", "--year", "2024",
+		"--expand", "--format", "csv", "--columns", "key", "--no-headers")
+	requireNoError(t, err, "")
+
+	got := lines(out)[0]
+	if strings.Contains(got, "more") {
+		t.Errorf("--expand still summarised the tie: %s", got)
+	}
+	for _, team := range []string{"177", "217", "2168"} {
+		if !strings.Contains(got, team) {
+			t.Errorf("team %s missing from %s", team, got)
+		}
+	}
+	if n := strings.Count(got, ",") + 1; n != 14 {
+		t.Errorf("got %d keys, want 14: %s", n, got)
+	}
+}
+
+// The cap is presentation. JSON is the document the API sent.
+func TestInsightLeaderboardsJSONKeepsEveryKey(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/insights/leaderboards/2024": leaderboardsBigTie2024JSON,
+	})
+	out, _, err := runCmd(t, srv, "insight", "leaderboards", "--year", "2024", "--json")
+	requireNoError(t, err, "")
+
+	board := decodeJSON(t, out).([]any)[0].(map[string]any)
+	rankings := board["data"].(map[string]any)["rankings"].([]any)
+	keys := rankings[0].(map[string]any)["keys"].([]any)
+	if len(keys) != 14 {
+		t.Errorf("json carries %d keys, want 14", len(keys))
+	}
+}
