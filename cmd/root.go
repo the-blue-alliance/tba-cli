@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
@@ -82,6 +85,11 @@ func Run(ctx context.Context, root *cobra.Command) error {
 }
 
 // Execute runs the CLI with the process's standard streams.
+//
+// The command tree runs under a context that is cancelled on SIGINT or
+// SIGTERM, so Ctrl-C aborts an in-flight request instead of waiting for it.
 func Execute() error {
-	return Run(context.Background(), NewRootCmd())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return Run(ctx, NewRootCmd())
 }

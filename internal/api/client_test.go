@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // apiEnv gives each test its own cache and a fixed auth key.
@@ -470,5 +473,82 @@ func TestNotModifiedDoesNotTouchTheCacheWhenCachingIsOff(t *testing.T) {
 	c.SetUseCache(false)
 	if _, err := c.GetRaw("/status"); err == nil {
 		t.Fatal("want an error for a 304 with no cached entry")
+	}
+}
+
+func TestGetContextAbortsWhenTheContextIsCancelled(t *testing.T) {
+	apiEnv(t)
+	started := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-started
+		cancel()
+	}()
+
+	done := make(chan error, 1)
+	go func() {
+		var v map[string]any
+		done <- c.GetContext(ctx, "/status", &v)
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !errors.Is(err, context.Canceled) {
+			t.Errorf("error = %v, want one wrapping context.Canceled", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("GetContext ignored the cancellation")
+	}
+}
+
+func TestGetRawContextHonoursTheContext(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec, testResponse{body: `{"a":1}`})
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := c.GetRawContext(ctx, "/status"); err == nil {
+		t.Fatal("want an error for a cancelled context")
+	}
+	if n := len(rec.all()); n != 0 {
+		t.Errorf("the request should not have been sent, got %d", n)
+	}
+}
+
+func TestGetAndGetRawStillWorkWithoutAContext(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec, testResponse{body: `{"current_season":2024}`})
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	var v map[string]any
+	if err := c.Get("/status", &v); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if v["current_season"] != float64(2024) {
+		t.Errorf("current_season = %v", v["current_season"])
+	}
+	if _, err := c.GetRaw("/status"); err != nil {
+		t.Fatalf("GetRaw: %v", err)
 	}
 }

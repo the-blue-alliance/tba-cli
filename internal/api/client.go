@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,23 +41,36 @@ func NewClient(baseURL string) (*Client, error) {
 // SetUseCache toggles the on-disk response cache. Cache is enabled by default.
 func (c *Client) SetUseCache(b bool) { c.useCache = b }
 
+// Get fetches path with a background context.
 func (c *Client) Get(path string, result interface{}) error {
-	body, err := c.fetch(path)
+	return c.GetContext(context.Background(), path, result)
+}
+
+// GetContext fetches path, decoding the body into result. Cancelling ctx
+// aborts the request, which is how Ctrl-C stops a slow command.
+func (c *Client) GetContext(ctx context.Context, path string, result interface{}) error {
+	body, err := c.fetch(ctx, path)
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal(body, result)
 }
 
+// GetRaw fetches path with a background context, returning the body untouched.
 func (c *Client) GetRaw(path string) (json.RawMessage, error) {
-	body, err := c.fetch(path)
+	return c.GetRawContext(context.Background(), path)
+}
+
+// GetRawContext returns the body of path untouched.
+func (c *Client) GetRawContext(ctx context.Context, path string) (json.RawMessage, error) {
+	body, err := c.fetch(ctx, path)
 	if err != nil {
 		return nil, err
 	}
 	return json.RawMessage(body), nil
 }
 
-func (c *Client) fetch(path string) ([]byte, error) {
+func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 	url := c.baseURL + path
 
 	var cached *cache.Entry
@@ -64,7 +78,7 @@ func (c *Client) fetch(path string) ([]byte, error) {
 		cached = c.cache.Get(url)
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}

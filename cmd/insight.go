@@ -42,7 +42,7 @@ func newRawInsightCmd(use, short, resource, example string) *cobra.Command {
 				return err
 			}
 			year, _ := cmd.Flags().GetInt("year")
-			raw, err := client.GetRaw(fmt.Sprintf("/insights/%s/%d", resource, year))
+			raw, err := client.GetRawContext(cmd.Context(), fmt.Sprintf("/insights/%s/%d", resource, year))
 			if err != nil {
 				return err
 			}

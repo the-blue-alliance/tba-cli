@@ -35,7 +35,7 @@ func newMatchViewCmd() *cobra.Command {
 				return err
 			}
 			var match api.Match
-			if err := client.Get(fmt.Sprintf("/match/%s", args[0]), &match); err != nil {
+			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/match/%s", args[0]), &match); err != nil {
 				return err
 			}
 			return outputData(cmd, match, func() {

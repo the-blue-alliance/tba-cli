@@ -35,7 +35,7 @@ func newDistrictListCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var districts []api.District
-			if err := client.Get(fmt.Sprintf("/districts/%d", year), &districts); err != nil {
+			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/districts/%d", year), &districts); err != nil {
 				return err
 			}
 			rows := make([][]string, len(districts))
@@ -62,7 +62,7 @@ func newDistrictEventsCmd() *cobra.Command {
 				return err
 			}
 			var events []api.Event
-			if err := client.Get(fmt.Sprintf("/district/%s/events", args[0]), &events); err != nil {
+			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/district/%s/events", args[0]), &events); err != nil {
 				return err
 			}
 			rows := make([][]string, len(events))
@@ -87,7 +87,7 @@ func newDistrictTeamsCmd() *cobra.Command {
 				return err
 			}
 			var teams []api.Team
-			if err := client.Get(fmt.Sprintf("/district/%s/teams", args[0]), &teams); err != nil {
+			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/district/%s/teams", args[0]), &teams); err != nil {
 				return err
 			}
 			rows := make([][]string, len(teams))
@@ -112,7 +112,7 @@ func newDistrictRankingsCmd() *cobra.Command {
 				return err
 			}
 			var rankings []api.DistrictRanking
-			if err := client.Get(fmt.Sprintf("/district/%s/rankings", args[0]), &rankings); err != nil {
+			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/district/%s/rankings", args[0]), &rankings); err != nil {
 				return err
 			}
 			rows := make([][]string, len(rankings))
