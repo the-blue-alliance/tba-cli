@@ -1,10 +1,10 @@
 package frc
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 )
 
 // Where a match time came from. The API carries three, and which one is on
@@ -83,18 +83,4 @@ func RelativeEpoch(epoch *int64, now time.Time) string {
 // because a countdown of "1h 3m 12s" is harder to read at a glance than "1h".
 // A negative duration is measured as its absolute value, so a caller that has
 // already chosen a "before"/"after" wording cannot print a minus sign.
-func Magnitude(d time.Duration) string {
-	if d < 0 {
-		d = -d
-	}
-	switch {
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d/time.Second))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d/time.Minute))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d/time.Hour))
-	default:
-		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
-	}
-}
+func Magnitude(d time.Duration) string { return humanize.Age(d) }

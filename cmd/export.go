@@ -14,6 +14,7 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/frc"
+	"github.com/the-blue-alliance/tba-cli/internal/fsutil"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -429,32 +430,11 @@ func renderExportFile(e *exporter, ds exportDataset, raw json.RawMessage) ([]byt
 }
 
 // stageExportFile writes one file's bytes next to where it is going to live,
-// and returns the temporary name to rename from.
+// and returns the temporary name to rename from. An export is ordinary data,
+// so it is staged with the mode a written file usually has rather than the
+// private mode a temporary file is created with.
 func stageExportFile(dir string, body []byte) (string, error) {
-	f, err := os.CreateTemp(dir, exportTempPattern)
-	if err != nil {
-		return "", err
-	}
-	name := f.Name()
-	fail := func(err error) (string, error) {
-		_ = f.Close()
-		_ = os.Remove(name)
-		return "", err
-	}
-	if _, err := f.Write(body); err != nil {
-		return fail(err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(name)
-		return "", err
-	}
-	// CreateTemp makes a private file; an export is ordinary data and should
-	// arrive with the mode a written file usually has.
-	if err := os.Chmod(name, exportFileMode); err != nil {
-		_ = os.Remove(name)
-		return "", err
-	}
-	return name, nil
+	return fsutil.WriteTemp(dir, exportTempPattern, body, exportFileMode)
 }
 
 // reportExport writes the paths to stdout and everything else to stderr, so

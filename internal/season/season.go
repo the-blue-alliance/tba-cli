@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/the-blue-alliance/tba-cli/internal/cache"
+	"github.com/the-blue-alliance/tba-cli/internal/fsutil"
 )
 
 // TTL is how long a remembered season is trusted. A day is short enough that
@@ -85,23 +86,5 @@ func (s *Store) Put(year int) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".tba-season-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(name)
-		return err
-	}
-	if err := os.Rename(name, s.path); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return nil
+	return fsutil.WriteFileAtomic(s.path, b, 0600)
 }

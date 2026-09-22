@@ -2,11 +2,12 @@ package cache
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 )
 
 // EntryInfo describes one cache entry without carrying its body.
@@ -137,18 +138,12 @@ func (c *Cache) WriteEntry(e *Entry) error {
 }
 
 // FormatAge renders a duration as a short age such as "45s", "12m", "3h" or
-// "8d". Anything under a second, or in the future, reads as "0s".
+// "8d". Anything under a second, or in the future, reads as "0s": a cache
+// entry stamped later than now is a clock that moved, not something that has
+// not happened yet.
 func FormatAge(d time.Duration) string {
-	switch {
-	case d < time.Second:
-		return "0s"
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	default:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	if d < 0 {
+		d = 0
 	}
+	return humanize.Age(d)
 }
