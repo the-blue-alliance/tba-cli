@@ -555,3 +555,132 @@ const apiStatusJSON = `{
   "ios": {"latest_app_version": 1, "min_app_version": 1},
   "android": {"latest_app_version": 1, "min_app_version": 1}
 }`
+
+// A spread of 2024 events covering every filter `event list` offers: a
+// regional, two district events in different districts and countries, a
+// district championship, a championship division and an offseason.
+
+const event2024casjJSON = `{
+  "key": "2024casj",
+  "name": "Silicon Valley Regional",
+  "event_code": "casj",
+  "event_type": 0,
+  "district": null,
+  "city": "San Jose",
+  "state_prov": "CA",
+  "country": "USA",
+  "start_date": "2024-03-27",
+  "end_date": "2024-03-30",
+  "year": 2024,
+  "short_name": "Silicon Valley",
+  "event_type_string": "Regional",
+  "week": 3,
+  "address": "1393 S 7th St, San Jose, CA 95112, USA",
+  "location_name": "San Jose State University",
+  "timezone": "America/Los_Angeles",
+  "website": "https://cafirst.org/frc/siliconvalley/",
+  "first_event_code": "CASJ",
+  "webcasts": [{"type": "twitch", "channel": "firstinspires9"}],
+  "playoff_type": 10
+}`
+
+const event2024isde3JSON = `{
+  "key": "2024isde3",
+  "name": "ISR District Event #3",
+  "event_code": "isde3",
+  "event_type": 1,
+  "district": {
+    "abbreviation": "isr",
+    "display_name": "FIRST Israel",
+    "key": "2024isr",
+    "year": 2024
+  },
+  "city": "Tel Aviv-Yafo",
+  "state_prov": "",
+  "country": "Israel",
+  "start_date": "2024-03-12",
+  "end_date": "2024-03-14",
+  "year": 2024,
+  "short_name": "ISR District Event #3",
+  "event_type_string": "District",
+  "week": 1,
+  "address": "Shlomo Group Arena, Tel Aviv-Yafo, Israel",
+  "location_name": "Shlomo Group Arena",
+  "timezone": "Asia/Jerusalem",
+  "webcasts": [],
+  "playoff_type": 10
+}`
+
+const event2024milJSON = `{
+  "key": "2024mil",
+  "name": "Milstein Division",
+  "event_code": "mil",
+  "event_type": 3,
+  "district": null,
+  "city": "Houston",
+  "state_prov": "TX",
+  "country": "USA",
+  "start_date": "2024-04-17",
+  "end_date": "2024-04-20",
+  "year": 2024,
+  "short_name": "Milstein",
+  "event_type_string": "Championship Division",
+  "week": null,
+  "address": "1001 Avenida De Las Americas, Houston, TX 77010, USA",
+  "location_name": "George R. Brown Convention Center",
+  "timezone": "America/Chicago",
+  "webcasts": [{"type": "youtube", "channel": "abc123XYZ"}],
+  "playoff_type": 10
+}`
+
+const event2024iriJSON = `{
+  "key": "2024iri",
+  "name": "Indiana Robotics Invitational",
+  "event_code": "iri",
+  "event_type": 99,
+  "district": null,
+  "city": "Indianapolis",
+  "state_prov": "IN",
+  "country": "USA",
+  "start_date": "2024-07-12",
+  "end_date": "2024-07-13",
+  "year": 2024,
+  "short_name": "Indiana Robotics Invitational",
+  "event_type_string": "Offseason",
+  "week": null,
+  "address": "7350 Shadeland Station Way, Indianapolis, IN 46256, USA",
+  "location_name": "Lawrence North High School",
+  "timezone": "America/Indiana/Indianapolis",
+  "webcasts": [],
+  "playoff_type": 0
+}`
+
+const event2021nhflaJSON = `{
+  "key": "2021nhfla",
+  "name": "FIRST Innovation Challenge",
+  "event_code": "nhfla",
+  "event_type": 7,
+  "district": null,
+  "city": "",
+  "state_prov": "",
+  "country": "",
+  "start_date": "2021-03-01",
+  "end_date": "2021-03-01",
+  "year": 2021,
+  "short_name": "FIRST Innovation Challenge",
+  "event_type_string": "Remote",
+  "week": 5,
+  "address": null,
+  "location_name": null,
+  "timezone": null,
+  "webcasts": [],
+  "playoff_type": null
+}`
+
+// events2024JSON is deliberately out of calendar order, so that tests see
+// `event list` sort it.
+const events2024JSON = "[" + event2024milJSON + "," + event2024ctharJSON + "," +
+	event2024casjJSON + "," + event2024isde3JSON + "," + event2024necmpJSON + "," +
+	event2024iriJSON + "]"
+
+const teamEvents177JSON = "[" + event2024ctharJSON + "," + event2024necmpJSON + "]"

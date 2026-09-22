@@ -95,8 +95,8 @@ func TestEventListCSVQuotesLocations(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "list", "--year", "2024", "--format", "csv")
 	requireNoError(t, err, "")
 
-	want := "Key,Name,Start,Type,Location\n" +
-		"2024cthar,NE District Hartford Event,2024-03-22,District,\"Hartford, CT, USA\"\n"
+	want := "Key,Name,Type,Week,Start,End,Location,District\n" +
+		"2024cthar,NE District Hartford Event,District,4,2024-03-22,2024-03-24,\"Hartford, CT, USA\",ne\n"
 	if out != want {
 		t.Errorf("csv =\n%q\nwant\n%q", out, want)
 	}

@@ -74,26 +74,61 @@ func newEventListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
 		Short: "List events for a year",
+		Long: `List the events of a season.
+
+Every filter is applied to the season's event list after it is fetched, so any
+combination of them works and only one request is made. --week takes the
+1-based week number shown on The Blue Alliance, not the 0-based one the API
+returns.`,
 		Example: `  tba event list --year 2024
+  tba event list --year 2024 --week 3 --type district
+  tba event list --year 2024 --district ne --state CT
+  tba event list --year 2024 --team 177
   tba events list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			filter, err := eventFilterFromFlags(cmd)
+			if err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			year, _ := cmd.Flags().GetInt("year")
+			path := fmt.Sprintf("/events/%d", year)
+			if team, _ := cmd.Flags().GetString("team"); strings.TrimSpace(team) != "" {
+				path = fmt.Sprintf("/team/%s/events/%d", teamKey(team), year)
+			}
 			var events []api.Event
-			if err := client.Get(cmd.Context(), fmt.Sprintf("/events/%d", year), &events); err != nil {
+			if err := client.Get(cmd.Context(), path, &events); err != nil {
 				return err
 			}
+			events = filter.apply(events)
+			sortEvents(events)
 			rows := make([][]string, len(events))
 			for i, e := range events {
-				rows[i] = []string{e.Key, e.Name, e.StartDate, e.EventTypeStr, output.FormatLocation(e.City, e.StateProv, e.Country)}
+				rows[i] = []string{
+					e.Key,
+					e.Name,
+					e.EventTypeStr,
+					humanWeek(e.Week),
+					e.StartDate,
+					e.EndDate,
+					output.FormatLocation(e.City, e.StateProv, e.Country),
+					districtAbbrev(e.District),
+				}
 			}
-			return outputTable(cmd, events, []string{"Key", "Name", "Start", "Type", "Location"}, rows)
+			headers := []string{"Key", "Name", "Type", "Week", "Start", "End", "Location", "District"}
+			return outputTable(cmd, events, headers, rows)
 		},
 	}
 	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	c.Flags().Int("week", 0, "Only events in this competition week (1-based, as thebluealliance.com numbers them)")
+	c.Flags().String("type", "", "Only events of these types, comma-separated: "+validEventTypes)
+	c.Flags().String("district", "", "Only events in this district, by abbreviation (e.g. ne)")
+	c.Flags().String("state", "", "Only events in this state or province (e.g. CT)")
+	c.Flags().String("country", "", "Only events in this country (e.g. USA)")
+	c.Flags().String("team", "", "Only events this team attends (e.g. 177 or frc177)")
 	return c
 }
 
