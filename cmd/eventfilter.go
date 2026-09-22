@@ -98,11 +98,6 @@ type eventFilter struct {
 	country  string
 }
 
-// firstFRCSeason is the earliest season The Blue Alliance holds events for. A
-// year below it is a typo, and answering it with an empty list looks like "that
-// season had no events".
-const firstFRCSeason = 1992
-
 func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 	var f eventFilter
 	// Week 0 is not a week: the flag is 1-based, the way thebluealliance.com
@@ -113,12 +108,6 @@ func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 		return f, clierr.Usage("invalid --week %d (weeks are numbered from 1, as thebluealliance.com numbers them)", week)
 	}
 	f.week = week
-
-	// A season that predates FRC's records would print an empty list, which
-	// reads as "no events that year" rather than "no such year".
-	if year := settings(cmd).Int("year"); year != 0 && year < firstFRCSeason {
-		return f, clierr.Usage("--year %d is before the first FRC season (%d)", year, firstFRCSeason)
-	}
 
 	typeSpec, _ := cmd.Flags().GetString("type")
 	types, err := parseEventTypes(typeSpec)
