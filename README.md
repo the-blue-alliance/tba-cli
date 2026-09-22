@@ -773,6 +773,7 @@ $ tba event export 2024cthar --to csv
 2024cthar-event.csv
 2024cthar-teams.csv
 2024cthar-matches.csv
+2024cthar-score-breakdowns.csv
 2024cthar-rankings.csv
 2024cthar-alliances.csv
 2024cthar-awards.csv
@@ -783,7 +784,7 @@ $ tba event export 2024cthar --to csv
 
 Nothing is inferred — not from a file name, not from whether you are on a terminal, not from `format:` in your config file. `--format` on this command describes how the command talks to *you*, so `--format csv` here is a usage error that points you back at `--to`. Leaving `--to` out is an error too, rather than a guess.
 
-**The files.** Each dataset becomes `<dir>/<prefix>-<dataset>.<ext>`, where `--dir` defaults to the working directory and `--prefix` defaults to the event key. The nine datasets are `event`, `teams`, `matches`, `rankings`, `alliances`, `awards`, `oprs`, `district-points` and `team-statuses`; `--only` takes a comma-separated subset of those names.
+**The files.** Each dataset becomes `<dir>/<prefix>-<dataset>.<ext>`, where `--dir` defaults to the working directory and `--prefix` defaults to the event key. The ten datasets are `event`, `teams`, `matches`, `score-breakdowns`, `rankings`, `alliances`, `awards`, `oprs`, `district-points` and `team-statuses`; `--only` takes a comma-separated subset of those names.
 
 ```
 $ tba event export 2024cthar --to json --dir exports --only matches,rankings
@@ -791,9 +792,25 @@ exports/2024cthar-matches.json
 exports/2024cthar-rankings.json
 ```
 
-For `csv` and `tsv` each file carries exactly the columns the matching `tba event <dataset>` command prints — the same row builders render both — with a header row and no color. The `event` dataset is a single object rather than a list, so in `csv` and `tsv` it becomes a two-column `Field,Value` listing of the same fields `tba event view` shows. For `json` each file holds the API's own payload, pretty-printed and newline-terminated; it is re-indented rather than re-encoded, so nothing in it is re-escaped or reordered.
+For `csv` and `tsv` most files carry exactly the columns the matching `tba event <dataset>` command prints — the same row builders render both — with a header row and no color. The `event` dataset is a single object rather than a list, so in `csv` and `tsv` it becomes a two-column `Field,Value` listing of the same fields `tba event view` shows. For `json` each file holds the API's own payload, pretty-printed and newline-terminated; it is re-indented rather than re-encoded, so nothing in it is re-escaped or reordered.
 
-**Reproducibility.** Two exports of the same data produce byte-identical files. Nothing written carries a timestamp or a version string, every listing has a fixed order (matches in play order, teams by number, rankings by rank, oprs by team, awards by award type then team), lines end with LF on every platform, and files arrive with mode `0644`.
+**The two match files are shaped for analysis, not for reading.** The `tba event matches` table puts three teams in one cell, writes `36-21` as a single score, shows `Sat 11:25` in your timezone and marks a disqualification as `175!`. All of that is right on a terminal and wrong in a file something else is going to compute from, so `matches` gets one value per column instead:
+
+```
+key,label,comp_level,set_number,match_number,red1,red2,red3,blue1,blue2,blue3,red_score,blue_score,winner,time,predicted_time,actual_time,red_surrogates,blue_surrogates,red_dq,blue_dq
+```
+
+Team cells are bare numbers, one per driver station. Scores are blank for a match that has not been played — the API says `-1` there, and a `-1` in a column of numbers is a value something will happily average. `winner` is `red`, `blue`, `tie`, or blank for an unplayed match. The three times are RFC3339 in **UTC**, blank when the API has none: a file outlives the machine that wrote it, and UTC sorts as text. Surrogates and disqualifications are their own columns rather than punctuation glued to a team number, `;`-separated where there is more than one.
+
+`score-breakdowns` is the dataset `csv` had no way to reach at all. It holds one row per match per alliance, with the season's `score_breakdown` flattened into columns:
+
+```
+key,label,alliance,autoPoints,autoSpeakerNoteCount,endGameHarmonyPoints,...,totalPoints
+```
+
+The columns are the union of every key seen anywhere in the event, sorted (with array indices compared as numbers, so a grid reads 1, 2, ... 10 rather than 1, 10, 2), and a key an alliance does not have is blank rather than zero. The game changes every season, so the columns do too. This dataset is skipped under `--to json` with a note on stderr: the JSON `matches` file already carries every breakdown verbatim, and a second copy under another name would only be something to keep in step.
+
+**Reproducibility.** Two exports of the same data produce byte-identical files. Nothing written carries a timestamp or a version string, every listing has a fixed order (matches and score breakdowns in play order, teams by number, rankings by rank, oprs by team, awards by award type then team), lines end with LF on every platform, and files arrive with mode `0644`.
 
 **Nothing half-done.** Every file is written to a temporary file in the target directory, and the whole set is renamed into place only once all of them have been fetched. A failure part way through — a 500 on the seventh dataset, or a rename the filesystem refuses on the third file — leaves the directory exactly as it was: files already renamed are taken back out, and under `--force` the files that were replaced are put back. An existing file is never overwritten without `--force`, and the clash is found before the first request, and again immediately before the renames, so a file that appeared while the export was fetching is refused rather than silently replaced. Every conflicting path is listed at once:
 

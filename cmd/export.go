@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
-	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/fsutil"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
@@ -53,9 +52,14 @@ inferred from a file name, a terminal or a config file. Each dataset becomes
 
   ` + strings.Join(exportDatasetNames, ", ") + `
 
-For csv and tsv each file carries exactly the columns the matching
-` + "`tba event <dataset>`" + ` command prints, with a header row and no color. For
-json each file holds the API's own payload, pretty-printed.
+For csv and tsv each file carries a header row and no color. Most of them
+carry exactly the columns the matching ` + "`tba event <dataset>`" + ` command prints.
+The two match files are shaped for analysis instead: matches gets one value
+per column (teams one per station, scores apart, times as RFC3339 in UTC), and
+score-breakdowns gets one row per match per alliance with the season's
+score_breakdown flattened into columns. For json each file holds the API's own
+payload, pretty-printed; score-breakdowns is skipped there, since the matches
+file already carries every breakdown verbatim.
 
 The bytes are reproducible: no timestamps are written, rows are in a fixed
 order, and two exports of the same data produce identical files. Every file is
@@ -102,7 +106,7 @@ a JSON summary of what was written and what was skipped.`,
 // exportDatasetNames is the --only vocabulary and the order the files are
 // written in, whatever order --only listed them.
 var exportDatasetNames = []string{
-	"event", "teams", "matches", "rankings", "alliances",
+	"event", "teams", "matches", "score-breakdowns", "rankings", "alliances",
 	"awards", "oprs", "district-points", "team-statuses",
 }
 
@@ -111,9 +115,13 @@ var exportDatasetNames = []string{
 type exportDataset struct {
 	name string
 	path string
-	// table renders the payload with the same columns `tba event <name>`
-	// prints. It is called for csv and tsv only; json writes the payload.
+	// table renders the payload as the rows of the file. It is called for
+	// csv and tsv only; json writes the payload itself.
 	table func(e *exporter, raw json.RawMessage) (output.Table, error)
+	// delimited marks a dataset that only exists as a table, because its
+	// payload is one another dataset already writes out verbatim. Writing it
+	// again under --to json would produce a second identical file.
+	delimited bool
 }
 
 // exportOptions is one invocation's settled configuration.
@@ -128,9 +136,21 @@ type exportOptions struct {
 	// describing the whole run.
 	jsonSummary bool
 	datasets    []exportDataset
+	// skipped are the datasets ruled out by the flags rather than by the
+	// API, which the summary reports alongside the ones the event lacks.
+	skipped []exportSkip
 }
 
-// exportSkip records a dataset the event simply does not have.
+// skips is the datasets ruled out before the run started, as a fresh slice
+// the summary can append to. Never nil: "skipped": null in the JSON summary
+// would be a different shape from "skipped": [].
+func (o exportOptions) skips() []exportSkip {
+	out := make([]exportSkip, 0, len(o.skipped))
+	return append(out, o.skipped...)
+}
+
+// exportSkip records a dataset the event simply does not have, or that these
+// flags cannot write.
 type exportSkip struct {
 	Dataset string `json:"dataset"`
 	Reason  string `json:"reason"`
@@ -220,7 +240,16 @@ func exportOptionsFrom(cmd *cobra.Command, key string) (exportOptions, error) {
 	if err != nil {
 		return opts, err
 	}
-	opts.datasets = eventExportDatasets(key, names)
+	for _, ds := range eventExportDatasets(key, names) {
+		if ds.delimited && opts.format == "json" {
+			opts.skipped = append(opts.skipped, exportSkip{
+				Dataset: ds.name,
+				Reason:  "a table over a payload --to json already writes in full (see the matches file)",
+			})
+			continue
+		}
+		opts.datasets = append(opts.datasets, ds)
+	}
 	return opts, nil
 }
 
@@ -259,15 +288,16 @@ func exportDatasetsFrom(only string) ([]string, error) {
 func eventExportDatasets(key string, names []string) []exportDataset {
 	at := func(suffix string) string { return "/event/" + key + suffix }
 	all := map[string]exportDataset{
-		"event":           {"event", at(""), exportEventTable},
-		"teams":           {"teams", at("/teams"), exportTeamsTable},
-		"matches":         {"matches", at("/matches"), exportMatchesTable},
-		"rankings":        {"rankings", at("/rankings"), exportRankingsTable},
-		"alliances":       {"alliances", at("/alliances"), exportAlliancesTable},
-		"awards":          {"awards", at("/awards"), exportAwardsTable},
-		"oprs":            {"oprs", at("/oprs"), exportOPRsTable},
-		"district-points": {"district-points", at("/district_points"), exportDistrictPointsTable},
-		"team-statuses":   {"team-statuses", at("/teams/statuses"), exportTeamStatusesTable},
+		"event":            {name: "event", path: at(""), table: exportEventTable},
+		"teams":            {name: "teams", path: at("/teams"), table: exportTeamsTable},
+		"matches":          {name: "matches", path: at("/matches"), table: exportMatchesTable},
+		"score-breakdowns": {name: "score-breakdowns", path: at("/matches"), table: exportScoreBreakdownsTable, delimited: true},
+		"rankings":         {name: "rankings", path: at("/rankings"), table: exportRankingsTable},
+		"alliances":        {name: "alliances", path: at("/alliances"), table: exportAlliancesTable},
+		"awards":           {name: "awards", path: at("/awards"), table: exportAwardsTable},
+		"oprs":             {name: "oprs", path: at("/oprs"), table: exportOPRsTable},
+		"district-points":  {name: "district-points", path: at("/district_points"), table: exportDistrictPointsTable},
+		"team-statuses":    {name: "team-statuses", path: at("/teams/statuses"), table: exportTeamStatusesTable},
 	}
 	out := make([]exportDataset, 0, len(names))
 	for _, name := range names {
@@ -351,7 +381,7 @@ func runEventExport(cmd *cobra.Command, opts exportOptions) error {
 	}
 
 	if opts.dryRun {
-		return reportExport(cmd, opts, exportSummary{Written: paths, Skipped: []exportSkip{}, DryRun: true})
+		return reportExport(cmd, opts, exportSummary{Written: paths, Skipped: opts.skips(), DryRun: true})
 	}
 
 	client, err := newClient(cmd)
@@ -376,7 +406,7 @@ func runEventExport(cmd *cobra.Command, opts exportOptions) error {
 		}
 	}
 
-	summary := exportSummary{Written: []string{}, Skipped: []exportSkip{}}
+	summary := exportSummary{Written: []string{}, Skipped: opts.skips()}
 	for i, ds := range opts.datasets {
 		raw, err := e.get(ds.path)
 		if err != nil {
@@ -607,16 +637,6 @@ func exportTeamsTable(_ *exporter, raw json.RawMessage) (output.Table, error) {
 	}
 	sort.SliceStable(teams, func(i, j int) bool { return teams[i].TeamNumber < teams[j].TeamNumber })
 	return eventTeamsTable(teams), nil
-}
-
-func exportMatchesTable(e *exporter, raw json.RawMessage) (output.Table, error) {
-	var matches []api.Match
-	if err := json.Unmarshal(raw, &matches); err != nil {
-		return output.Table{}, err
-	}
-	frc.SortMatches(matches)
-	rows, _ := matchTableRows(matches, constantPlayoffType(e.playoffType()), false)
-	return output.Table{Headers: matchHeaders, Rows: rows}, nil
 }
 
 func exportRankingsTable(e *exporter, raw json.RawMessage) (output.Table, error) {

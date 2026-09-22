@@ -3,11 +3,14 @@ package cmd
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -129,6 +132,11 @@ func TestEventExportWritesOneFilePerDatasetInEveryFormat(t *testing.T) {
 
 			var want []string
 			for _, name := range exportDatasetNames {
+				// score-breakdowns is a view of the matches payload, which
+				// --to json already writes out in full.
+				if ext == "json" && name == "score-breakdowns" {
+					continue
+				}
 				want = append(want, "2024cthar-"+name+"."+ext)
 			}
 			// os.ReadDir sorts; the order the files were written in is
@@ -138,7 +146,7 @@ func TestEventExportWritesOneFilePerDatasetInEveryFormat(t *testing.T) {
 			if strings.Join(got, ",") != strings.Join(want, ",") {
 				t.Errorf("files =\n%v\nwant\n%v", got, want)
 			}
-			requireContains(t, stderr, "wrote 9 file(s)")
+			requireContains(t, stderr, fmt.Sprintf("wrote %d file(s)", len(want)))
 		})
 	}
 }
@@ -146,9 +154,10 @@ func TestEventExportWritesOneFilePerDatasetInEveryFormat(t *testing.T) {
 // The csv and tsv files are the command's own tables: anything else would mean
 // two renderings of the same data to keep in step.
 func TestEventExportFilesMatchTheEventCommandTables(t *testing.T) {
+	// matches is not here: its file is shaped for analysis rather than for
+	// reading, and has a test of its own.
 	cases := []struct{ dataset, command string }{
 		{"teams", "teams"},
-		{"matches", "matches"},
 		{"rankings", "rankings"},
 		{"alliances", "alliances"},
 		{"awards", "awards"},
@@ -175,20 +184,288 @@ func TestEventExportFilesMatchTheEventCommandTables(t *testing.T) {
 	}
 }
 
-func TestEventExportCSVHeaderIsTheMatchesTableHeader(t *testing.T) {
+// The matches file is deliberately not the `event matches` table: that table
+// puts three teams in one cell and two scores in another, which has to be
+// undone before anything can be computed from it.
+func TestEventExportMatchesCSVIsShapedForAnalysis(t *testing.T) {
 	srv := newExportServer(t)
 	dir := t.TempDir()
 	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir)
 	requireNoError(t, err, stderr)
 
+	got := lines(readExported(t, dir, "matches", "csv"))
+	want := "key,label,comp_level,set_number,match_number," +
+		"red1,red2,red3,blue1,blue2,blue3," +
+		"red_score,blue_score,winner," +
+		"time,predicted_time,actual_time," +
+		"red_surrogates,blue_surrogates,red_dq,blue_dq"
+	if got[0] != want {
+		t.Errorf("header =\n%s\nwant\n%s", got[0], want)
+	}
 	table, stderr, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, stderr)
-
-	got := lines(readExported(t, dir, "matches", "csv"))[0]
-	if want := lines(table)[0]; got != want {
-		t.Errorf("header = %q, want %q", got, want)
+	if got[0] == lines(table)[0] {
+		t.Error("the matches export should no longer mirror the display table")
 	}
-	requireContains(t, got, "Match,Key,Red,Blue")
+	for _, row := range got[1:] {
+		if len(strings.Split(row, ",")) != len(exportMatchColumns) {
+			t.Errorf("row %q has the wrong number of cells; a cell must be quoted or holding a list", row)
+		}
+	}
+}
+
+// exportedMatchRow returns the exported matches row for one match key.
+func exportedMatchRow(t *testing.T, dir, key string) []string {
+	t.Helper()
+	for _, line := range lines(readExported(t, dir, "matches", "csv"))[1:] {
+		cells := strings.Split(line, ",")
+		if cells[0] == key {
+			return cells
+		}
+	}
+	t.Fatalf("no row for %s", key)
+	return nil
+}
+
+// exportMatchCell reads one named column out of a row.
+func exportMatchCell(t *testing.T, row []string, column string) string {
+	t.Helper()
+	i := slices.Index(exportMatchColumns, column)
+	if i < 0 {
+		t.Fatalf("no column named %q", column)
+	}
+	return row[i]
+}
+
+// A played match with a disqualification: the DQ has its own column rather
+// than a "!" glued onto a team number, and the two scores are two values.
+func TestEventExportMatchesCSVSplitsTeamsScoresAndMarks(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir)
+	requireNoError(t, err, stderr)
+
+	row := exportedMatchRow(t, dir, "2024cthar_qm3")
+	want := map[string]string{
+		"label":           "Qual 3",
+		"comp_level":      "qm",
+		"set_number":      "1",
+		"match_number":    "3",
+		"red1":            "177",
+		"red2":            "3467",
+		"red3":            "2168",
+		"blue1":           "1073",
+		"blue2":           "1124",
+		"blue3":           "6153",
+		"red_score":       "31",
+		"blue_score":      "77",
+		"winner":          "blue",
+		"red_dq":          "2168",
+		"blue_dq":         "",
+		"red_surrogates":  "",
+		"blue_surrogates": "",
+		"time":            "2024-03-22T16:00:00Z",
+		"actual_time":     "2024-03-22T16:03:00Z",
+	}
+	for column, value := range want {
+		if got := exportMatchCell(t, row, column); got != value {
+			t.Errorf("%s = %q, want %q", column, got, value)
+		}
+	}
+}
+
+// An unplayed match: -1 is the API's way of saying "no result yet", and a -1
+// in a column of numbers is a value something will happily average.
+func TestEventExportMatchesCSVLeavesUnplayedCellsBlank(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir)
+	requireNoError(t, err, stderr)
+
+	row := exportedMatchRow(t, dir, "2024cthar_qm2")
+	for _, column := range []string{"red_score", "blue_score", "winner", "actual_time"} {
+		if got := exportMatchCell(t, row, column); got != "" {
+			t.Errorf("%s = %q, want it blank for an unplayed match", column, got)
+		}
+	}
+	// The schedule is still known, and is still a full timestamp.
+	if got := exportMatchCell(t, row, "predicted_time"); got != "2024-03-22T15:40:00Z" {
+		t.Errorf("predicted_time = %q", got)
+	}
+}
+
+// A surrogate is a fact about the match, not a decoration on a team number.
+func TestEventExportMatchesCSVGivesSurrogatesTheirOwnColumn(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir)
+	requireNoError(t, err, stderr)
+
+	row := exportedMatchRow(t, dir, "2024cthar_qm12")
+	if got := exportMatchCell(t, row, "blue_surrogates"); got != "4055" {
+		t.Errorf("blue_surrogates = %q, want 4055", got)
+	}
+	// ...and the team column holds a number and nothing else.
+	if got := exportMatchCell(t, row, "blue3"); got != "4055" {
+		t.Errorf("blue3 = %q, want the bare number", got)
+	}
+}
+
+// A played match the API names no winner for is a tie, which is a different
+// thing from a match that has not happened.
+func TestEventExportMatchesCSVNamesATie(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir)
+	requireNoError(t, err, stderr)
+
+	if got := exportMatchCell(t, exportedMatchRow(t, dir, "2024cthar_qm7"), "winner"); got != "tie" {
+		t.Errorf("winner = %q, want tie", got)
+	}
+}
+
+// UTC, not the local timezone: the file outlives the machine that wrote it.
+func TestEventExportMatchTimesAreUTCWhateverTheLocalZoneIs(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	t.Setenv("TZ", "Pacific/Kiritimati")
+
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir, "--only", "matches")
+	requireNoError(t, err, stderr)
+
+	for _, row := range lines(readExported(t, dir, "matches", "csv"))[1:] {
+		for _, column := range []string{"time", "predicted_time", "actual_time"} {
+			got := exportMatchCell(t, strings.Split(row, ","), column)
+			if got != "" && !strings.HasSuffix(got, "Z") {
+				t.Errorf("%s = %q, want an RFC3339 time in UTC", column, got)
+			}
+		}
+	}
+}
+
+// The score breakdowns are the whole point of the API's match payload for
+// anyone doing analysis, and csv had no way to reach them at all.
+func TestEventExportScoreBreakdowns(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "csv", "--dir", dir, "--only", "score-breakdowns")
+	requireNoError(t, err, stderr)
+
+	got := lines(readExported(t, dir, "score-breakdowns", "csv"))
+	if got[0] != "key,label,alliance,totalPoints" {
+		t.Errorf("header = %q", got[0])
+	}
+	// One row per match per alliance, whether or not the match has a
+	// breakdown: the rows are the shape of the event, not of the data.
+	if len(got)-1 != 2*6 {
+		t.Errorf("%d rows, want two per match for six matches:\n%s", len(got)-1, strings.Join(got, "\n"))
+	}
+	for _, want := range []string{
+		"2024cthar_qm12,Qual 12,red,88",
+		"2024cthar_qm12,Qual 12,blue,61",
+		// A match with no breakdown still gets its rows, with blanks.
+		"2024cthar_qm3,Qual 3,red,",
+	} {
+		if !contains(got, want) {
+			t.Errorf("missing row %q:\n%s", want, strings.Join(got, "\n"))
+		}
+	}
+	// Both alliances of a match are together, red first.
+	if got[1] != "2024cthar_qm2,Qual 2,red," || got[2] != "2024cthar_qm2,Qual 2,blue," {
+		t.Errorf("rows 1-2 = %q, %q; want the first match's red then blue", got[1], got[2])
+	}
+}
+
+// The columns are the union over the event: a match that was replayed or
+// stopped early can be missing entries the rest of the event has, and a file
+// whose columns came from the first match would drop them.
+func TestEventExportScoreBreakdownColumnsAreTheUnionOverTheEvent(t *testing.T) {
+	routes := exportRoutes()
+	routes["/event/2024cthar/matches"] = `[
+	  {"key": "2024cthar_qm1", "comp_level": "qm", "set_number": 1, "match_number": 1,
+	   "alliances": {"red": {"score": 1, "team_keys": []}, "blue": {"score": 2, "team_keys": []}},
+	   "score_breakdown": {"red": {"autoPoints": 5}, "blue": {"autoPoints": 6}}},
+	  {"key": "2024cthar_qm2", "comp_level": "qm", "set_number": 1, "match_number": 2,
+	   "alliances": {"red": {"score": 3, "team_keys": []}, "blue": {"score": 4, "team_keys": []}},
+	   "score_breakdown": {"red": {"grid.10": 1, "grid.2": 2, "foulPoints": 9}, "blue": {}}}
+	]`
+	srv := newFakeTBA(t, routes)
+	dir := t.TempDir()
+
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "csv", "--dir", dir, "--only", "score-breakdowns")
+	requireNoError(t, err, stderr)
+
+	got := lines(readExported(t, dir, "score-breakdowns", "csv"))
+	// Sorted, and the array indices sorted as numbers rather than as text.
+	if want := "key,label,alliance,autoPoints,foulPoints,grid.2,grid.10"; got[0] != want {
+		t.Errorf("header = %q, want %q", got[0], want)
+	}
+	if want := "2024cthar_qm1,Qual 1,red,5,,,"; got[1] != want {
+		t.Errorf("row = %q, want %q", got[1], want)
+	}
+}
+
+// The matches payload is fetched once even though two datasets are built from
+// it.
+func TestEventExportFetchesTheMatchesPayloadOnce(t *testing.T) {
+	srv := newExportServer(t)
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "csv", "--dir", t.TempDir(), "--only", "matches,score-breakdowns", "--no-cache")
+	requireNoError(t, err, stderr)
+
+	n := 0
+	for _, p := range requestPaths(t, srv) {
+		if p == "/event/2024cthar/matches" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("fetched the matches payload %d times, want 1", n)
+	}
+}
+
+// --to json writes the API's own payload, and the matches payload already
+// carries every breakdown verbatim. A second identical file under another
+// name would only be something to keep in step.
+func TestEventExportSkipsScoreBreakdownsForJSON(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+
+	stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "json", "--dir", dir)
+	requireNoError(t, err, stderr)
+
+	if contains(dirEntries(t, dir), "2024cthar-score-breakdowns.json") {
+		t.Errorf("score-breakdowns should not be written as json: %v", dirEntries(t, dir))
+	}
+	requireContains(t, stderr, "note: skipped score-breakdowns")
+	if strings.Contains(stdout, "score-breakdowns") {
+		t.Errorf("a skipped dataset should not be on stdout:\n%s", stdout)
+	}
+}
+
+func TestEventExportScoreBreakdownSkipIsInTheJSONSummary(t *testing.T) {
+	srv := newExportServer(t)
+	stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "json", "--dir", t.TempDir(), "--only", "score-breakdowns", "--json")
+	requireNoError(t, err, stderr)
+
+	obj := decodeJSON(t, stdout).(map[string]any)
+	if written, _ := obj["written"].([]any); len(written) != 0 {
+		t.Errorf("written = %v, want nothing", obj["written"])
+	}
+	skipped, ok := obj["skipped"].([]any)
+	if !ok || len(skipped) != 1 {
+		t.Fatalf("skipped = %v, want one entry", obj["skipped"])
+	}
+	if entry := skipped[0].(map[string]any); entry["dataset"] != "score-breakdowns" {
+		t.Errorf("dataset = %v", entry["dataset"])
+	}
+	// Nothing was fetched: the decision is made from the flags alone.
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("requested %v, want nothing", got)
+	}
 }
 
 func TestEventExportTSVIsTabSeparated(t *testing.T) {
@@ -329,7 +606,7 @@ func TestEventExportDryRunFetchesNothingAndWritesNothing(t *testing.T) {
 		t.Errorf("stdout has %d lines, want %d:\n%s", len(got), len(exportDatasetNames), stdout)
 	}
 	requireContains(t, stdout, exportedPath(dir, "matches", "csv"))
-	requireContains(t, stderr, "dry run: would write 9 file(s)")
+	requireContains(t, stderr, fmt.Sprintf("dry run: would write %d file(s)", len(exportDatasetNames)))
 }
 
 func TestEventExportDryRunJSONSaysSo(t *testing.T) {
@@ -414,7 +691,7 @@ func TestEventExportSkipsADatasetTheEventDoesNotHave(t *testing.T) {
 
 	requireContains(t, stderr, "note: skipped district-points")
 	requireContains(t, stderr, "404")
-	requireContains(t, stderr, "wrote 8 file(s)")
+	requireContains(t, stderr, fmt.Sprintf("wrote %d file(s)", len(exportDatasetNames)-1))
 	if contains(dirEntries(t, dir), "2024cthar-district-points.csv") {
 		t.Errorf("a skipped dataset should leave no file: %v", dirEntries(t, dir))
 	}
@@ -646,7 +923,7 @@ func TestEventExportStdoutListsExactlyTheWrittenPaths(t *testing.T) {
 	if strings.Contains(stdout, "wrote") {
 		t.Errorf("the summary belongs on stderr:\n%s", stdout)
 	}
-	requireContains(t, stderr, "wrote 9 file(s)")
+	requireContains(t, stderr, fmt.Sprintf("wrote %d file(s)", len(exportDatasetNames)))
 }
 
 func TestEventExportPathsAreRelativeToTheDirAsGiven(t *testing.T) {
@@ -792,8 +1069,8 @@ func TestEventExportJSONSummaryTakesAJqExpression(t *testing.T) {
 	stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
 		"--to", "csv", "--dir", t.TempDir(), "--jq", ".written | length")
 	requireNoError(t, err, stderr)
-	if strings.TrimSpace(stdout) != "9" {
-		t.Errorf("stdout = %q, want 9", stdout)
+	if want := strconv.Itoa(len(exportDatasetNames)); strings.TrimSpace(stdout) != want {
+		t.Errorf("stdout = %q, want %s", stdout, want)
 	}
 }
 
@@ -910,7 +1187,7 @@ func TestEventExportMatchesAreInPlayOrder(t *testing.T) {
 
 	var keys []string
 	for _, line := range lines(readExported(t, dir, "matches", "csv"))[1:] {
-		keys = append(keys, strings.Split(line, ",")[1])
+		keys = append(keys, strings.Split(line, ",")[0])
 	}
 	quals := 0
 	for _, k := range keys {
