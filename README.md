@@ -699,6 +699,64 @@ tba event insights 2024cthar --level playoff
 tba event insights 2024cthar --columns stat,value --format markdown
 ```
 
+### Watching an event
+
+`tba event watch <key>` polls an event and prints what changed since the last look. It talks to a shared API for as long as it is left running, so the defaults are deliberately timid: **one poll a minute, for two hours, then it stops**. To run it longer, say so:
+
+```
+tba event watch 2024cthar --for 8h          # a whole competition day
+tba event watch 2024cthar --for 0           # until you press Ctrl-C
+tba event watch 2024cthar --interval 30s    # more often (15s is the floor)
+tba event watch 2024cthar --max-polls 10    # a fixed number of looks
+```
+
+Unchanged polls are cheap: each one is a conditional request the API answers with a 304 and no body, so a watch left open all afternoon costs far less than its poll count suggests.
+
+Output is append-only. Nothing is cleared, nothing is redrawn, and the cursor never moves, so the stream can be scrolled back through, `tee`d into a file or diffed later. The first poll prints the whole match table — the same columns as `tba event matches` — and every later poll prints only the rows that changed, under a line naming the time and the poll number:
+
+```
+$ tba event watch 2024cthar
+Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status
+------  -------------  ---------------  ---------------  -----------  ------  ---------  -----------  ---------
+Qual 1  2024cthar_qm1  177, 1073, 5507  230, 1071, 4055  88-61        red     Fri 14:00  actual       Played
+Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153                       Fri 14:10  predicted    Scheduled
+Qual 3  2024cthar_qm3  177, 1073, 5507  195, 1124, 6153                       Fri 14:20  predicted    Scheduled
+--- 14:32:07 (poll 2) ---
+Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153  101-99       red     Fri 14:10  actual       Played
+```
+
+Column widths are fixed by that first table, so the rows below it stay in line.
+
+`--team 177` narrows the whole feed to one team's matches. `--rankings` adds the standings, printed after the matches on the first poll and again whenever a rank or a record moves. A match counts as changed when it is newly played, when a score or a winner changes, when its predicted time moves by a minute or more, or when it appears in the schedule for the first time; `actual_time` being restamped after the fact is not news.
+
+Why the watch stopped goes to stderr, and stopping is not a failure:
+
+```
+note: stopped after 2h0m0s (--for)
+note: stopped after 10 polls (--max-polls)
+```
+
+Both exit 0. Ctrl-C exits 130 without a word. A poll that fails is a note on stderr and another try at the next interval — five failures in a row is exit 1.
+
+**JSON Lines.** Piped, or with `--format json`, each change is one self-contained JSON object on its own line, flushed as it happens. It is never a growing array, so a reader can act on a change the moment it arrives. The first line is a snapshot of everything as it stood at the first poll:
+
+```
+{"ts":"2024-03-22T14:31:07-04:00","poll":1,"type":"snapshot","matches":[…]}
+{"ts":"2024-03-22T14:32:07-04:00","poll":2,"type":"match","key":"2024cthar_qm2","change":"played","match":{…}}
+{"ts":"2024-03-22T14:33:07-04:00","poll":3,"type":"ranking","team_key":"frc177","rank":3,"previous_rank":5,"record":{"wins":9,"losses":3,"ties":0}}
+```
+
+`change` is one of `added`, `played`, `score`, `winner` or `rescheduled`. `--jq` is applied to each line on its own, so a filter written for a single change works all day:
+
+```
+$ tba event watch 2024cthar --format json \
+    --jq 'select(.change == "played") | "\(.match.key) \(.match.winning_alliance)"' -r
+2024cthar_qm12 red
+2024cthar_qm13 blue
+```
+
+`csv`, `tsv` and `markdown` describe a finished table and have nothing to say about a stream, so they are a usage error. `--columns` and `--sort` do not apply either, and are ignored.
+
 ## Scripting
 
 `tba` is meant to be piped into other tools.
@@ -822,6 +880,7 @@ identical archives.
 | `tba event teams <key>` | List teams at event |
 | `tba event matches <key>` | List event matches |
 | `tba event rankings <key>` | Show event rankings |
+| `tba event watch <key>` | Follow an event live (`--interval`, `--for`, `--max-polls`, `--rankings`, `--team`) |
 | `tba event alliances <key>` | Show playoff alliances |
 | `tba event team-statuses <key>` | Show where every team at an event stands |
 | `tba event awards <key>` | Show event awards |
