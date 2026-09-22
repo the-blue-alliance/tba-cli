@@ -124,8 +124,10 @@ falls, in table and markdown output.
 The ranks the API publishes include district championship points once the DCMP
 has been played, so late in a season "top N" is a line through the final
 standings rather than through the cut that decided who went. --pre-dcmp ranks
-instead on the points a team had before the DCMP, adds that total as its own
-column, and puts the cut line there; the cut line says which of the two it is.`,
+instead on the points a team had before the DCMP, renumbers Rank by that
+order, keeps the published rank as Season Rank, adds the pre-DCMP total as its
+own column, and puts the cut line there; the cut line says which of the two it
+is. The JSON is the API's own answer either way.`,
 		Example: `  tba district rankings 2024ne
   tba district rankings 2024ne --format markdown
   tba district rankings 2024ne --cutoff 80
@@ -171,7 +173,14 @@ column, and puts the cut line there; the cut line says which of the two it is.`,
 				}
 			}
 
-			headers := []string{"Rank", "Team", "Rookie Bonus"}
+			headers := []string{"Rank"}
+			if preDCMP {
+				// Rank counts the rows as they are now ordered, so the number
+				// the API published needs a column of its own -- and a name
+				// that says which of the two it is.
+				headers = append(headers, "Season Rank")
+			}
+			headers = append(headers, "Team", "Rookie Bonus")
 			for i := 1; i <= eventColumns; i++ {
 				headers = append(headers, fmt.Sprintf("Event %d", i))
 				if detail {
@@ -190,11 +199,22 @@ column, and puts the cut line there; the cut line says which of the two it is.`,
 			rows := make([][]string, len(rankings))
 			for i, r := range rankings {
 				events := qualifyingEvents(r)
-				row := []string{
-					strconv.Itoa(r.Rank),
+				// A rank next to a cut line has to be the rank the cut was
+				// made on: the published one counts district championship
+				// points, so under --pre-dcmp it ran 2, 3, 11, 5 down a table
+				// ordered by something else.
+				rank := r.Rank
+				if preDCMP {
+					rank = i + 1
+				}
+				row := []string{strconv.Itoa(rank)}
+				if preDCMP {
+					row = append(row, strconv.Itoa(r.Rank))
+				}
+				row = append(row,
 					output.TeamNumberFromKey(r.TeamKey),
 					strconv.Itoa(r.RookieBonus),
-				}
+				)
 				for n := 0; n < eventColumns; n++ {
 					if n >= len(events) {
 						row = append(row, "")
