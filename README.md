@@ -8,6 +8,17 @@ A command-line interface for [The Blue Alliance](https://www.thebluealliance.com
 
 Download a prebuilt binary for your platform from the [Releases](https://github.com/the-blue-alliance/tba-cli/releases) page.
 
+Each archive carries the `tba` binary, this README, man pages under `man/`
+(`man/tba.1`, plus one page per command) and completion scripts under
+`completions/` for bash, zsh and fish. To install the man pages by hand, copy
+them somewhere on your `MANPATH`:
+
+```
+sudo cp man/*.1 /usr/local/share/man/man1/
+man tba
+man tba-event-matches
+```
+
 ### From source
 
 ```
@@ -271,8 +282,34 @@ CI runs on every pull request and on pushes to `main`
 [golangci-lint](https://golangci-lint.run) with the config in `.golangci.yml`.
 Dependency and action updates arrive weekly via Dependabot.
 
-Releases are cut by pushing a `v*` tag, which runs GoReleaser
-(`.github/workflows/release.yml` and `.goreleaser.yml`).
+### Releasing
+
+Releases are cut by pushing a tag:
+
+```
+git tag -a v1.2.3 -m "v1.2.3"
+git push origin v1.2.3
+```
+
+That runs `.github/workflows/release.yml`, which runs GoReleaser with
+`.goreleaser.yml`: it builds every platform with the version, commit and commit
+date stamped into the binary, generates the man pages and completion scripts
+from the command tree, builds the archives and checksums, writes grouped release
+notes from the commits since the last tag and announces the release on Slack
+(`SLACK_WEBHOOK_URL`).
+
+Man pages and completions are generated, never checked in, so they cannot drift
+from the flags the binary has. To produce them locally:
+
+```
+go run ./cmd/tba docs man --dir manpages
+go run ./cmd/tba docs markdown --dir docs
+go run ./cmd/tba docs completions --dir completions
+```
+
+`docs man` dates its pages from `--date`, else `SOURCE_DATE_EPOCH`, else the
+binary's build date — never from the clock, so rebuilding a tag produces
+identical archives.
 
 ## Commands
 
