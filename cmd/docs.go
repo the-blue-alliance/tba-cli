@@ -229,8 +229,9 @@ func newDocsReadmeTableCmd() *cobra.Command {
 			"\"Command reference\": one row per command that does something, built from\n" +
 			"each command's own use line and short description.\n\n" +
 			"Hidden commands are left out, including this one.",
-		Example: `  tba docs readme-table`,
-		Args:    cobra.NoArgs,
+		Example: `  tba docs readme-table
+  tba docs readme-table > commands.md`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := io.WriteString(cmd.OutOrStdout(), readmeCommandTable())
 			return err
