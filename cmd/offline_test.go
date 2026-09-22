@@ -119,6 +119,35 @@ func TestOfflineAnswersFromTheCacheWithoutAnyRequest(t *testing.T) {
 	}
 }
 
+// Reading one's own cache is not a request to anyone, so it needs no
+// credentials. `tba --offline ...` over a warm cache on a machine with no key
+// exited 4 "not authenticated", which is the one situation where offline is
+// most worth having.
+func TestOfflineNeedsNoAPIKey(t *testing.T) {
+	sharedCacheDir(t)
+	t.Setenv("TBA_CONFIG_DIR", t.TempDir())
+	t.Setenv("TBA_AUTH_KEY", "test-key")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	first, stderr, err := runCmd(t, srv, "team", "view", "177", "--format", "json")
+	requireNoError(t, err, stderr)
+
+	// Same cache and config directory, no key anywhere.
+	t.Setenv("TBA_AUTH_KEY", "")
+	out, stderr, err := runCmd(t, srv, "team", "view", "177", "--format", "json", "--offline")
+	requireNoError(t, err, stderr)
+	if out != first {
+		t.Errorf("offline output differs:\n%s\n---\n%s", first, out)
+	}
+
+	// Without --offline the same run still asks for a key, because then it
+	// really is about to make a request.
+	_, _, err = runCmd(t, srv, "team", "view", "177")
+	if got := clierr.ExitCode(err); got != clierr.ExitAuth {
+		t.Errorf("exit code = %d (err %v), want %d", got, err, clierr.ExitAuth)
+	}
+}
+
 func TestOfflineFailsOnAnUncachedPath(t *testing.T) {
 	sharedCacheDir(t)
 	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
