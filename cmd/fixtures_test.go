@@ -517,7 +517,8 @@ const predictions2024ctharJSON = `{
     "qual": {
       "2024cthar_qm10": {"red": {"score": 70}, "blue": {"score": 71.05}, "winning_alliance": "blue", "prob": 0.5104},
       "2024cthar_qm1": {"red": {"score": 84.2}, "blue": {"score": 63.1}, "winning_alliance": "red", "prob": 0.7853},
-      "2024cthar_qm2": {"red": {"score": 55.5}, "blue": {"score": 77.25}, "winning_alliance": "blue", "prob": 0.6231}
+      "2024cthar_qm2": {"red": {"score": 55.5}, "blue": {"score": 77.25}, "winning_alliance": "blue", "prob": 0.6231},
+      "2024cthar_qm11": {"red": {"score": 0}, "blue": {"score": 0}, "winning_alliance": "red", "prob": 0.5}
     },
     "playoff": {
       "2024cthar_f1m1": {"red": {"score": 121}, "blue": {"score": 118.4}, "winning_alliance": "red", "prob": 0.52},
@@ -540,6 +541,67 @@ const predictions2024ctharJSON = `{
     ["frc230", [4]]
   ]
 }`
+
+// The matches behind the predictions above, as /event/2024cthar/matches sends
+// them: the same keys, so the prediction table can label them and name the
+// teams. The final is deliberately missing, since a prediction can name a
+// match the list does not carry.
+const matchesPredicted2024ctharJSON = `[
+  {
+    "key": "2024cthar_qm1", "comp_level": "qm", "set_number": 1, "match_number": 1,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_qm2", "comp_level": "qm", "set_number": 1, "match_number": 2,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc558", "frc3467", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_qm10", "comp_level": "qm", "set_number": 1, "match_number": 10,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc177", "frc195", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc1073", "frc558", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_qm11", "comp_level": "qm", "set_number": 1, "match_number": 11,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc5507", "frc1071", "frc1124"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc230", "frc2168", "frc3467"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_sf1m1", "comp_level": "sf", "set_number": 1, "match_number": 1,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc3467", "frc6153", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_sf3m1", "comp_level": "sf", "set_number": 3, "match_number": 1,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc230", "frc195", "frc1071"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc558", "frc1124", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  }
+]`
 
 // Event insights as the API sends them: season-specific keys, the
 // [count, total, percent] triples the endpoint is full of, a nested object and

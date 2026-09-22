@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -19,10 +21,17 @@ func newEventPredictionsCmd() *cobra.Command {
 		Short: "Show event predictions",
 		Long: `Show what TBA's model expects at an event.
 
-By default the table is Match | Red Score | Blue Score | Predicted Winner |
-Confidence, in play order -- qualification matches first, then the playoff
-bracket -- rather than the alphabetical order the match keys are in. Confidence
-is the model's own probability for the winner it picked.
+By default the table is Match | Key | Red | Blue | Red Score | Blue Score |
+Predicted Winner | Confidence, in play order -- qualification matches first,
+then the playoff bracket -- rather than the alphabetical order the match keys
+are in. Confidence is the model's own probability for the winner it picked.
+
+Match is the label a person uses ("Qual 12", "SF 3"), and Red and Blue are the
+teams, both from the event's match list; that list is fetched once alongside
+the predictions, and an event without one still gets its labels from the match
+keys. A match the model has nothing to say about comes back as a 0-0
+prediction, and its winner and confidence are left blank rather than reported
+as a coin flip.
 
 --rankings switches to the predicted qualification ranking, Team | Predicted
 Rank | Range, where Range bounds the rank the model allows for.
@@ -79,7 +88,13 @@ JSON output stays the document the API sent, whichever table was asked for.`,
 			case showStats:
 				headers, rows = predictionStatsTable(predictions)
 			default:
-				headers, rows = matchPredictionTable(predictions.MatchPredictions)
+				// The match list is a convenience -- labels and team lists --
+				// so a failure costs those cells, not the table.
+				var byKey map[string]api.Match
+				if format != "json" {
+					byKey = eventMatchesByKey(cmd, client, args[0])
+				}
+				headers, rows = matchPredictionTable(predictions.MatchPredictions, byKey)
 			}
 			if len(rows) == 0 {
 				return noPredictions(cmd, args[0], format, raw)
@@ -106,10 +121,52 @@ func noPredictions(cmd *cobra.Command, key, format string, raw json.RawMessage) 
 	return output.PrintJSONWithFilter(cmd.OutOrStdout(), raw, jqExpr(cmd), rawOutput(cmd))
 }
 
+// eventMatchesByKey fetches an event's matches, keyed by match key, for the
+// labels and team lists the prediction table borrows from them. It is best
+// effort: an event whose match list cannot be had still gets its table, with
+// labels read out of the match keys and no teams.
+func eventMatchesByKey(cmd *cobra.Command, client *api.Client, key string) map[string]api.Match {
+	var matches []api.Match
+	if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/matches", key), &matches); err != nil {
+		return nil
+	}
+	byKey := make(map[string]api.Match, len(matches))
+	for _, m := range matches {
+		byKey[m.Key] = m
+	}
+	return byKey
+}
+
+// matchFromKey rebuilds enough of a match from its key to label it, for the
+// matches a prediction document mentions but the match list does not carry.
+func matchFromKey(key string) api.Match {
+	m := api.Match{Key: key}
+	i := strings.LastIndex(key, "_")
+	if i < 0 {
+		return m
+	}
+	m.EventKey = key[:i]
+	parts := matchKeySuffixPattern.FindStringSubmatch(key[i+1:])
+	if parts == nil {
+		return m
+	}
+	m.CompLevel = parts[1]
+	first, _ := strconv.Atoi(parts[2])
+	if parts[3] == "" {
+		// A qualification key carries only the match number.
+		m.SetNumber, m.MatchNumber = 1, first
+		return m
+	}
+	m.SetNumber = first
+	m.MatchNumber, _ = strconv.Atoi(parts[3])
+	return m
+}
+
 // matchPredictionTable lists every predicted match, qualification rounds first
-// and then the playoff bracket, each in play order.
-func matchPredictionTable(rounds *api.MatchPredictionRounds) ([]string, [][]string) {
-	headers := []string{"Match", "Red Score", "Blue Score", "Predicted Winner", "Confidence"}
+// and then the playoff bracket, each in play order. byKey supplies the labels
+// and team lists and may be nil or incomplete.
+func matchPredictionTable(rounds *api.MatchPredictionRounds, byKey map[string]api.Match) ([]string, [][]string) {
+	headers := []string{"Match", "Key", "Red", "Blue", "Red Score", "Blue Score", "Predicted Winner", "Confidence"}
 	if rounds == nil {
 		return headers, nil
 	}
@@ -122,16 +179,36 @@ func matchPredictionTable(rounds *api.MatchPredictionRounds) ([]string, [][]stri
 		sortMatchKeys(keys)
 		for _, k := range keys {
 			p := round[k]
+			m, ok := byKey[k]
+			if !ok {
+				m = matchFromKey(k)
+			}
+			winner, confidence := allianceLabel(p.WinningAlliance), formatConfidence(p.Prob)
+			if unmodelled(p) {
+				// TBA answers for a match it cannot model with 0-0, and then
+				// names a winner anyway at a confidence of about a half.
+				// "Red / 50%" is not a prediction; it is the absence of one.
+				winner, confidence = "", ""
+			}
 			rows = append(rows, []string{
+				frc.MatchLabel(m, nil),
 				k,
+				strings.Join(frc.MarkedTeams(m.Alliances[frc.AllianceRed]), ", "),
+				strings.Join(frc.MarkedTeams(m.Alliances[frc.AllianceBlue]), ", "),
 				formatNumber(p.Red.Score),
 				formatNumber(p.Blue.Score),
-				allianceLabel(p.WinningAlliance),
-				formatConfidence(p.Prob),
+				winner,
+				confidence,
 			})
 		}
 	}
 	return headers, rows
+}
+
+// unmodelled reports whether a prediction says nothing: both alliances are
+// expected to score exactly nothing, which no real prediction does.
+func unmodelled(p api.MatchPrediction) bool {
+	return p.Red.Score == 0 && p.Blue.Score == 0
 }
 
 // allianceLabel titles an alliance colour, leaving an unpredicted match blank

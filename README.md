@@ -697,10 +697,15 @@ tba insight leaderboards --year 2024 --limit 0 --format csv
 tba insight notables --year 2024 --board "Hall Of Fame"
 ```
 
-`event predictions` is `Match | Red Score | Blue Score | Predicted Winner |
-Confidence`, in play order — the qualification rounds and then the bracket,
-never the alphabetical order the match keys are in. Confidence is the model's
-own probability for the winner it picked. `--rankings` switches to the predicted
+`event predictions` is `Match | Key | Red | Blue | Red Score | Blue Score |
+Predicted Winner | Confidence`, in play order — the qualification rounds and
+then the bracket, never the alphabetical order the match keys are in. Match is
+the label ("Qual 12", "SF 3") and Red and Blue are the teams; both come from the
+event's match list, fetched once alongside the predictions, and an event whose
+list cannot be had still gets its labels from the match keys. Confidence is the
+model's own probability for the winner it picked, and a match the model has
+nothing to say about — a 0-0 prediction — leaves the winner and the confidence
+blank instead of reporting a coin flip. `--rankings` switches to the predicted
 qualification finish, `Team | Predicted Rank | Range`, and `--stats` shows the
 model's own numbers: the Brier scores and the mean and variance of each
 statistic it fits.
