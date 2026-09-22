@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -84,7 +85,8 @@ func (t Table) SelectColumns(spec string) (Table, error) {
 // spec, a column reference optionally prefixed with "-" to descend. The sort is
 // stable, so rows that compare equal keep the order the API returned them in,
 // and it is numeric-aware: two cells that both parse as numbers compare as
-// numbers, everything else compares bytewise.
+// numbers, two win-loss-tie records compare number by number, and everything
+// else compares bytewise.
 //
 // The caller gets indices rather than a sorted Table so that the same
 // permutation can be applied to the underlying JSON data.
@@ -181,22 +183,72 @@ func cellAt(row []string, i int) string {
 	return row[i]
 }
 
+// wltPattern recognises a win-loss-tie record, with or without the ties:
+// "11-1-0", "9-3".
+var wltPattern = regexp.MustCompile(`^\d+-\d+(-\d+)?$`)
+
 // compareCells orders two cells, preferring a numeric comparison when both
-// sides are numbers so that "10" sorts after "9".
+// sides are numbers so that "10" sorts after "9", and a field-by-field one
+// when both sides are win-loss-tie records.
 func compareCells(a, b string) int {
 	if x, err := parseNumber(a); err == nil {
 		if y, err := parseNumber(b); err == nil {
-			switch {
-			case x < y:
-				return -1
-			case x > y:
-				return 1
-			default:
-				return 0
-			}
+			return compareFloats(x, y)
 		}
 	}
+	if cmp, ok := compareWLT(a, b); ok {
+		return cmp
+	}
 	return strings.Compare(a, b)
+}
+
+// compareWLT orders two win-loss-tie records by wins, then losses, then ties,
+// each as a number. Compared as text, "9-3-0" sorts above "11-1-0" because "9"
+// is bigger than "1", which is not an order anybody wants a season in.
+//
+// The second result is false unless both cells are records, so every other
+// cell falls through to the comparison it would have had.
+func compareWLT(a, b string) (int, bool) {
+	x, okA := parseWLT(a)
+	y, okB := parseWLT(b)
+	if !okA || !okB {
+		return 0, false
+	}
+	for i := range x {
+		if cmp := compareFloats(float64(x[i]), float64(y[i])); cmp != 0 {
+			return cmp, true
+		}
+	}
+	return 0, true
+}
+
+// parseWLT reads a record into wins, losses and ties. A record without ties is
+// read as no ties, which is what a two-part record means.
+func parseWLT(s string) ([3]int, bool) {
+	var out [3]int
+	s = strings.TrimSpace(s)
+	if !wltPattern.MatchString(s) {
+		return out, false
+	}
+	for i, part := range strings.Split(s, "-") {
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+func compareFloats(x, y float64) int {
+	switch {
+	case x < y:
+		return -1
+	case x > y:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func parseNumber(s string) (float64, error) {

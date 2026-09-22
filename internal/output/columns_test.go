@@ -327,3 +327,54 @@ func TestReorderDropsDividers(t *testing.T) {
 		t.Errorf("dividers = %v, want none after a reorder", got.Dividers)
 	}
 }
+
+// A record is three numbers, not a string: compared as text "9-3-0" sorts
+// above "11-1-0" because "9" beats "1".
+func TestSortOrderComparesRecordsAsNumbers(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Team", "Record"},
+		Rows: [][]string{
+			{"177", "9-3-0"},
+			{"1073", "11-1-0"},
+			{"5507", "10-2-0"},
+			{"230", "10-3-0"},
+			{"195", "10-2-1"},
+		},
+	}
+	order, err := tbl.SortOrder("-record")
+	if err != nil {
+		t.Fatalf("SortOrder: %v", err)
+	}
+	got := make([]string, 0, len(order))
+	for _, i := range order {
+		got = append(got, tbl.Rows[i][1])
+	}
+	want := []string{"11-1-0", "10-3-0", "10-2-1", "10-2-0", "9-3-0"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("records = %v, want %v", got, want)
+		}
+	}
+}
+
+// Two-part records are records too, and a blank one is not.
+func TestSortOrderHandlesShortAndMissingRecords(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Record"},
+		Rows:    [][]string{{"9-3"}, {""}, {"11-1"}, {"not a record"}},
+	}
+	order, err := tbl.SortOrder("record")
+	if err != nil {
+		t.Fatalf("SortOrder: %v", err)
+	}
+	got := make([]string, 0, len(order))
+	for _, i := range order {
+		got = append(got, tbl.Rows[i][0])
+	}
+	want := []string{"", "9-3", "11-1", "not a record"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("cells = %q, want %q", got, want)
+		}
+	}
+}

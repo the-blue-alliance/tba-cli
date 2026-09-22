@@ -139,3 +139,20 @@ func TestEventRankingsSortByDQ(t *testing.T) {
 		t.Errorf("teams = %q", out)
 	}
 }
+
+// Records are three numbers. Sorted as text, 10-2-0 would come first because
+// "1" beats "7" and "9".
+func TestEventRankingsSortByRecord(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/rankings":     rankings2024ctharJSON,
+		"/event/2024cthar/teams/simple": teamsSimple2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "event", "rankings", "2024cthar",
+		"--format", "csv", "--sort", "record", "--columns", "team,record", "--no-headers")
+	requireNoError(t, err, "")
+
+	want := "5507,7-5-0\n1073,9-3-0\n177,10-2-0\n"
+	if out != want {
+		t.Errorf("csv =\n%s\nwant\n%s", out, want)
+	}
+}

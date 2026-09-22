@@ -364,7 +364,7 @@ tba team list --year 2024 --sort number
 tba event oprs 2024cthar --sort team
 ```
 
-`--sort` is stable, so rows that compare equal keep the order the API returned them in, and it is numeric-aware: two cells that both parse as numbers compare as numbers, so team `177` sorts before `1073`. Sorting happens before `--columns`, so you can sort by a column you do not display.
+`--sort` is stable, so rows that compare equal keep the order the API returned them in, and it is numeric-aware: two cells that both parse as numbers compare as numbers, so team `177` sorts before `1073`. Win-loss-tie records compare number by number as well, so `9-3-0` sorts below `11-1-0` rather than above it the way text would. Sorting happens before `--columns`, so you can sort by a column you do not display.
 
 `--sort` also reorders the array in `--format json`, keeping the JSON and the table in the same order. Where the JSON is not that array — an object keyed by team, or a document with the rows nested inside — there is no row order to apply, and `--sort` says so (exit 2) rather than printing an unsorted answer; use `--jq` to sort those. `--columns` does not apply to JSON — use `--jq` to shape it.
 
