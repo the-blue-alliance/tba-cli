@@ -13,6 +13,7 @@ import (
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 // --- fakes -------------------------------------------------------------
@@ -792,5 +793,70 @@ func TestEventWatchHelpLeadsWithTheDefaults(t *testing.T) {
 	requireNoError(t, err, "")
 	for _, want := range []string{"(default 1m0s)", "(default 2h0m0s)", "minimum 15s"} {
 		requireContains(t, out, want)
+	}
+}
+
+// --- marks and the legend ----------------------------------------------
+
+// watchMarked is V1 with a surrogate on qm2 and a disqualification on qm3, the
+// two marks a row can carry.
+func watchMarked() []api.Match {
+	out := watchMatchesV1()
+	out[1].Alliances["red"] = api.Alliance{
+		Score: -1, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"},
+	}
+	out[2].Alliances["blue"] = api.Alliance{
+		Score: -1, TeamKeys: watchOther2, DQTeamKeys: []string{"frc6153"},
+	}
+	return out
+}
+
+// The legend explains the marks once for the whole table, not once per row:
+// the first poll used to print it again for every marked match it built.
+func TestEventWatchPrintsTheLegendOnceForTheFirstTable(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchMarked())
+
+	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	requireNoError(t, err, errOut)
+
+	if n := strings.Count(errOut, frc.Legend); n != 1 {
+		t.Errorf("the legend appears %d times on stderr, want once:\n%s", n, errOut)
+	}
+	if strings.Contains(out, "surrogate") {
+		t.Errorf("the legend must not be on stdout:\n%s", out)
+	}
+	requireContains(t, out, "2168*")
+	requireContains(t, out, "6153!")
+}
+
+// A poll that brings in a mark explains it, and only the first one does.
+func TestEventWatchPrintsTheLegendOnceWhenAPollIntroducesAMark(t *testing.T) {
+	srv := watchServer(t)
+	out, errOut, err := runWatch(t, srv, func() {
+		marked := watchMarked()
+		marked[1] = watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000)
+		marked[1].Alliances["red"] = api.Alliance{
+			Score: 101, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"},
+		}
+		watchSetBody(t, srv, watchMatchesPath, marked)
+	}, "--format", "table", "--max-polls", "3")
+	requireNoError(t, err, errOut)
+
+	if n := strings.Count(errOut, frc.Legend); n != 1 {
+		t.Errorf("the legend appears %d times on stderr, want once:\n%s", n, errOut)
+	}
+	requireContains(t, out, "2168*")
+}
+
+// No marks, nothing to explain.
+func TestEventWatchOmitsTheLegendWithoutMarks(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	srv := watchServer(t)
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "surrogate") {
+		t.Errorf("stderr = %q, want no legend", errOut)
 	}
 }
