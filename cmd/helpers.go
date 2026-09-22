@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"time"
@@ -82,6 +83,16 @@ func resolveFormat(cmd *cobra.Command) (string, error) {
 	return "table", nil
 }
 
+// colorMode reads the user's color preference. --no-color is a spelling of
+// --color=never and wins, so scripts can set it unconditionally.
+func colorMode(cmd *cobra.Command) (output.ColorMode, error) {
+	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
+		return output.ColorNever, nil
+	}
+	mode, _ := cmd.Flags().GetString("color")
+	return output.ParseColorMode(mode)
+}
+
 func jqExpr(cmd *cobra.Command) string {
 	jqFlag, _ := cmd.Flags().GetString("jq")
 	return jqFlag
@@ -101,6 +112,9 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 	if err != nil {
 		return err
 	}
+	if _, err := colorMode(cmd); err != nil {
+		return err
+	}
 	switch format {
 	case "table":
 		humanFn()
@@ -110,27 +124,55 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 	}
 }
 
-// outputTable routes tabular output through the chosen format.
+// outputTable routes tabular output through the chosen format. Tabular formats
+// share one Table so that column selection, sorting and width handling behave
+// identically no matter which renderer prints it.
 func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows [][]string) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
 	}
-	w := cmd.OutOrStdout()
-	switch format {
-	case "json":
-		return output.PrintJSONWithFilter(w, data, jqExpr(cmd), rawOutput(cmd))
-	case "csv":
-		return output.PrintDelimited(w, headers, rows, ',')
-	case "tsv":
-		return output.PrintDelimited(w, headers, rows, '\t')
-	case "markdown":
-		output.PrintMarkdownTable(w, headers, rows)
-		return nil
-	default:
-		output.PrintTable(w, headers, rows)
-		return nil
+	// The presentation flags are validated even when the chosen format ignores
+	// them, so a typo is reported rather than silently doing nothing.
+	color, err := colorMode(cmd)
+	if err != nil {
+		return err
 	}
+	w := cmd.OutOrStdout()
+	table := output.Table{Headers: headers, Rows: rows}
+
+	// Sorting runs before column selection so that a table can be ordered by a
+	// column the user chose not to display.
+	sortSpec, _ := cmd.Flags().GetString("sort")
+	var order []int
+	if sortSpec != "" {
+		if order, err = table.SortOrder(sortSpec); err != nil {
+			return err
+		}
+		table = table.Reorder(order)
+	}
+
+	columns, _ := cmd.Flags().GetString("columns")
+	if format == "json" {
+		if columns != "" {
+			return errors.New("--columns applies to tabular formats; use --jq to shape JSON")
+		}
+		// --sort is about the order of the result, not its shape, so it also
+		// reorders the JSON array the table was built from.
+		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
+	}
+	if columns != "" {
+		if table, err = table.SelectColumns(columns); err != nil {
+			return err
+		}
+	}
+
+	noHeaders, _ := cmd.Flags().GetBool("no-headers")
+	return output.Render(w, table, output.RenderOptions{
+		Format:    format,
+		NoHeaders: noHeaders,
+		Color:     color,
+	})
 }
 
 // teamKey normalises a team argument, so that both "177" and "frc177" (in any

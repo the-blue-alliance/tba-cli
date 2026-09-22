@@ -8,57 +8,6 @@ import (
 	"testing"
 )
 
-func TestPrintTableAlignsColumns(t *testing.T) {
-	var buf bytes.Buffer
-	PrintTable(&buf,
-		[]string{"Number", "Name", "Location"},
-		[][]string{
-			{"177", "Bobcat Robotics", "South Windsor, CT"},
-			{"1073", "The Force Team", "Hollis, NH"},
-		},
-	)
-
-	want := "Number  Name             Location         \n" +
-		"------  ---------------  -----------------\n" +
-		"177     Bobcat Robotics  South Windsor, CT\n" +
-		"1073    The Force Team   Hollis, NH       \n"
-	if buf.String() != want {
-		t.Errorf("table =\n%q\nwant\n%q", buf.String(), want)
-	}
-}
-
-func TestPrintTableWidensColumnsToTheWidestCell(t *testing.T) {
-	var buf bytes.Buffer
-	PrintTable(&buf, []string{"A"}, [][]string{{"aaaaaaa"}})
-
-	got := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if got[0] != "A      " {
-		t.Errorf("header = %q", got[0])
-	}
-	if got[1] != "-------" {
-		t.Errorf("separator = %q", got[1])
-	}
-	if got[2] != "aaaaaaa" {
-		t.Errorf("row = %q", got[2])
-	}
-}
-
-func TestPrintTableWithNoRows(t *testing.T) {
-	var buf bytes.Buffer
-	PrintTable(&buf, []string{"Key", "Name"}, nil)
-	if buf.String() != "Key  Name\n---  ----\n" {
-		t.Errorf("table = %q", buf.String())
-	}
-}
-
-func TestPrintTableToleratesExtraCells(t *testing.T) {
-	var buf bytes.Buffer
-	PrintTable(&buf, []string{"A"}, [][]string{{"1", "extra"}})
-	if buf.String() != "A\n-\n1  extra\n" {
-		t.Errorf("table = %q", buf.String())
-	}
-}
-
 func TestPrintKeyValueAlignsValues(t *testing.T) {
 	var buf bytes.Buffer
 	PrintKeyValue(&buf,
@@ -95,77 +44,42 @@ func TestPrintKeyValueIgnoresATrailingOddKey(t *testing.T) {
 	}
 }
 
-func TestPrintKeyValueEmpty(t *testing.T) {
+// A key with no value at all must not index past the end of the slice.
+func TestPrintKeyValueWithOnlyADanglingKey(t *testing.T) {
 	var buf bytes.Buffer
-	PrintKeyValue(&buf)
+	PrintKeyValue(&buf, "dangling")
 	if buf.String() != "" {
 		t.Errorf("want no output, got %q", buf.String())
 	}
 }
 
-func TestPrintDelimitedQuotesSpecialCharacters(t *testing.T) {
+// The dangling key must not widen the label column either: it is dropped
+// before the widths are measured.
+func TestPrintKeyValueDanglingKeyDoesNotWidenTheLabels(t *testing.T) {
 	var buf bytes.Buffer
-	err := PrintDelimited(&buf,
-		[]string{"Award", "Recipient", "Note"},
-		[][]string{
-			{"District Event Winner", "177, 1073, 5507", `He said "hi"`},
-			{"Multi\nline", "plain", ""},
-		},
-		',',
-	)
-	if err != nil {
-		t.Fatalf("PrintDelimited: %v", err)
+	PrintKeyValue(&buf, "A", "1", "a very long dangling key")
+	if buf.String() != "A:  1\n" {
+		t.Errorf("key/value = %q", buf.String())
 	}
+}
 
-	want := "Award,Recipient,Note\n" +
-		"District Event Winner,\"177, 1073, 5507\",\"He said \"\"hi\"\"\"\n" +
-		"\"Multi\nline\",plain,\n"
+func TestPrintKeyValueAlignsWideLabels(t *testing.T) {
+	var buf bytes.Buffer
+	PrintKeyValue(&buf, "チーム", "177", "Year", "2024")
+
+	// "チーム:" draws 7 cells, so "Year:" is padded out to match.
+	want := "チーム:  177\n" +
+		"Year:    2024\n"
 	if buf.String() != want {
-		t.Errorf("csv =\n%q\nwant\n%q", buf.String(), want)
+		t.Errorf("key/value =\n%q\nwant\n%q", buf.String(), want)
 	}
 }
 
-func TestPrintDelimitedTabDoesNotQuoteCommas(t *testing.T) {
+func TestPrintKeyValueEmpty(t *testing.T) {
 	var buf bytes.Buffer
-	if err := PrintDelimited(&buf, []string{"A"}, [][]string{{"x, y"}}, '\t'); err != nil {
-		t.Fatalf("PrintDelimited: %v", err)
-	}
-	if buf.String() != "A\nx, y\n" {
-		t.Errorf("tsv = %q", buf.String())
-	}
-}
-
-func TestPrintDelimitedRejectsAnInvalidDelimiter(t *testing.T) {
-	var buf bytes.Buffer
-	if err := PrintDelimited(&buf, []string{"A"}, [][]string{{"1"}}, '\n'); err == nil {
-		t.Error("want an error for a newline delimiter")
-	}
-}
-
-func TestPrintMarkdownTableEscapesPipes(t *testing.T) {
-	var buf bytes.Buffer
-	PrintMarkdownTable(&buf,
-		[]string{"Key | Alt", "Name"},
-		[][]string{
-			{"2024cthar", "NE District | Hartford"},
-			{"2024necmp", "New\nEngland"},
-		},
-	)
-
-	want := "| Key \\| Alt | Name |\n" +
-		"| --- | --- |\n" +
-		"| 2024cthar | NE District \\| Hartford |\n" +
-		"| 2024necmp | New England |\n"
-	if buf.String() != want {
-		t.Errorf("markdown =\n%q\nwant\n%q", buf.String(), want)
-	}
-}
-
-func TestPrintMarkdownTableWithNoRows(t *testing.T) {
-	var buf bytes.Buffer
-	PrintMarkdownTable(&buf, []string{"A", "B"}, nil)
-	if buf.String() != "| A | B |\n| --- | --- |\n" {
-		t.Errorf("markdown = %q", buf.String())
+	PrintKeyValue(&buf)
+	if buf.String() != "" {
+		t.Errorf("want no output, got %q", buf.String())
 	}
 }
 
