@@ -196,8 +196,8 @@ func matchPredictionTable(rounds *api.MatchPredictionRounds, byKey map[string]ap
 				k,
 				strings.Join(frc.MarkedTeams(m.Alliances[frc.AllianceRed]), ", "),
 				strings.Join(frc.MarkedTeams(m.Alliances[frc.AllianceBlue]), ", "),
-				formatNumber(p.Red.Score),
-				formatNumber(p.Blue.Score),
+				formatPredictedScore(p.Red.Score),
+				formatPredictedScore(p.Blue.Score),
 				winner,
 				confidence,
 			})
@@ -223,19 +223,29 @@ func tied(p api.MatchPrediction) bool {
 	return p.Red.Score == p.Blue.Score
 }
 
-// allianceLabel titles an alliance colour, leaving an unpredicted match blank
-// rather than inventing a winner.
+// allianceLabel names the alliance a prediction picked, leaving an unpredicted
+// match blank rather than inventing a winner.
+//
+// Lowercase, because that is how every other Winner column in the tool writes
+// an alliance -- `event matches` and `match view` print the API's own "red" and
+// "blue" -- and a column that reads "Red" in one table and "red" in the next
+// cannot be compared, sorted or grepped across the two.
 func allianceLabel(alliance string) string {
-	switch strings.ToLower(alliance) {
-	case "":
+	return strings.ToLower(strings.TrimSpace(alliance))
+}
+
+// formatPredictedScore renders a predicted score, always to two decimals.
+//
+// A model's score is a number it computed, not a number anybody counted, and
+// trimming the trailing zeroes made a column of them ragged -- "0", "28.5" and
+// "36.42" one under the other, with the decimal point in three places, which is
+// three digit-counts to compare two numbers. The Confidence column beside it
+// settled the same question the same way.
+func formatPredictedScore(f float64) string {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
 		return ""
-	case "red":
-		return "Red"
-	case "blue":
-		return "Blue"
-	default:
-		return humanizeName(alliance)
 	}
+	return strconv.FormatFloat(f, 'f', 2, 64)
 }
 
 // formatConfidence renders a probability as a percentage. A prediction without

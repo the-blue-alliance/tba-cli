@@ -711,9 +711,12 @@ Predicted Winner | Confidence`, in play order — the qualification rounds and
 then the bracket, never the alphabetical order the match keys are in. Match is
 the label ("Qual 12", "SF 3") and Red and Blue are the teams; both come from the
 event's match list, fetched once alongside the predictions, and an event whose
-list cannot be had still gets its labels from the match keys. Confidence is the
-model's own probability for the winner it picked, always to two decimals so the
-column lines up, and a match the model has
+list cannot be had still gets its labels from the match keys. Predicted Winner
+is `red` or `blue`, lowercase, the way every other winner column writes an
+alliance. Red Score and Blue Score are the model's own numbers, always to two
+decimals, and so is Confidence, the model's probability for the winner it
+picked — a column of numbers is read by comparing them, and a ragged decimal
+point makes that a digit count. A match the model has
 nothing to say about — a 0-0 prediction — leaves the winner and the confidence
 blank instead of reporting a coin flip. So does one the model calls even: an
 exact `50%`, or two equal predicted scores, is the model declining to pick
