@@ -185,13 +185,19 @@ func exportOptionsFrom(cmd *cobra.Command, key string) (exportOptions, error) {
 	// that means something here, and it selects the JSON summary.
 	//
 	// It is read through the settings layer rather than off the flag, so
-	// TBA_FORMAT and format: in config.yaml mean here exactly what they mean
-	// everywhere else. What stays off the layer is the terminal rule: a bare
-	// `auto` leaves the summary as a plain list of paths whether or not
-	// stdout is a pipe, because `tba event export ... | xargs` wants file
-	// names rather than a JSON object.
+	// TBA_FORMAT means here exactly what it means everywhere else. What stays
+	// off the layer is the terminal rule: a bare `auto` leaves the summary as
+	// a plain list of paths whether or not stdout is a pipe, because
+	// `tba event export ... | xargs` wants file names rather than a JSON
+	// object.
+	//
+	// A format from config.yaml is ignored outright, the way settings.Format
+	// ignores one off a terminal. `format: table` is a statement about how
+	// this user likes to read listings, not an instruction to this command,
+	// and honouring it made `tba event export` exit 2 on every invocation —
+	// even on a terminal, where the preference is otherwise in force.
 	s := settings(cmd)
-	if s.Source("format") != sourceDefault {
+	if src := s.Source("format"); src == sourceFlag || src == sourceEnv {
 		raw := s.String("format")
 		normalized, ok := normalizeFormat(raw)
 		if !ok {
