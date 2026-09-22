@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -59,6 +60,9 @@ func NewRootCmd() *cobra.Command {
 
 	// Cobra reports a bad flag as a plain error; tag it so main can exit 2.
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		if advice := negativeNumberArg(err); advice != nil {
+			return advice
+		}
 		return clierr.Wrap(clierr.KindUsage, err)
 	})
 
@@ -102,6 +106,34 @@ func NewRootCmd() *cobra.Command {
 	attachCompletions(rootCmd)
 
 	return rootCmd
+}
+
+// shorthandFlagPattern picks the offending token out of pflag's complaint
+// about a shorthand flag it does not know: "unknown shorthand flag: '5' in -5".
+var shorthandFlagPattern = regexp.MustCompile(`^unknown shorthand flag: '.' in (-[^ ]+)$`)
+
+// negativeNumberArg recognises a team number someone wrote with a minus sign
+// and answers the question they actually have.
+//
+// `tba team view -5` came back as "unknown shorthand flag: '5' in -5", which
+// is about pflag's parser rather than about anything the user typed on
+// purpose: there is no -5 flag and there never will be, because the argument
+// is a team number. It returns nil for anything else, so a real unknown
+// shorthand still gets cobra's own wording.
+func negativeNumberArg(err error) error {
+	match := shorthandFlagPattern.FindStringSubmatch(err.Error())
+	if match == nil {
+		return nil
+	}
+	token := match[1]
+	digits := token[1:]
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return nil
+		}
+	}
+	return clierr.Usage("%q looks like a negative number; team numbers and keys never start with '-' (did you mean %q?)",
+		token, digits)
 }
 
 // Run executes an already-built command tree.
