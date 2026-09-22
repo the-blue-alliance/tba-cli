@@ -983,17 +983,21 @@ func TestEventExportFormatComesFromTheEnvironment(t *testing.T) {
 	}
 }
 
-func TestEventExportFormatComesFromTheConfigFile(t *testing.T) {
+// A format in config.yaml is a preference about reading listings, not an
+// instruction to this command, so it is ignored here whichever value it has:
+// the plain list of paths is what a script piping `event export` expects, and
+// it cannot be made to depend on a file the script never sees.
+func TestEventExportIgnoresAJSONFormatFromTheConfigFile(t *testing.T) {
 	srv := newExportServer(t)
 	writeConfig(t, "format: json\n")
+	dir := t.TempDir()
 
 	stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
-		"--to", "csv", "--dir", t.TempDir(), "--only", "oprs")
+		"--to", "csv", "--dir", dir, "--only", "oprs")
 	requireNoError(t, err, stderr)
 
-	obj := decodeJSON(t, stdout).(map[string]any)
-	if _, ok := obj["written"].([]any); !ok {
-		t.Errorf("stdout = %q, want the JSON summary", stdout)
+	if stdout != exportedPath(dir, "oprs", "csv")+"\n" {
+		t.Errorf("stdout = %q, want the bare path", stdout)
 	}
 }
 
@@ -1014,13 +1018,53 @@ func TestEventExportRejectsANonJSONFormatFromTheEnvironment(t *testing.T) {
 	}
 }
 
-func TestEventExportRejectsANonJSONFormatFromTheConfigFile(t *testing.T) {
-	srv := newExportServer(t)
-	path := writeConfig(t, "format: table\n")
+// `format: table` in config.yaml is the commonest setting there is, and it
+// made `tba event export` exit 2 on every invocation — on a pipe and on a
+// terminal alike — leaving the command unusable until the file was edited.
+// Only a --format flag or TBA_FORMAT is deliberate enough to be an error here.
+func TestEventExportIgnoresANonJSONFormatFromTheConfigFile(t *testing.T) {
+	for _, format := range []string{"table", "csv", "tsv", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			srv := newExportServer(t)
+			writeConfig(t, "format: "+format+"\n")
+			dir := t.TempDir()
 
-	_, _, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "json", "--dir", t.TempDir())
+			stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+				"--to", "json", "--dir", dir, "--only", "oprs")
+			requireNoError(t, err, stderr)
+			if stdout != exportedPath(dir, "oprs", "json")+"\n" {
+				t.Errorf("stdout = %q, want the bare path", stdout)
+			}
+		})
+	}
+}
+
+// A terminal changes nothing: the config file is out of the decision either
+// way, so the same run works with a terminal on the other end of stdout.
+func TestEventExportIgnoresAConfigFormatOnATerminal(t *testing.T) {
+	srv := newExportServer(t)
+	writeConfig(t, "format: table\n")
+	dir := t.TempDir()
+
+	stdout, stderr, err := runCmdTTY(t, srv, "event", "export", "2024cthar",
+		"--to", "json", "--dir", dir, "--only", "oprs")
+	requireNoError(t, err, stderr)
+	if stdout != exportedPath(dir, "oprs", "json")+"\n" {
+		t.Errorf("stdout = %q, want the bare path", stdout)
+	}
+}
+
+// The flag and the environment variable still say what they always said.
+func TestEventExportStillRejectsANonJSONFormatFromTheFlag(t *testing.T) {
+	srv := newExportServer(t)
+	writeConfig(t, "format: json\n") // the file must not rescue the flag either
+
+	_, _, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "json", "--dir", t.TempDir(), "--format", "table")
 	requireErrorContains(t, err, "does not choose the export format")
-	requireErrorContains(t, err, path)
+	if code := clierr.ExitCode(err); code != clierr.ExitUsage {
+		t.Errorf("exit code = %d, want %d", code, clierr.ExitUsage)
+	}
 }
 
 // `auto` is the default and means "decide from the terminal" everywhere else.
