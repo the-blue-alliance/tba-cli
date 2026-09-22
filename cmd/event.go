@@ -109,7 +109,10 @@ returns.`,
 			if err != nil {
 				return err
 			}
-			year, _ := cmd.Flags().GetInt("year")
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
 			path := fmt.Sprintf("/events/%d", year)
 			if team, _ := cmd.Flags().GetString("team"); strings.TrimSpace(team) != "" {
 				path = fmt.Sprintf("/team/%s/events/%d", teamKey(team), year)
@@ -137,7 +140,7 @@ returns.`,
 			return outputTable(cmd, events, headers, rows)
 		},
 	}
-	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	addYearFlag(c)
 	c.Flags().Int("week", 0, "Only events in this competition week (1-based, as thebluealliance.com numbers them)")
 	c.Flags().String("type", "", "Only events of these types, comma-separated: "+validEventTypes)
 	c.Flags().String("district", "", "Only events in this district, by abbreviation (e.g. ne)")
