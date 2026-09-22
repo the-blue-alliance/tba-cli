@@ -85,10 +85,6 @@ xattr -d com.apple.quarantine ./tba
 go install github.com/the-blue-alliance/tba-cli/cmd/tba@latest
 ```
 
-A Homebrew cask is prepared in
-[PR #37](https://github.com/the-blue-alliance/tba-cli/pull/37) and will be
-published once the maintainers create the tap repository.
-
 ## Authentication
 
 Get an API key from your
