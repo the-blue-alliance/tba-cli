@@ -248,6 +248,17 @@ func subcommandNames(t *testing.T, parent string) []string {
 	return nil
 }
 
+// requireErrorContains checks an error message without pinning its wording.
+func requireErrorContains(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("want an error mentioning %q, got nil", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not mention %q", err.Error(), want)
+	}
+}
+
 func requireContains(t *testing.T, got, want string) {
 	t.Helper()
 	if !strings.Contains(got, want) {

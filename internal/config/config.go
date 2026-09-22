@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/viper"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 const DefaultBaseURL = "https://www.thebluealliance.com/api/v3"
@@ -64,7 +65,7 @@ func GetAPIKey(baseURL string) (string, error) {
 	v := viper.New()
 	v.SetConfigFile(authFile)
 	if err := v.ReadInConfig(); err != nil {
-		return "", fmt.Errorf("not authenticated for %s. Run 'tba auth login' first", baseURL)
+		return "", clierr.Auth("not authenticated for %s. Run 'tba auth login' first", baseURL)
 	}
 	_ = secureAuthFile(authFile) // remediate legacy files written with wider perms; ignore errors
 
@@ -81,7 +82,7 @@ func GetAPIKey(baseURL string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("not authenticated for %s. Run 'tba auth login --base-url %s' first", baseURL, baseURL)
+	return "", clierr.Auth("not authenticated for %s. Run 'tba auth login --base-url %s' first", baseURL, baseURL)
 }
 
 // migrateLegacyKey folds a pre-per-URL "api_key" entry into the "keys" map.

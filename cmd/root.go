@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // NewRootCmd builds a fresh `tba` command tree. Every command is constructed
@@ -14,7 +15,18 @@ func NewRootCmd() *cobra.Command {
 		Long:          "A command-line interface for The Blue Alliance API v3.",
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		// Flags are checked once, before any command does work, so that a
+		// contradictory --format is reported without first hitting the API.
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := resolveFormat(cmd)
+			return err
+		},
 	}
+
+	// Cobra reports a bad flag as a plain error; tag it so main can exit 2.
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return clierr.Wrap(clierr.KindUsage, err)
+	})
 
 	rootCmd.PersistentFlags().Bool("json", false, "Output as JSON (shorthand for --format=json)")
 	rootCmd.PersistentFlags().String("jq", "", "Apply jq expression to JSON output")

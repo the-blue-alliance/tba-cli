@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -52,15 +52,15 @@ func resolveFormat(cmd *cobra.Command) (string, error) {
 	case "md":
 		explicit = "markdown"
 	default:
-		return "", fmt.Errorf("invalid --format %q (want: %s)", raw, validFormats)
+		return "", clierr.Usage("invalid --format %q (want: %s)", raw, validFormats)
 	}
 
 	if explicit != "" && explicit != "json" {
 		if jqFlag != "" {
-			return "", fmt.Errorf("--jq requires JSON output; drop --format %s or use --format json", raw)
+			return "", clierr.Usage("--jq requires JSON output; drop --format %s or use --format json", raw)
 		}
 		if jsonFlag {
-			return "", fmt.Errorf("--json requires JSON output; drop --format %s or use --format json", raw)
+			return "", clierr.Usage("--json requires JSON output; drop --format %s or use --format json", raw)
 		}
 	}
 	if explicit != "" {
@@ -147,7 +147,7 @@ var (
 // typo comes back as a usage error instead of a 404.
 func validateEventKey(arg string) error {
 	if !eventKeyPattern.MatchString(arg) {
-		return fmt.Errorf("%q is not a valid event key (expected something like 2024cthar)", arg)
+		return clierr.Usage("%q is not a valid event key (expected something like 2024cthar)", arg)
 	}
 	return nil
 }
@@ -155,7 +155,7 @@ func validateEventKey(arg string) error {
 // validateMatchKey rejects a malformed match key before any HTTP call.
 func validateMatchKey(arg string) error {
 	if !matchKeyPattern.MatchString(arg) {
-		return fmt.Errorf("%q is not a valid match key (expected something like 2024cthar_qm12)", arg)
+		return clierr.Usage("%q is not a valid match key (expected something like 2024cthar_qm12)", arg)
 	}
 	return nil
 }

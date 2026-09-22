@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
 )
 
@@ -41,7 +42,7 @@ func newAuthLoginCmd() *cobra.Command {
 				key = strings.TrimSpace(input)
 			}
 			if key == "" {
-				return fmt.Errorf("API key cannot be empty")
+				return clierr.Usage("API key cannot be empty")
 			}
 			if err := config.SaveAPIKey(key, baseURL); err != nil {
 				return err

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/the-blue-alliance/tba-cli/internal/cache"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
 )
 
@@ -104,6 +105,13 @@ func (c *Client) fetch(path string) ([]byte, error) {
 		return body, nil
 	default:
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateErrorBody(string(body)))
+		message := truncateErrorBody(string(body))
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			return nil, clierr.Auth("not authenticated for %s (HTTP 401): run 'tba auth login'", c.baseURL)
+		case http.StatusNotFound:
+			return nil, clierr.NotFound("API error 404: %s", message)
+		}
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, message)
 	}
 }
