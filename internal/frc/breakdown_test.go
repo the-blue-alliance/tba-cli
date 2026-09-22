@@ -3,6 +3,7 @@ package frc_test
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -72,6 +73,55 @@ func TestFlattenBreakdownSortsItsKeys(t *testing.T) {
 	want := []frc.KV{{Key: "alpha", Value: "2"}, {Key: "mu", Value: "3"}, {Key: "zeta", Value: "1"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FlattenBreakdown = %v, want %v", got, want)
+	}
+}
+
+// A twelve-slot grid is a real shape for a score breakdown, and a plain
+// string sort turns it into 1, 10, 11, 2 — which is not a listing anyone can
+// read down.
+func TestFlattenBreakdownSortsArrayIndicesAsNumbers(t *testing.T) {
+	grid := make([]interface{}, 12)
+	for i := range grid {
+		grid[i] = float64(i)
+	}
+	got := frc.FlattenBreakdown(map[string]interface{}{"autoCommunity": grid})
+
+	var keys []string
+	for _, kv := range got {
+		keys = append(keys, kv.Key)
+	}
+	var want []string
+	for i := 0; i < 12; i++ {
+		want = append(want, "autoCommunity."+strconv.Itoa(i))
+	}
+	if !reflect.DeepEqual(keys, want) {
+		t.Errorf("keys =\n%v\nwant\n%v", keys, want)
+	}
+}
+
+func TestCompareBreakdownKeys(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"x.2", "x.10", -1},
+		{"x.10", "x.2", 1},
+		{"x.2", "x.2", 0},
+		{"a", "b", -1},
+		// A prefix comes before what extends it.
+		{"auto", "auto.0", -1},
+		// A nested array is ordered at the level the indices are on.
+		{"g.1.b", "g.10.a", -1},
+		// Numbers before names at the same level, so indices stay together.
+		{"g.3", "g.total", -1},
+		// A name that merely starts with a digit is still a name.
+		{"g.2x", "g.10", 1},
+	}
+	for _, c := range cases {
+		got := frc.CompareBreakdownKeys(c.a, c.b)
+		if (got < 0) != (c.want < 0) || (got > 0) != (c.want > 0) {
+			t.Errorf("CompareBreakdownKeys(%q, %q) = %d, want sign %d", c.a, c.b, got, c.want)
+		}
 	}
 }
 
