@@ -55,6 +55,47 @@ func TestNoColorBeatsColorAlways(t *testing.T) {
 	}
 }
 
+// no-color wins wherever either setting came from, so a script can export it
+// unconditionally; `tba config list --help` promises exactly this.
+func TestNoColorBeatsColorFromEveryLayer(t *testing.T) {
+	t.Setenv("TBA_COLOR", "always")
+	out := districtsCmd(t, "--format", "table", "--no-color")
+	if strings.Contains(out, "\x1b") {
+		t.Errorf("no-color must win over TBA_COLOR, got %q", out)
+	}
+
+	help, _, err := runCmd(t, nil, "config", "list", "--help")
+	requireNoError(t, err, "")
+	requireContains(t, help, "no-color")
+	requireContains(t, help, "wins")
+}
+
+// A bad --color is still reported when --no-color would have settled the
+// question, so a typo in the config file does not go unnoticed.
+func TestBadColorValueIsReportedEvenWithNoColor(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	_ = requireExitCode(t, clierr.ExitUsage, srv,
+		"district", "list", "--year", "2024", "--color", "sometimes", "--no-color")
+}
+
+func TestSortFlagHelpShowsBothForms(t *testing.T) {
+	out, _, err := runCmd(t, nil, "district", "list", "--help")
+	requireNoError(t, err, "")
+	requireContains(t, out, "prefix with - to descend (e.g. --sort=-opr)")
+	if strings.Contains(out, "use the --sort=-col form") {
+		t.Errorf("the --sort help still claims only one form works:\n%s", out)
+	}
+}
+
+// Both spellings work, so the help must not imply otherwise.
+func TestSortAcceptsASeparateArgument(t *testing.T) {
+	spaced := districtsCmd(t, "--format", "csv", "--sort", "-name")
+	equals := districtsCmd(t, "--format=csv", "--sort=-name")
+	if spaced != equals {
+		t.Errorf("--sort -name = %q but --sort=-name = %q", spaced, equals)
+	}
+}
+
 func TestColorNever(t *testing.T) {
 	out := districtsCmd(t, "--format", "table", "--color", "never")
 	if strings.Contains(out, "\x1b") {

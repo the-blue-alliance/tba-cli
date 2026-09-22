@@ -89,7 +89,15 @@ func newConfigListCmd() *cobra.Command {
 		Use:     "list",
 		Short:   "Show every setting with its effective value and source",
 		Aliases: []string{"ls"},
-		Args:    cobra.NoArgs,
+		Long: `Show every setting, the value in effect and where it came from.
+
+The source is the layer that supplied the value: flag, env, config or default.
+
+Two of these settings overlap: no-color is a spelling of color=never, and it
+wins whenever it is true, whichever layer either of them came from. Setting
+no-color and color=always together leaves output uncolored, so a script can set
+no-color unconditionally without having to know what color says.`,
+		Args: cobra.NoArgs,
 		Example: `  tba config list
   tba config list --format json
   tba config list --jq '.[] | select(.source != "default")'`,

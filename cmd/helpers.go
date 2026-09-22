@@ -109,14 +109,26 @@ func normalizeFormat(raw string) (string, bool) {
 	}
 }
 
-// colorMode reads the user's color preference. --no-color is a spelling of
-// --color=never and wins, so scripts can set it unconditionally.
+// colorMode reads the user's color preference.
+//
+// no-color is a spelling of color=never and is checked first, so it wins
+// whenever it is true, whichever layer either setting came from: a script can
+// set it unconditionally without knowing what color says. `tba config list`
+// documents the same rule.
+//
+// A bad color value is still reported when no-color settles the question, so
+// that a typo in the config file is not hidden by an unrelated setting.
 func colorMode(cmd *cobra.Command) (output.ColorMode, error) {
 	s := settings(cmd)
+	mode, err := output.ParseColorMode(s.String("color"))
+	if err != nil {
+		// Like every other bad flag value, this is exit 2.
+		return mode, clierr.Wrap(clierr.KindUsage, err)
+	}
 	if s.Bool("no-color") {
 		return output.ColorNever, nil
 	}
-	return output.ParseColorMode(s.String("color"))
+	return mode, nil
 }
 
 func jqExpr(cmd *cobra.Command) string {
