@@ -11,12 +11,51 @@ func TestCacheInfoOnAnEmptyCache(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TBA_CACHE_DIR", dir)
 
-	out, _, err := runCmd(t, nil, "cache", "info")
+	out, _, err := runCmd(t, nil, "cache", "info", "--format", "table")
 	requireNoError(t, err, "")
 
 	requireContains(t, out, "Directory: "+dir)
 	requireContains(t, out, "Entries:   0")
 	requireContains(t, out, "Size:      0 B")
+}
+
+func TestCacheInfoJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TBA_CACHE_DIR", dir)
+
+	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
+	if _, _, err := runCmd(t, srv, "status"); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+
+	out, _, err := runCmd(t, nil, "cache", "info", "--format", "json")
+	requireNoError(t, err, "")
+
+	obj, ok := decodeJSON(t, out).(map[string]any)
+	if !ok {
+		t.Fatalf("want a JSON object, got:\n%s", out)
+	}
+	if obj["directory"] != dir {
+		t.Errorf("directory = %v, want %v", obj["directory"], dir)
+	}
+	if obj["entries"] != float64(1) {
+		t.Errorf("entries = %v, want 1", obj["entries"])
+	}
+	if b, _ := obj["bytes"].(float64); b <= 0 {
+		t.Errorf("bytes = %v, want a positive total", obj["bytes"])
+	}
+	if _, ok := obj["size"].(string); !ok {
+		t.Errorf("size = %v, want a human-readable string", obj["size"])
+	}
+}
+
+func TestCacheInfoDefaultsToJSONOffATTY(t *testing.T) {
+	t.Setenv("TBA_CACHE_DIR", t.TempDir())
+	out, _, err := runCmd(t, nil, "cache", "info")
+	requireNoError(t, err, "")
+	if _, ok := decodeJSON(t, out).(map[string]any); !ok {
+		t.Errorf("want a JSON object, got:\n%s", out)
+	}
 }
 
 func TestCacheInfoCountsEntriesWrittenByRequests(t *testing.T) {
@@ -28,7 +67,7 @@ func TestCacheInfoCountsEntriesWrittenByRequests(t *testing.T) {
 		t.Fatalf("status: %v", err)
 	}
 
-	out, _, err := runCmd(t, nil, "cache", "info")
+	out, _, err := runCmd(t, nil, "cache", "info", "--format", "table")
 	requireNoError(t, err, "")
 	requireContains(t, out, "Entries:   1")
 	if strings.Contains(out, "Size:      0 B") {
@@ -51,11 +90,11 @@ func TestCacheClear(t *testing.T) {
 		t.Fatalf("team view: %v", err)
 	}
 
-	out, _, err := runCmd(t, nil, "cache", "clear")
+	out, _, err := runCmd(t, nil, "cache", "clear", "--format", "table")
 	requireNoError(t, err, "")
 	requireContains(t, out, "Removed 2 cache entries from "+dir)
 
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(filepath.Join(dir, "v1"))
 	if err != nil {
 		t.Fatalf("read cache dir: %v", err)
 	}
@@ -66,11 +105,35 @@ func TestCacheClear(t *testing.T) {
 	}
 }
 
+func TestCacheClearJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TBA_CACHE_DIR", dir)
+
+	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
+	if _, _, err := runCmd(t, srv, "status"); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+
+	out, _, err := runCmd(t, nil, "cache", "clear", "--format", "json")
+	requireNoError(t, err, "")
+
+	obj, ok := decodeJSON(t, out).(map[string]any)
+	if !ok {
+		t.Fatalf("want a JSON object, got:\n%s", out)
+	}
+	if obj["removed"] != float64(1) {
+		t.Errorf("removed = %v, want 1", obj["removed"])
+	}
+	if obj["directory"] != dir {
+		t.Errorf("directory = %v, want %v", obj["directory"], dir)
+	}
+}
+
 func TestCacheClearOnAnEmptyCache(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TBA_CACHE_DIR", dir)
 
-	out, _, err := runCmd(t, nil, "cache", "clear")
+	out, _, err := runCmd(t, nil, "cache", "clear", "--format", "table")
 	requireNoError(t, err, "")
 	requireContains(t, out, "Removed 0 cache entries")
 }

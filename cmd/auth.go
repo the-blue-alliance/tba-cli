@@ -2,12 +2,18 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
+	"github.com/the-blue-alliance/tba-cli/internal/output"
+	"golang.org/x/term"
 )
 
 func newAuthCmd() *cobra.Command {
@@ -29,30 +35,68 @@ func newAuthLoginCmd() *cobra.Command {
   tba auth login --key abcd1234
   tba auth login --base-url http://localhost:8080/api/v3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out := cmd.OutOrStdout()
+			// Everything here is conversation, not data, so it goes to stderr:
+			// `tba auth login < key.txt` should write nothing to stdout.
+			errOut := cmd.ErrOrStderr()
 			baseURL := getBaseURL(cmd)
 			key, _ := cmd.Flags().GetString("key")
 			if key == "" {
-				fmt.Fprintf(out, "Enter your TBA API key for %s: ", baseURL)
-				reader := bufio.NewReader(cmd.InOrStdin())
-				input, err := reader.ReadString('\n')
+				var err error
+				key, err = readKey(cmd, baseURL)
 				if err != nil {
 					return err
 				}
-				key = strings.TrimSpace(input)
 			}
 			if key == "" {
 				return clierr.Usage("API key cannot be empty")
 			}
+			// Check the key before storing it, so a typo fails here rather
+			// than on every later command.
+			if err := api.ValidateKey(cmd.Context(), baseURL, key); err != nil {
+				return err
+			}
 			if err := config.SaveAPIKey(key, baseURL); err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "Authenticated successfully for %s.\n", baseURL)
+			fmt.Fprintf(errOut, "Authenticated successfully for %s.\n", baseURL)
 			return nil
 		},
 	}
 	c.Flags().String("key", "", "API key (or enter interactively)")
 	return c
+}
+
+// readKey prompts for an API key. On a terminal the key is read without
+// echoing it; when stdin is a pipe or a file a single line is read, so that
+// `tba auth login < key.txt` works.
+func readKey(cmd *cobra.Command, baseURL string) (string, error) {
+	errOut := cmd.ErrOrStderr()
+	in := cmd.InOrStdin()
+
+	if f, ok := in.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		fmt.Fprintf(errOut, "Enter your TBA API key for %s: ", baseURL)
+		b, err := term.ReadPassword(int(f.Fd()))
+		fmt.Fprintln(errOut)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+
+	fmt.Fprintf(errOut, "Enter your TBA API key for %s: ", baseURL)
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+// authStatusReport is what `auth status` prints in JSON.
+type authStatusReport struct {
+	Authenticated bool   `json:"authenticated"`
+	BaseURL       string `json:"base_url"`
+	KeyMasked     string `json:"key_masked"`
+	ConfigFile    string `json:"config_file"`
 }
 
 func newAuthStatusCmd() *cobra.Command {
@@ -62,21 +106,30 @@ func newAuthStatusCmd() *cobra.Command {
 		Example: `  tba auth status
   tba auth status --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out := cmd.OutOrStdout()
 			baseURL := getBaseURL(cmd)
 			key, err := config.GetAPIKey(baseURL)
 			if err != nil {
-				fmt.Fprintf(out, "Not authenticated for %s.\n", baseURL)
-				return nil
+				// Reported on stderr by main, with exit code 4, so that a
+				// script can tell "no key" from "no data".
+				return err
 			}
 			authFile, err := config.AuthFile()
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "Authenticated with key: %s\n", maskKey(key))
-			fmt.Fprintf(out, "Base URL: %s\n", baseURL)
-			fmt.Fprintf(out, "Config file: %s\n", authFile)
-			return nil
+			report := authStatusReport{
+				Authenticated: true,
+				BaseURL:       baseURL,
+				KeyMasked:     maskKey(key),
+				ConfigFile:    authFile,
+			}
+			return outputData(cmd, report, func() {
+				output.PrintKeyValue(cmd.OutOrStdout(),
+					"Authenticated with key", report.KeyMasked,
+					"Base URL", report.BaseURL,
+					"Config file", report.ConfigFile,
+				)
+			})
 		},
 	}
 }
@@ -100,13 +153,13 @@ func newAuthLogoutCmd() *cobra.Command {
 		Example: `  tba auth logout
   tba auth logout --base-url http://localhost:8080/api/v3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out := cmd.OutOrStdout()
 			baseURL := getBaseURL(cmd)
+			// Nothing to remove is a failure: the caller asked for a change
+			// that did not happen.
 			if err := config.RemoveAPIKey(baseURL); err != nil {
-				fmt.Fprintln(out, err)
-				return nil
+				return err
 			}
-			fmt.Fprintf(out, "Logged out from %s.\n", baseURL)
+			fmt.Fprintf(cmd.ErrOrStderr(), "Logged out from %s.\n", baseURL)
 			return nil
 		},
 	}
