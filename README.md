@@ -101,6 +101,57 @@ alliances)"), the event website, timezone and FIRST event code, and one line
 per webcast rendered as a link you can open. Anything the API does not supply
 is left out rather than printed empty.
 
+### Finding teams
+
+`team search` looks for a team by name, location or number within one season:
+
+```
+tba team search bobcat
+tba team search 17
+tba team search "south windsor"
+tba team search bobcat connecticut
+tba team search robotics --limit 0
+```
+
+Matching is case-insensitive. Text fields match on a substring and the team
+number matches on a **prefix**, so `17` finds 177 and 1768 but not 517. Every
+word of the query has to match, though the words may match different fields:
+`bobcat connecticut` finds the team whose nickname is Bobcat Robotics and whose
+state is Connecticut.
+
+| Flag | Description |
+|------|-------------|
+| `--fields` | Which fields to search, comma-separated: `nickname`, `name`, `location`, `number` (all of them by default). `name` is the full sponsor-and-school name, `location` is city, state/province and country. An unknown value is a usage error listing the valid ones. |
+| `--limit N` | Show at most N matches (default 20); `0` shows every match. |
+| `--year` | The season to search (defaults to the current year). |
+| `--max-pages` | Stop after this many pages of 500 teams (default 30). |
+
+Results are ranked: an exact nickname first, then a nickname the query starts,
+then a nickname that contains it, then the teams that matched on some other
+field, with team number breaking ties. The columns are `Number`, `Name`,
+`Location` and `Rookie`.
+
+When the list is cut short, the count goes to stderr so stdout stays data:
+
+```
+note: showing 20 of 143 matches; use --limit 0 for all
+```
+
+No match at all prints nothing, exits `0`, and says so on stderr (`--json`
+still prints `[]`, so a pipeline keeps parsing):
+
+```
+$ tba team search nosuchteam --json
+[]
+note: no teams match "nosuchteam"
+```
+
+The search runs over the season's team list — about 20 pages of 500 teams — so
+the first search of a season fetches those pages, and later searches revalidate
+the cached copies instead of downloading them again. Searching every season is
+not offered: it would repeat that walk once per year, so `--year 0` and
+`--all-years` are usage errors.
+
 ### Team history
 
 ```
@@ -698,6 +749,8 @@ identical archives.
 | `tba version` | Show the version and build metadata |
 | `tba team view <number>` | View team info |
 | `tba team list` | List all teams (defaults to the current season) |
+| `tba team list` | List all teams (defaults to the current year) |
+| `tba team search <query>` | Search a season's teams by nickname, name, location or number (`--fields`, `--limit`) |
 | `tba team events <number>` | List team events |
 | `tba team years <number>` | List the seasons a team competed in |
 | `tba team matches <number>` | List team matches |
