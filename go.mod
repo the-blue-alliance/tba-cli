@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/itchyny/gojq v0.12.19
+	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	golang.org/x/term v0.46.0
