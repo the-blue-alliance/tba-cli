@@ -139,10 +139,20 @@ func TestUsageErrorsPrintUsage(t *testing.T) {
 			if stdout != "" {
 				t.Errorf("usage must not go to stdout, got:\n%s", stdout)
 			}
-			// The hint is the call shape and where to find the rest, not the
-			// whole usage block with every global flag in it.
-			if n := len(lines(stderr)); n > 3 {
-				t.Errorf("usage hint is %d lines, want at most 3:\n%s", n, stderr)
+			// What went wrong comes first. It used to be printed below the
+			// call shape and the "run --help" line, so on a small terminal
+			// the one line worth reading was the one that scrolled away.
+			got := lines(stderr)
+			if len(got) == 0 || !strings.HasPrefix(got[0], "Error: ") {
+				t.Errorf("stderr should open with the error line:\n%s", stderr)
+			}
+			if !strings.Contains(got[0], err.Error()) {
+				t.Errorf("first line = %q, want it to carry %q", got[0], err.Error())
+			}
+			// Then the call shape and where to find the rest — not the whole
+			// usage block with every global flag in it.
+			if n := len(got); n > 4 {
+				t.Errorf("the error and its hint are %d lines, want at most 4:\n%s", n, stderr)
 			}
 			if strings.Contains(stderr, "Global Flags:") || strings.Contains(stderr, "--no-cache") {
 				t.Errorf("the flag listing belongs in --help, not in the error:\n%s", stderr)
@@ -166,6 +176,12 @@ func TestRuntimeErrorsPrintNoUsage(t *testing.T) {
 	if stdout != "" {
 		t.Errorf("nothing should reach stdout, got:\n%s", stdout)
 	}
+	// Reporting moved out of main and into Run, so it has to happen here —
+	// and exactly once, not once in each.
+	if n := strings.Count(stderr, "Error: "); n != 1 {
+		t.Errorf("stderr carries %d error lines, want 1:\n%s", n, stderr)
+	}
+	requireContains(t, stderr, err.Error())
 }
 
 func TestHelpIsNotAnError(t *testing.T) {

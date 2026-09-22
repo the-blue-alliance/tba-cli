@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/the-blue-alliance/tba-cli/cmd"
@@ -9,12 +8,8 @@ import (
 )
 
 func main() {
-	err := cmd.Execute()
-	// A closed stdout and a Ctrl-C are not worth a message: the reader has
-	// already gone, and the person who interrupted knows they did. The exit
-	// code still says which it was.
-	if err != nil && !clierr.Silent(err) {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-	}
-	os.Exit(clierr.ExitCode(err))
+	// cmd.Run does the reporting, so that the one line saying what went wrong
+	// is printed above the usage hint rather than below it. All that is left
+	// here is the exit code.
+	os.Exit(clierr.ExitCode(cmd.Execute()))
 }

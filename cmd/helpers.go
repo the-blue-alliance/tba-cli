@@ -120,10 +120,13 @@ func normalizeFormat(raw string) (string, bool) {
 // that a typo in the config file is not hidden by an unrelated setting.
 func colorMode(cmd *cobra.Command) (output.ColorMode, error) {
 	s := settings(cmd)
-	mode, err := output.ParseColorMode(s.String("color"))
+	raw := s.String("color")
+	mode, err := output.ParseColorMode(raw)
 	if err != nil {
-		// Like every other bad flag value, this is exit 2.
-		return mode, clierr.Wrap(clierr.KindUsage, err)
+		// Like every other bad flag value, this is exit 2 — and, like --format,
+		// it names the layer the value came from. "invalid --color" is advice
+		// about a flag the user never typed when the value is in config.yaml.
+		return mode, clierr.Usage("invalid %s %q (want: auto, always, never)", s.origin("color"), raw)
 	}
 	if s.Bool("no-color") {
 		return output.ColorNever, nil

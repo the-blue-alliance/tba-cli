@@ -160,6 +160,36 @@ func TestInvalidConfigValueNamesTheConfigFile(t *testing.T) {
 	}
 }
 
+// Every bad value names the layer it came from, not a flag the user never
+// typed. --format said so already; --color said "invalid --color".
+func TestInvalidColorNamesItsLayer(t *testing.T) {
+	t.Run("config", func(t *testing.T) {
+		path := writeConfig(t, "color: sometimes\n")
+		srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+		_, _, err := runCmd(t, srv, "team", "view", "177")
+		requireErrorContains(t, err, "invalid "+path+` "sometimes"`)
+		if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+			t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+		}
+	})
+	t.Run("env", func(t *testing.T) {
+		emptyConfigDir(t)
+		t.Setenv("TBA_COLOR", "sometimes")
+		srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+		_, _, err := runCmd(t, srv, "team", "view", "177")
+		requireErrorContains(t, err, `invalid TBA_COLOR "sometimes"`)
+	})
+	t.Run("flag", func(t *testing.T) {
+		emptyConfigDir(t)
+		srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+		_, _, err := runCmd(t, srv, "team", "view", "177", "--color", "sometimes")
+		requireErrorContains(t, err, `invalid --color "sometimes"`)
+	})
+}
+
 func TestUnknownConfigKeyWarnsOnStderr(t *testing.T) {
 	path := writeConfig(t, "format: json\nwidgets: 3\n")
 	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})

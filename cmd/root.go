@@ -156,10 +156,20 @@ func Run(ctx context.Context, root *cobra.Command) error {
 	if err == nil {
 		return nil
 	}
+	if cmd == nil {
+		cmd = root
+	}
+	// The line that says what went wrong is printed first, above the usage
+	// hint. It used to come last, below the call shape and the "run --help"
+	// line, so on a small terminal the one line worth reading was the one
+	// that had already scrolled away.
+	//
+	// A closed stdout and a Ctrl-C get no line at all: the reader has already
+	// gone, and the person who pressed Ctrl-C knows they did.
+	if !clierr.Silent(err) {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Error:", err)
+	}
 	if clierr.ExitCode(err) == clierr.ExitUsage {
-		if cmd == nil {
-			cmd = root
-		}
 		printUsageHint(cmd)
 	}
 	return err
