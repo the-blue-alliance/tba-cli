@@ -158,18 +158,22 @@ not offered: it would repeat that walk once per year, so `--year 0` and
 tba team years 177
 tba team awards 177
 tba team awards 177 --year 2024
+tba team awards 177 --type impact
 tba team awards 177 --type 0
 ```
 
 `team years` lists the seasons a team has competed in, newest first, as a
 single `Year` column; `--json` gives the plain array of years.
 
-`team awards` lists a team's awards as `Year | Event | Award | Recipient`,
-newest season first and grouped by event. The event column shows the event's
-name, which costs one extra request for the team's event list; if that request
-fails the awards are still listed with the name left blank. `Recipient` names
-the individual for awards that go to a person rather than to the team, and
-`--type` filters by TBA's numeric `award_type`.
+`team awards` lists a team's awards as `Year | Event | Award | Type |
+Recipient`, newest season first and grouped by event. The event column shows
+the event's name, which costs one extra request for the team's event list; if
+that request fails the awards are still listed with the name left blank.
+`Recipient` names the individual for awards that go to a person rather than to
+the team. `--type` filters by kind: a name matched case-insensitively against
+any part of it (`--type impact`, `--type "dean's"`), or TBA's numeric
+`award_type` (`--type 0`). A name that could mean several awards is an error
+that lists them.
 
 ### Opening the website
 

@@ -4,6 +4,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // A team's awards arrive in no useful order and span its whole history.
@@ -85,12 +87,12 @@ func TestTeamAwardsColumnsOrderAndEventNames(t *testing.T) {
 	requireNoError(t, err, stderr)
 
 	want := strings.Join([]string{
-		"Year\tEvent\tAward\tRecipient",
-		"2024\tNE District Hartford Event\tDistrict Event Winner\t",
-		"2024\tNE District Hartford Event\tIndustrial Design Award sponsored by General Motors\t",
-		"2024\tNew England FIRST District Championship\tWoodie Flowers Finalist Award\tBill Beatty",
-		"2024\tNew England FIRST District Championship\tDean's List Finalist Award\tAda Lovelace, Grace Hopper",
-		"2007\tConnecticut Regional\tRegional Chairman's Award\t",
+		"Year\tEvent\tAward\tType\tRecipient",
+		"2024\tNE District Hartford Event\tDistrict Event Winner\tWinner\t",
+		"2024\tNE District Hartford Event\tIndustrial Design Award sponsored by General Motors\tEngineering Inspiration\t",
+		"2024\tNew England FIRST District Championship\tWoodie Flowers Finalist Award\tWoodie Flowers\tBill Beatty",
+		"2024\tNew England FIRST District Championship\tDean's List Finalist Award\tDean's List\tAda Lovelace, Grace Hopper",
+		"2007\tConnecticut Regional\tRegional Chairman's Award\tChairman's/Impact\t",
 		"",
 	}, "\n")
 	if out != want {
@@ -154,8 +156,8 @@ func TestTeamAwardsTypeFilter(t *testing.T) {
 	out, stderr, err := runCmd(t, srv, "team", "awards", "177", "--type", "4", "--format", "tsv")
 	requireNoError(t, err, stderr)
 
-	want := "Year\tEvent\tAward\tRecipient\n" +
-		"2024\tNew England FIRST District Championship\tDean's List Finalist Award\tAda Lovelace, Grace Hopper\n"
+	want := "Year\tEvent\tAward\tType\tRecipient\n" +
+		"2024\tNew England FIRST District Championship\tDean's List Finalist Award\tDean's List\tAda Lovelace, Grace Hopper\n"
 	if out != want {
 		t.Errorf("tsv =\n%q\nwant\n%q", out, want)
 	}
@@ -180,6 +182,85 @@ func TestTeamAwardsTypeZeroIsAFilterNotADefault(t *testing.T) {
 	}
 }
 
+// --type takes the award's name, because nobody knows that 9 is Engineering
+// Inspiration.
+func TestTeamAwardsTypeAcceptsAName(t *testing.T) {
+	cases := []struct {
+		spec string
+		want string
+	}{
+		{"impact", "Regional Chairman's Award"},
+		{"IMPACT", "Regional Chairman's Award"},
+		{"engineering inspiration", "Industrial Design Award sponsored by General Motors"},
+		{"dean's list", "Dean's List Finalist Award"},
+		{"woodie", "Woodie Flowers Finalist Award"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.spec, func(t *testing.T) {
+			srv := teamAwardsServer(t)
+			out, stderr, err := runCmd(t, srv, "team", "awards", "177", "--type", tc.spec, "--format", "tsv")
+			requireNoError(t, err, stderr)
+			if n := len(lines(out)); n != 2 {
+				t.Fatalf("want header + 1 row, got %d:\n%s", n, out)
+			}
+			requireContains(t, out, tc.want)
+		})
+	}
+}
+
+// An exact name wins over the awards it is a part of, so --type winner is the
+// event Winner award rather than an ambiguity with Skills Competition Winner.
+func TestTeamAwardsTypeExactNameWinsOverSubstrings(t *testing.T) {
+	srv := teamAwardsServer(t)
+	out, stderr, err := runCmd(t, srv, "team", "awards", "177", "--type", "winner", "--format", "tsv")
+	requireNoError(t, err, stderr)
+	requireContains(t, out, "District Event Winner")
+	if n := len(lines(out)); n != 2 {
+		t.Fatalf("want header + 1 row, got %d:\n%s", n, out)
+	}
+}
+
+func TestTeamAwardsTypeRejectsAnUnknownName(t *testing.T) {
+	srv := teamAwardsServer(t)
+	err := requireExitCode(t, clierr.ExitUsage, srv, "team", "awards", "177", "--type", "chairmanship")
+	requireErrorContains(t, err, `unknown award type "chairmanship"`)
+	requireErrorContains(t, err, "Chairman's")
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a usage error must not reach the API, got %v", got)
+	}
+}
+
+func TestTeamAwardsTypeRejectsAnAmbiguousName(t *testing.T) {
+	srv := teamAwardsServer(t)
+	err := requireExitCode(t, clierr.ExitUsage, srv, "team", "awards", "177", "--type", "chairman")
+	requireErrorContains(t, err, "matches")
+	requireErrorContains(t, err, "Chairman's Finalist (70)")
+}
+
+func TestTeamAwardsTypeRejectsAnUnknownCode(t *testing.T) {
+	srv := teamAwardsServer(t)
+	err := requireExitCode(t, clierr.ExitUsage, srv, "team", "awards", "177", "--type", "900")
+	requireErrorContains(t, err, "unknown award type 900")
+}
+
+func TestAwardTypeNamesCoverTheEnum(t *testing.T) {
+	for i, tc := range awardTypes {
+		if tc.code != i {
+			t.Fatalf("award type %d is out of order: %+v", i, tc)
+		}
+		if tc.name == "" {
+			t.Errorf("award type %d has no name", tc.code)
+		}
+	}
+	if got := awardTypeName(0); got != "Chairman's/Impact" {
+		t.Errorf("awardTypeName(0) = %q", got)
+	}
+	// A code TBA adds later still says something useful.
+	if got := awardTypeName(999); got != "999" {
+		t.Errorf("awardTypeName(999) = %q, want the bare code", got)
+	}
+}
+
 func TestTeamAwardsTypeFilterMatchingNothing(t *testing.T) {
 	srv := teamAwardsServer(t)
 	out, stderr, err := runCmd(t, srv, "team", "awards", "177", "--type", "77", "--json")
@@ -194,7 +275,7 @@ func TestTeamAwardsWithYearKeepsTheSameColumns(t *testing.T) {
 	out, stderr, err := runCmd(t, srv, "team", "awards", "177", "--year", "2024", "--format", "tsv")
 	requireNoError(t, err, stderr)
 
-	if got := lines(out)[0]; got != "Year\tEvent\tAward\tRecipient" {
+	if got := lines(out)[0]; got != "Year\tEvent\tAward\tType\tRecipient" {
 		t.Errorf("header = %q", got)
 	}
 	requireContains(t, out, "NE District Hartford Event")

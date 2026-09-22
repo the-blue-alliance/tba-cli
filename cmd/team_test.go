@@ -275,9 +275,9 @@ func TestTeamAwardsCSV(t *testing.T) {
 	out, _, err := runCmd(t, srv, "team", "awards", "177", "--format", "csv")
 	requireNoError(t, err, "")
 
-	want := "Year,Event,Award,Recipient\n" +
-		"2024,,District Event Winner,\n" +
-		"2007,,Regional Chairman's Award,\n"
+	want := "Year,Event,Award,Type,Recipient\n" +
+		"2024,,District Event Winner,Winner,\n" +
+		"2007,,Regional Chairman's Award,Chairman's/Impact,\n"
 	if out != want {
 		t.Errorf("csv =\n%q\nwant\n%q", out, want)
 	}

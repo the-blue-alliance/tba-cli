@@ -240,14 +240,32 @@ the event's name, which takes one extra request for the team's event list; if
 that request fails the awards are still listed, with the name left blank.
 
 Recipient names the individual who received the award, for awards such as
-Dean's List or Woodie Flowers that go to a person rather than to the team.`,
+Dean's List or Woodie Flowers that go to a person rather than to the team.
+
+--type narrows the list to one kind of award. It takes a name, matched
+case-insensitively against any part of it (--type impact, --type "dean's"), or
+TBA's own award_type code (--type 0). A name that could mean several awards is
+an error that lists them.`,
 		Example: `  tba team awards 177
   tba team awards frc177 --year 2024 --format markdown
-  tba team awards 177 --type 0`,
+  tba team awards 177 --type impact
+  tba team awards 177 --type 9`,
 		Args: exactArgs(1, "a team number (e.g. tba team awards 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateTeamArg(args[0]); err != nil {
 				return err
+			}
+			// The award type is resolved before the request, so a name that
+			// means nothing costs nothing.
+			typeSpec, _ := cmd.Flags().GetString("type")
+			filterByType := cmd.Flags().Changed("type")
+			wantType := 0
+			if filterByType {
+				code, err := parseAwardType(typeSpec)
+				if err != nil {
+					return err
+				}
+				wantType = code
 			}
 			client, err := newClient(cmd)
 			if err != nil {
@@ -266,9 +284,8 @@ Dean's List or Woodie Flowers that go to a person rather than to the team.`,
 			if err := client.Get(cmd.Context(), path, &awards); err != nil {
 				return err
 			}
-			if cmd.Flags().Changed("type") {
-				awardType, _ := cmd.Flags().GetInt("type")
-				awards = filterAwardsByType(awards, awardType)
+			if filterByType {
+				awards = filterAwardsByType(awards, wantType)
 			}
 			names := teamEventNames(cmd, client, key, len(awards) > 0)
 			sortTeamAwards(awards)
@@ -279,14 +296,15 @@ Dean's List or Woodie Flowers that go to a person rather than to the team.`,
 					strconv.Itoa(a.Year),
 					names[a.EventKey],
 					a.Name,
+					awardTypeName(a.AwardType),
 					awardeeNames(a),
 				}
 			}
-			return outputTable(cmd, awards, []string{"Year", "Event", "Award", "Recipient"}, rows)
+			return outputTable(cmd, awards, []string{"Year", "Event", "Award", "Type", "Recipient"}, rows)
 		},
 	}
 	c.Flags().Int("year", 0, "Season year (default: all years)")
-	c.Flags().Int("type", -1, "Only awards with this TBA award_type")
+	c.Flags().String("type", "", "Only awards of this kind, by name or TBA award_type code (e.g. impact, 0)")
 	return c
 }
 
