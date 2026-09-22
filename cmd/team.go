@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ func newTeamCmd() *cobra.Command {
 	teamCmd.AddCommand(newTeamViewCmd())
 	teamCmd.AddCommand(newTeamListCmd())
 	teamCmd.AddCommand(newTeamEventsCmd())
+	teamCmd.AddCommand(newTeamYearsCmd())
 	teamCmd.AddCommand(newTeamMatchesCmd())
 	teamCmd.AddCommand(newTeamAwardsCmd())
 	teamCmd.AddCommand(newTeamMediaCmd())
@@ -134,6 +136,39 @@ func newTeamEventsCmd() *cobra.Command {
 	}
 	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
 	return c
+}
+
+func newTeamYearsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "years <number>",
+		Short: "List the seasons a team has competed in",
+		Long: `List the seasons a team has competed in, most recent first.
+
+The JSON form is the plain array of years the API returns, which makes it easy
+to drive a loop over a team's whole history.`,
+		Example: `  tba team years 177
+  tba team years frc177 --json
+  tba team years 177 --jq '.[0]' -r`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			var years []int
+			path := fmt.Sprintf("/team/%s/years_participated", teamKey(args[0]))
+			if err := client.Get(cmd.Context(), path, &years); err != nil {
+				return err
+			}
+			// Newest first: the recent seasons are the ones people look up.
+			sort.Sort(sort.Reverse(sort.IntSlice(years)))
+			rows := make([][]string, len(years))
+			for i, y := range years {
+				rows[i] = []string{strconv.Itoa(y)}
+			}
+			return outputTable(cmd, years, []string{"Year"}, rows)
+		},
+	}
 }
 
 func newTeamMatchesCmd() *cobra.Command {
