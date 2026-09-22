@@ -606,13 +606,16 @@ type watchTableSink struct {
 }
 
 func (s *watchTableSink) snapshot(_ int, _ time.Time, matches []api.Match, rankings *api.EventRankings) error {
+	// The first poll settles how the times are written, so that the rows
+	// printed under this table hours later still line up with it.
 	s.withDate = frc.SpansDays(matches, time.Local)
-	rows := s.matchRows(matches)
+	rows, marked := matchTableRows(matches, constantPlayoffType(s.playoffType), s.color)
 	s.matchWidths = watchWidths(matchHeaders, rows)
 	if err := output.Render(s.out, output.Table{Headers: matchHeaders, Rows: rows},
 		output.RenderOptions{Format: "table", Color: s.mode}); err != nil {
 		return err
 	}
+	s.showLegend(marked)
 	if rankings != nil {
 		fmt.Fprintln(s.out)
 		if err := s.renderRankings(rankings); err != nil {
@@ -626,9 +629,17 @@ func (s *watchTableSink) changes(news watchNews) error {
 	// The header is data in table mode: it is what tells one poll's rows from
 	// the next when the stream is read back later.
 	fmt.Fprintf(s.out, "--- %s (poll %d) ---\n", news.at.Local().Format("15:04:05"), news.poll)
-	for _, c := range news.matches {
-		fmt.Fprintln(s.out, watchPadded(s.matchRow(c.match), s.matchWidths))
+	changed := make([]api.Match, len(news.matches))
+	for i, c := range news.matches {
+		changed[i] = c.match
 	}
+	rows, marked := matchRows(changed, constantPlayoffType(s.playoffType), s.color, s.withDate, news.at)
+	for _, row := range rows {
+		fmt.Fprintln(s.out, watchPadded(row, s.matchWidths))
+	}
+	// Once per poll, not once per row: a poll that brings in three surrogates
+	// is still one thing to explain.
+	s.showLegend(marked)
 	if len(news.rankings) > 0 && news.standings != nil {
 		fmt.Fprintln(s.out)
 		if err := s.renderRankings(news.standings); err != nil {
@@ -638,50 +649,15 @@ func (s *watchTableSink) changes(news watchNews) error {
 	return nil
 }
 
-func (s *watchTableSink) matchRows(matches []api.Match) [][]string {
-	rows := make([][]string, len(matches))
-	for i, m := range matches {
-		rows[i] = s.matchRow(m)
+// showLegend explains the surrogate and DQ marks the first time a poll prints
+// one. It goes to stderr, so a stream teed into a file keeps only the rows,
+// and it is printed once for the whole watch rather than once per row.
+func (s *watchTableSink) showLegend(marked bool) {
+	if !marked || s.legendShown {
+		return
 	}
-	return rows
-}
-
-// matchRow renders one match as a row of matchHeaders.
-//
-// This is a copy of the row `event matches` builds in cmd/matches.go, kept here
-// so that a streaming command cannot be broken by a change to a listing
-// command, and vice versa. The headers themselves are shared (matchHeaders),
-// so the two tables cannot silently grow different columns.
-func (s *watchTableSink) matchRow(m api.Match) []string {
-	red, blue := m.Alliances[frc.AllianceRed], m.Alliances[frc.AllianceBlue]
-	redCell := strings.Join(frc.MarkedTeams(red), ", ")
-	blueCell := strings.Join(frc.MarkedTeams(blue), ", ")
-	if !s.legendShown && strings.ContainsAny(redCell+blueCell, frc.MarkChars) {
-		s.legendShown = true
-		fmt.Fprintln(s.errw, frc.Legend)
-	}
-
-	score := ""
-	if frc.Played(m) {
-		score = fmt.Sprintf("%d-%d", red.Score, blue.Score)
-	}
-	epoch, source := frc.BestTime(m)
-	when := ""
-	if !frc.Played(m) {
-		when = frc.RelativeEpoch(epoch, nowFunc())
-	}
-	return []string{
-		frc.MatchLabel(m, s.playoffType),
-		m.Key,
-		output.Colorize(redCell, output.Red, s.color),
-		output.Colorize(blueCell, output.Blue, s.color),
-		score,
-		colorizeAlliance(frc.Winner(m), s.color),
-		frc.FormatTime(epoch, time.Local, s.withDate),
-		when,
-		source,
-		frc.MatchStatus(m),
-	}
+	s.legendShown = true
+	fmt.Fprintln(s.errw, frc.Legend)
 }
 
 // renderRankings prints the whole standings table, since a rank changing moves
