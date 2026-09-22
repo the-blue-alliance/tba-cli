@@ -154,21 +154,38 @@ func exportOptionsFrom(cmd *cobra.Command, key string) (exportOptions, error) {
 	// --format describes how this command talks to the terminal, not what it
 	// writes to disk; only --to chooses that. --format json is the one value
 	// that means something here, and it selects the JSON summary.
-	if cmd.Flags().Changed("format") {
-		raw, _ := cmd.Flags().GetString("format")
-		switch normalized, _ := normalizeFormat(raw); normalized {
+	//
+	// It is read through the settings layer rather than off the flag, so
+	// TBA_FORMAT and format: in config.yaml mean here exactly what they mean
+	// everywhere else. What stays off the layer is the terminal rule: a bare
+	// `auto` leaves the summary as a plain list of paths whether or not
+	// stdout is a pipe, because `tba event export ... | xargs` wants file
+	// names rather than a JSON object.
+	s := settings(cmd)
+	if s.Source("format") != sourceDefault {
+		raw := s.String("format")
+		normalized, ok := normalizeFormat(raw)
+		if !ok {
+			return opts, clierr.Usage("invalid %s %q (want: %s)", s.origin("format"), raw, validFormats)
+		}
+		switch normalized {
 		case "":
-			// auto: the summary stays a plain list of paths, so that piping
-			// an export into xargs does not turn it into JSON.
+			// auto: see above.
 		case "json":
 			opts.jsonSummary = true
 		default:
+			// Name where the format came from, so that "drop --format table"
+			// is not advice about a flag the user never typed.
+			chosen := "--format " + raw
+			if s.Source("format") != sourceFlag {
+				chosen = fmt.Sprintf("--format %s from %s", raw, s.origin("format"))
+			}
 			return opts, clierr.Usage(
-				"--format %s does not choose the export format; use --to %s (--format json prints a JSON summary of the run)",
-				raw, exportFormats)
+				"%s does not choose the export format; use --to %s (--format json prints a JSON summary of the run)",
+				chosen, exportFormats)
 		}
 	}
-	if settings(cmd).Bool("json") || jqExpr(cmd) != "" {
+	if s.Bool("json") || jqExpr(cmd) != "" {
 		opts.jsonSummary = true
 	}
 
