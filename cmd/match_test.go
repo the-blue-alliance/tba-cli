@@ -243,7 +243,7 @@ func TestMatchViewBreakdownIsSideBySide(t *testing.T) {
 	teleop := strings.Index(body, "Teleop Points")
 	fouls := strings.Index(body, "Foul Count")
 	detail := strings.Index(body, "Auto Amp Note Count")
-	if !(total < rp && rp < teleop && teleop < fouls && fouls < detail) {
+	if total >= rp || rp >= teleop || teleop >= fouls || fouls >= detail {
 		t.Errorf("breakdown rows are out of order:\n%s", body)
 	}
 }

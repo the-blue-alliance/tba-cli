@@ -86,7 +86,9 @@ refused. --columns and --sort do not apply either, and are ignored.
 
 Because it polls, the defaults are conservative: a poll a minute for two hours.
 --for 0 watches until Ctrl-C. Unchanged polls cost a conditional request the
-API answers with a 304, so a long watch is cheaper than it looks.`,
+API answers with a 304, so a long watch is cheaper than it looks. A watch of an
+event that is already over stops at the first poll, and one whose output is
+piped into a reader that has gone away stops at the next.`,
 		Example: `  tba event watch 2024cthar
   tba event watch 2024cthar --interval 30s --for 6h
   tba event watch 2024cthar --team 177 --rankings
@@ -189,8 +191,16 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 		return nil
 	}
 
+	// A watch can sit quiet for an hour between polls, so a reader that has
+	// hung up is never noticed by a failed write. Ask the descriptor instead,
+	// before each poll and before each wait.
+	out := cmd.OutOrStdout()
+
 	failures := 0
 	for poll := 1; ; poll++ {
+		if stdoutHungUp(out) {
+			return errStdoutClosed()
+		}
 		matches, rankings, err := watchPoll(ctx, client, opts)
 		switch {
 		case err != nil && ctx.Err() != nil:
@@ -233,6 +243,10 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			return nil
 		case expired():
 			return stopFor()
+		}
+
+		if stdoutHungUp(out) {
+			return errStdoutClosed()
 		}
 
 		wait := opts.interval
