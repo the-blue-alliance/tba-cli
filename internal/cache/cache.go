@@ -188,9 +188,10 @@ func (c *Cache) ForEach(fn func(Entry)) error {
 	return nil
 }
 
-// List returns every cache entry, ordered by URL so that callers reading the
-// cache get the same answer every time.
-func (c *Cache) List() ([]Entry, error) {
+// Entries returns every cache entry with its body, ordered by URL so that
+// callers reading the cache get the same answer every time. List returns the
+// lighter per-entry metadata without bodies.
+func (c *Cache) Entries() ([]Entry, error) {
 	var out []Entry
 	if err := c.ForEach(func(e Entry) { out = append(out, e) }); err != nil {
 		return nil, err
