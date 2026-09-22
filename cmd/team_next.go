@@ -251,7 +251,11 @@ func printNextMatch(cmd *cobra.Command, m api.Match, event api.Event, team strin
 
 	timeCell := ""
 	if epoch != nil {
-		timeCell = fmt.Sprintf("%s (%s)", frc.FormatTime(epoch, time.Local, false), source)
+		// The date is left off only for a match happening today, the same
+		// rule a listing follows: "Sun 13:00" for a match three weeks out is
+		// a weekday the reader has no way to place.
+		withDate := frc.NeedsDate([]api.Match{m}, time.Local, now)
+		timeCell = fmt.Sprintf("%s (%s)", frc.FormatTime(epoch, time.Local, withDate, now), source)
 	}
 
 	pairs := []string{

@@ -48,6 +48,31 @@ func TestMatchViewTable(t *testing.T) {
 	}
 }
 
+// One match got a weekday-only time whatever year it was played in, so looking
+// an old match up answered "Fri 14:07" and left the reader to work out which
+// Friday. It follows the listing's rule now: the date unless the match is
+// today, and the year too when the match is not in this one.
+func TestMatchViewDatesAMatchFromAnotherSeason(t *testing.T) {
+	withNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm12": matchViewQM12JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	want := time.Unix(1711130820, 0).In(time.Local).Format(frc.YearTimeLayout)
+	requireContains(t, out, "Time:        "+want+" (actual,")
+}
+
+// A match earlier this season needs the date but not the year.
+func TestMatchViewDatesAMatchEarlierThisSeason(t *testing.T) {
+	withNow(t, time.Date(2024, 5, 1, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm12": matchViewQM12JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	want := time.Unix(1711130820, 0).In(time.Local).Format(frc.DatedTimeLayout)
+	requireContains(t, out, "Time:        "+want+" (actual,")
+}
+
 // A row nobody did anything in is noise however the season spells "nothing":
 // "None" on both sides reads exactly like a pair of zeroes. The game's own
 // constants say nothing about the match either, and both columns always agree
