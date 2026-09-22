@@ -100,7 +100,7 @@ func matchTimeDetail(m api.Match, now time.Time) string {
 	if epoch == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s (%s, %s)", frc.FormatTime(epoch, time.Local), source, frc.RelativeEpoch(epoch, now))
+	return fmt.Sprintf("%s (%s, %s)", frc.FormatTime(epoch, time.Local, false), source, frc.RelativeEpoch(epoch, now))
 }
 
 // stationList renders an alliance as its driver stations, which is how teams

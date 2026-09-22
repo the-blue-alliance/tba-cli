@@ -19,9 +19,17 @@ const (
 	TimeScheduled = "scheduled"
 )
 
-// TimeLayout shows a weekday and a 24-hour clock. A competition fits in a
-// weekend, so the date adds noise without adding information.
-const TimeLayout = "Mon 15:04"
+// The two ways a match time is written.
+const (
+	// TimeLayout shows a weekday and a 24-hour clock, which is all anyone at
+	// an event needs: a competition fits in a weekend, so the date would add
+	// noise without adding information.
+	TimeLayout = "Mon 15:04"
+	// DatedTimeLayout adds the calendar date, for a listing that spans more
+	// than one day — a whole season, say, where "Sat 11:22" could be any of
+	// a dozen Saturdays.
+	DatedTimeLayout = "Jan 2 15:04"
+)
 
 // BestTime returns the most useful time the API has for a match, and which of
 // the three it is: what actually happened, else the live prediction, else the
@@ -49,14 +57,48 @@ func BestTime(m api.Match) (*int64, string) {
 // FormatTime renders a Unix timestamp in loc, or "" when there is none. A nil
 // location means the machine's local time, which is what someone standing at
 // the event wants to read.
-func FormatTime(epoch *int64, loc *time.Location) string {
+//
+// withDate adds the calendar date. A caller decides it once for a whole table
+// (see SpansDays) rather than per row, so that every time in a listing is
+// written the same way and the column stays one width.
+func FormatTime(epoch *int64, loc *time.Location, withDate bool) string {
 	if epoch == nil || *epoch == 0 {
 		return ""
 	}
 	if loc == nil {
 		loc = time.Local
 	}
-	return time.Unix(*epoch, 0).In(loc).Format(TimeLayout)
+	layout := TimeLayout
+	if withDate {
+		layout = DatedTimeLayout
+	}
+	return time.Unix(*epoch, 0).In(loc).Format(layout)
+}
+
+// SpansDays reports whether the matches fall on more than one calendar day in
+// loc, which is what decides whether their times need a date on them. Matches
+// with no time at all are ignored: an unpublished schedule says nothing about
+// how many days a listing covers.
+func SpansDays(matches []api.Match, loc *time.Location) bool {
+	if loc == nil {
+		loc = time.Local
+	}
+	first := ""
+	for _, m := range matches {
+		epoch, _ := BestTime(m)
+		if epoch == nil || *epoch == 0 {
+			continue
+		}
+		day := time.Unix(*epoch, 0).In(loc).Format(DateLayout)
+		if first == "" {
+			first = day
+			continue
+		}
+		if day != first {
+			return true
+		}
+	}
+	return false
 }
 
 // Relative describes when t happens relative to now: "in 18m", "2h ago",

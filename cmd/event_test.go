@@ -131,8 +131,8 @@ func TestEventMatches(t *testing.T) {
 	requireNoError(t, err, "")
 
 	got := lines(out)
-	if got[0] != "Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status" {
-		t.Errorf("header = %q", got[0])
+	for _, want := range matchHeaders {
+		requireContains(t, got[0], want)
 	}
 	requireContains(t, got[2], "Qual 1")
 	requireContains(t, got[2], "2024cthar_qm1")
