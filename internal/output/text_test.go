@@ -43,6 +43,37 @@ func TestPrintKeyValueIgnoresATrailingOddKey(t *testing.T) {
 	}
 }
 
+// A key with no value at all must not index past the end of the slice.
+func TestPrintKeyValueWithOnlyADanglingKey(t *testing.T) {
+	var buf bytes.Buffer
+	PrintKeyValue(&buf, "dangling")
+	if buf.String() != "" {
+		t.Errorf("want no output, got %q", buf.String())
+	}
+}
+
+// The dangling key must not widen the label column either: it is dropped
+// before the widths are measured.
+func TestPrintKeyValueDanglingKeyDoesNotWidenTheLabels(t *testing.T) {
+	var buf bytes.Buffer
+	PrintKeyValue(&buf, "A", "1", "a very long dangling key")
+	if buf.String() != "A:  1\n" {
+		t.Errorf("key/value = %q", buf.String())
+	}
+}
+
+func TestPrintKeyValueAlignsWideLabels(t *testing.T) {
+	var buf bytes.Buffer
+	PrintKeyValue(&buf, "チーム", "177", "Year", "2024")
+
+	// "チーム:" draws 7 cells, so "Year:" is padded out to match.
+	want := "チーム:  177\n" +
+		"Year:    2024\n"
+	if buf.String() != want {
+		t.Errorf("key/value =\n%q\nwant\n%q", buf.String(), want)
+	}
+}
+
 func TestPrintKeyValueEmpty(t *testing.T) {
 	var buf bytes.Buffer
 	PrintKeyValue(&buf)
