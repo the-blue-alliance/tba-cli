@@ -66,6 +66,38 @@ tba --no-cache <command>   # skip cache and conditional headers for this invocat
 
 `TBA_CACHE_DIR` overrides the cache location.
 
+If the server answers `304 Not Modified` but the cached body has gone — pruned between the request and the response, or a proxy answering a request that carried no validators — the request is retried once without the conditional headers rather than failing.
+
+### Network behavior
+
+Two persistent flags tune how requests are made:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--timeout` | `10s` | Per-request timeout (e.g. `10s`, `1m`) |
+| `--retries` | `3` | Retry attempts for 429/5xx/network errors; `0` disables |
+
+```
+tba event matches 2024necmp --timeout 30s
+tba status --retries 0            # fail fast, e.g. from cron
+```
+
+**Retries.** Only GETs are retried, and only when the request fails at the network level or the API answers `429`, `500`, `502`, `503` or `504`. Every other `4xx` is a problem no amount of retrying will fix, so it is reported straight away. Waits start at 500ms and double to a ceiling of 8s, with full jitter so that several machines retrying at once do not march in step. A `Retry-After` header — seconds or an HTTP-date — overrides the backoff and is capped at 30s. Regardless of `--retries`, one command spends at most 60s of wall clock on a single request including all of its retries, and `Ctrl-C` stops the loop immediately. When every attempt fails, the error says how many were made:
+
+```
+API error 503 after 4 attempts: {"Error": "temporarily unavailable"}
+```
+
+**Rate limiting.** Requests are paced client-side at 10 per second with a burst of 10, so a paging command such as `team list` stays a polite API citizen.
+
+**Paging.** `team list` walks pages of 500 teams. `--max-pages` (default 30) bounds how many it will fetch; when it stops early it says so on stderr:
+
+```
+note: stopped after 30 pages; raise --max-pages to fetch more
+```
+
+Notes and errors always go to stderr, so stdout carries nothing but data.
+
 ### Shell completion
 
 `tba completion <shell>` prints a completion script for `bash`, `zsh`, `fish`, or `powershell`. Common install paths:
