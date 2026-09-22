@@ -170,9 +170,29 @@ func TestGetAPIKeyErrorWhenNoConfigFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error with no config file")
 	}
-	want := "not authenticated for " + DefaultBaseURL + ". Run 'tba auth login' first"
+	want := "not authenticated for " + DefaultBaseURL + ". Run 'tba auth login' first. Get one at " + APIKeyPage
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+// Someone hitting this message for the first time has no key yet, so it has to
+// say where keys come from.
+func TestAuthErrorsSayWhereToGetAKey(t *testing.T) {
+	configEnv(t)
+	if _, err := GetAPIKey(DefaultBaseURL); err == nil {
+		t.Fatal("want an error with no config file")
+	} else if !strings.Contains(err.Error(), "https://www.thebluealliance.com/account") {
+		t.Errorf("error = %q, want it to point at the account page", err)
+	}
+
+	if err := SaveAPIKey("prod-key", DefaultBaseURL); err != nil {
+		t.Fatalf("SaveAPIKey: %v", err)
+	}
+	if _, err := GetAPIKey(localURL); err == nil {
+		t.Fatal("want an error for an unknown base URL")
+	} else if !strings.Contains(err.Error(), "https://www.thebluealliance.com/account") {
+		t.Errorf("error = %q, want it to point at the account page", err)
 	}
 }
 
