@@ -110,27 +110,21 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 	}
 }
 
-// outputTable routes tabular output through the chosen format.
+// outputTable routes tabular output through the chosen format. Tabular formats
+// share one Table so that column selection, sorting and width handling behave
+// identically no matter which renderer prints it.
 func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows [][]string) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
 	}
 	w := cmd.OutOrStdout()
-	switch format {
-	case "json":
+	table := output.Table{Headers: headers, Rows: rows}
+
+	if format == "json" {
 		return output.PrintJSONWithFilter(w, data, jqExpr(cmd), rawOutput(cmd))
-	case "csv":
-		return output.PrintDelimited(w, headers, rows, ',')
-	case "tsv":
-		return output.PrintDelimited(w, headers, rows, '\t')
-	case "markdown":
-		output.PrintMarkdownTable(w, headers, rows)
-		return nil
-	default:
-		output.PrintTable(w, headers, rows)
-		return nil
 	}
+	return output.Render(w, table, output.RenderOptions{Format: format})
 }
 
 // teamKey normalises a team argument, so that both "177" and "frc177" (in any
