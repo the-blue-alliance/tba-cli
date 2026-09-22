@@ -332,6 +332,110 @@ func TestSortOnANonListJSONPayloadIsAUsageError(t *testing.T) {
 	}
 }
 
+// An empty table is ambiguous: nothing there, or a filter that cancelled
+// itself out, or a mistyped key. The note says which, on stderr, so stdout
+// stays a well-formed empty table.
+func TestEmptyResultsCarryANoteOnStderr(t *testing.T) {
+	cases := []struct {
+		name   string
+		routes map[string]any
+		args   []string
+		want   string
+	}{
+		{
+			"event list with filters",
+			map[string]any{"/events/2024": `[]`},
+			[]string{"event", "list", "--year", "2024", "--district", "ne"},
+			"note: no events match those filters\n",
+		},
+		{
+			"event list without filters",
+			map[string]any{"/events/2024": `[]`},
+			[]string{"event", "list", "--year", "2024"},
+			"note: no events in 2024\n",
+		},
+		{
+			"event teams",
+			map[string]any{"/event/2024cthar/teams": `[]`},
+			[]string{"event", "teams", "2024cthar"},
+			"note: no teams listed for 2024cthar yet\n",
+		},
+		{
+			"team events",
+			map[string]any{"/team/frc9999/events/2024": `[]`},
+			[]string{"team", "events", "9999", "--year", "2024"},
+			"note: no events for team 9999 in 2024\n",
+		},
+		{
+			"team awards",
+			map[string]any{"/team/frc9999/awards": `[]`},
+			[]string{"team", "awards", "9999"},
+			"note: no awards for team 9999\n",
+		},
+		{
+			"team awards by type",
+			map[string]any{"/team/frc9999/awards": `[]`},
+			[]string{"team", "awards", "9999", "--type", "impact"},
+			"note: no Chairman's/Impact awards for team 9999\n",
+		},
+		{
+			"district list",
+			map[string]any{"/districts/2024": `[]`},
+			[]string{"district", "list", "--year", "2024"},
+			"note: no districts in 2024\n",
+		},
+		{
+			"district events",
+			map[string]any{"/district/2024ne/events": `[]`},
+			[]string{"district", "events", "2024ne"},
+			"note: no events in district 2024ne\n",
+		},
+		{
+			"district teams",
+			map[string]any{"/district/2024ne/teams": `[]`},
+			[]string{"district", "teams", "2024ne"},
+			"note: no teams in district 2024ne\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newFakeTBA(t, tc.routes)
+			out, stderr, err := runCmd(t, srv, append(tc.args, "--format", "csv")...)
+			requireNoError(t, err, stderr)
+			if stderr != tc.want {
+				t.Errorf("stderr = %q, want %q", stderr, tc.want)
+			}
+			// stdout is still a table: the header and nothing else.
+			if n := len(lines(out)); n != 1 {
+				t.Errorf("stdout should be the header alone, got %d lines:\n%s", n, out)
+			}
+		})
+	}
+}
+
+// JSON is read by scripts, which want [] and no commentary.
+func TestEmptyResultsAreSilentInJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": `[]`})
+	out, stderr, err := runCmd(t, srv, "district", "list", "--year", "2024", "--json")
+	requireNoError(t, err, stderr)
+	if strings.TrimSpace(out) != "[]" {
+		t.Errorf("stdout = %q, want []", out)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want nothing", stderr)
+	}
+}
+
+// A table with rows has nothing to say.
+func TestNonEmptyResultsCarryNoNote(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	_, stderr, err := runCmd(t, srv, "district", "list", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, stderr)
+	if stderr != "" {
+		t.Errorf("stderr = %q, want nothing", stderr)
+	}
+}
+
 func TestColorAlwaysDoesNotTouchDataFormats(t *testing.T) {
 	for _, format := range []string{"csv", "tsv", "markdown", "json"} {
 		out := districtsCmd(t, "--format", format, "--color", "always")

@@ -164,6 +164,25 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 // share one Table so that column selection, sorting and width handling behave
 // identically no matter which renderer prints it.
 func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows [][]string) error {
+	return outputTableWithEmptyNote(cmd, data, headers, rows, "")
+}
+
+// outputTableWithEmptyNote is outputTable with something to say when there is
+// nothing to show.
+//
+// A bare header row does not distinguish "this team played no matches at that
+// event" from "your filters cancelled each other out" or "you typed the wrong
+// event key". note says which, in one line on stderr — never on stdout, so a
+// pipeline still sees an empty table — and only in the human-facing formats.
+// JSON keeps printing [], which is the answer a script wants.
+//
+// note reads as the completion of "no ...": "no matches for team 9999 at
+// 2024cthar", "no events match those filters".
+//
+// TODO: the listings owned by other in-flight branches (event matches, event
+// rankings, event awards, team matches, team search, insights) should pass a
+// note too.
+func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []string, rows [][]string, note string) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -213,11 +232,17 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	}
 
 	noHeaders := settings(cmd).Bool("no-headers")
-	return output.Render(w, table, output.RenderOptions{
+	if err := output.Render(w, table, output.RenderOptions{
 		Format:    format,
 		NoHeaders: noHeaders,
 		Color:     color,
-	})
+	}); err != nil {
+		return err
+	}
+	if len(rows) == 0 && note != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
+	}
+	return nil
 }
 
 // exactArgs is cobra.ExactArgs with an error a person can act on.

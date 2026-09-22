@@ -146,7 +146,11 @@ returns.`,
 				}
 			}
 			headers := []string{"Key", "Name", "Type", "Week", "Start", "End", "Location", "District"}
-			return outputTable(cmd, events, headers, rows)
+			note := fmt.Sprintf("no events in %d", year)
+			if filterFlagsGiven(cmd) {
+				note = "no events match those filters"
+			}
+			return outputTableWithEmptyNote(cmd, events, headers, rows, note)
 		},
 	}
 	addYearFlag(c)
@@ -179,7 +183,8 @@ func newEventTeamsCmd() *cobra.Command {
 				return err
 			}
 			table := eventTeamsTable(teams)
-			return outputTable(cmd, teams, table.Headers, table.Rows)
+			return outputTableWithEmptyNote(cmd, teams, table.Headers, table.Rows,
+				fmt.Sprintf("no teams listed for %s yet", args[0]))
 		},
 	}
 }

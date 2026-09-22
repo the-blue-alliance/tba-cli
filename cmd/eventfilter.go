@@ -139,6 +139,18 @@ func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 	return f, nil
 }
 
+// filterFlagsGiven reports whether this invocation narrowed the event list at
+// all, which decides whether an empty result is "no events that season" or "no
+// events match those filters".
+func filterFlagsGiven(cmd *cobra.Command) bool {
+	for _, name := range []string{"week", "type", "district", "state", "country", "team"} {
+		if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
+			return true
+		}
+	}
+	return false
+}
+
 func (f eventFilter) match(e api.Event) bool {
 	if f.week > 0 {
 		if e.Week == nil || *e.Week != f.week-1 {

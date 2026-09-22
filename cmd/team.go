@@ -134,7 +134,9 @@ func newTeamEventsCmd() *cobra.Command {
 			for i, e := range events {
 				rows[i] = []string{e.Key, e.Name, e.StartDate, output.FormatLocation(e.City, e.StateProv, e.Country)}
 			}
-			return outputTable(cmd, events, []string{"Key", "Name", "Start Date", "Location"}, rows)
+			return outputTableWithEmptyNote(cmd, events,
+				[]string{"Key", "Name", "Start Date", "Location"}, rows,
+				fmt.Sprintf("no events for team %s in %d", teamNumberOf(args[0]), year))
 		},
 	}
 	addYearFlag(c)
@@ -300,7 +302,12 @@ an error that lists them.`,
 					awardeeNames(a),
 				}
 			}
-			return outputTable(cmd, awards, []string{"Year", "Event", "Award", "Type", "Recipient"}, rows)
+			note := fmt.Sprintf("no awards for team %s", teamNumberOf(args[0]))
+			if filterByType {
+				note = fmt.Sprintf("no %s awards for team %s", awardTypeName(wantType), teamNumberOf(args[0]))
+			}
+			return outputTableWithEmptyNote(cmd, awards,
+				[]string{"Year", "Event", "Award", "Type", "Recipient"}, rows, note)
 		},
 	}
 	c.Flags().Int("year", 0, "Season year (default: all years)")

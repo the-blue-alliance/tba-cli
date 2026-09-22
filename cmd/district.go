@@ -47,7 +47,8 @@ func newDistrictListCmd() *cobra.Command {
 			for i, d := range districts {
 				rows[i] = []string{d.Key, d.DisplayName, d.Abbreviation}
 			}
-			return outputTable(cmd, districts, []string{"Key", "Name", "Abbreviation"}, rows)
+			return outputTableWithEmptyNote(cmd, districts, []string{"Key", "Name", "Abbreviation"}, rows,
+				fmt.Sprintf("no districts in %d", year))
 		},
 	}
 	addYearFlag(c)
@@ -74,7 +75,8 @@ func newDistrictEventsCmd() *cobra.Command {
 			for i, e := range events {
 				rows[i] = []string{e.Key, e.Name, e.StartDate}
 			}
-			return outputTable(cmd, events, []string{"Key", "Name", "Start Date"}, rows)
+			return outputTableWithEmptyNote(cmd, events, []string{"Key", "Name", "Start Date"}, rows,
+				fmt.Sprintf("no events in district %s", args[0]))
 		},
 	}
 }
@@ -99,7 +101,8 @@ func newDistrictTeamsCmd() *cobra.Command {
 			for i, t := range teams {
 				rows[i] = []string{fmt.Sprintf("%d", t.TeamNumber), t.Nickname, output.FormatLocation(t.City, t.StateProv, t.Country)}
 			}
-			return outputTable(cmd, teams, []string{"Number", "Name", "Location"}, rows)
+			return outputTableWithEmptyNote(cmd, teams, []string{"Number", "Name", "Location"}, rows,
+				fmt.Sprintf("no teams in district %s", args[0]))
 		},
 	}
 }
