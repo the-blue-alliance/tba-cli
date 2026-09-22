@@ -29,6 +29,10 @@ const (
 	// than one day — a whole season, say, where "Sat 11:22" could be any of
 	// a dozen Saturdays.
 	DatedTimeLayout = "Jan 2 15:04"
+	// YearTimeLayout adds the year as well, for a match in a season other
+	// than the one the reader is in: "Mar 2 11:25" on a 2024 match read in
+	// 2026 names one of three March the 2nds.
+	YearTimeLayout = "Jan 2 2006 15:04"
 )
 
 // BestTime returns the most useful time the API has for a match, and which of
@@ -61,18 +65,28 @@ func BestTime(m api.Match) (*int64, string) {
 // withDate adds the calendar date. A caller decides it once for a whole table
 // (see NeedsDate) rather than per row, so that every time in a listing is
 // written the same way and the column stays one width.
-func FormatTime(epoch *int64, loc *time.Location, withDate bool) string {
+//
+// A dated time also carries the year when the match did not happen in the year
+// now falls in: "Mar 2 11:25" is one of three March the 2nds to someone
+// looking up a 2024 match in 2026, and the season is the first thing anybody
+// asks about an old match.
+func FormatTime(epoch *int64, loc *time.Location, withDate bool, now time.Time) string {
 	if epoch == nil || *epoch == 0 {
 		return ""
 	}
 	if loc == nil {
 		loc = time.Local
 	}
+	t := time.Unix(*epoch, 0).In(loc)
 	layout := TimeLayout
-	if withDate {
+	switch {
+	case !withDate:
+	case t.Year() != now.In(loc).Year():
+		layout = YearTimeLayout
+	default:
 		layout = DatedTimeLayout
 	}
-	return time.Unix(*epoch, 0).In(loc).Format(layout)
+	return t.Format(layout)
 }
 
 // NeedsDate reports whether the times in a listing have to carry the calendar

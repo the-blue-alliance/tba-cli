@@ -19,9 +19,15 @@ func localTime(epoch int64) string {
 }
 
 // localDateTime is localTime for a listing that spans more than one day, which
-// carries the date as well.
+// carries the date as well — and the year too when the match did not happen in
+// the year the clock is in, so that these expectations do not go stale as the
+// seasons the fixtures are from recede.
 func localDateTime(epoch int64) string {
-	return time.Unix(epoch, 0).In(time.Local).Format(frc.DatedTimeLayout)
+	at := time.Unix(epoch, 0).In(time.Local)
+	if at.Year() != nowFunc().In(time.Local).Year() {
+		return at.Format(frc.YearTimeLayout)
+	}
+	return at.Format(frc.DatedTimeLayout)
 }
 
 func eventMatchesServer(t *testing.T) *httptest.Server {
@@ -923,6 +929,34 @@ func TestEventMatchesAddsTheDateAcrossDays(t *testing.T) {
 	row := findRow(t, parseCSV(t, out), "2024cthar_f1m2")
 	if got := row[6]; got != localDateTime(1711307040) {
 		t.Errorf("time = %q, want %q", got, localDateTime(1711307040))
+	}
+}
+
+// A listing of an older season carries the year as well as the date: "Mar 22
+// 11:40" says nothing about which season it was, which is the first thing
+// anybody asks about an old match.
+func TestEventMatchesAddTheYearForAnOlderSeason(t *testing.T) {
+	withNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	want := time.Unix(1711122000, 0).In(time.Local).Format(frc.YearTimeLayout)
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm2")[6]; got != want {
+		t.Errorf("time = %q, want %q", got, want)
+	}
+}
+
+// A listing inside the season keeps the shorter form.
+func TestEventMatchesLeaveTheYearOffThisSeason(t *testing.T) {
+	withNow(t, time.Date(2024, 5, 1, 12, 0, 0, 0, time.Local))
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	want := time.Unix(1711122000, 0).In(time.Local).Format(frc.DatedTimeLayout)
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm2")[6]; got != want {
+		t.Errorf("time = %q, want %q", got, want)
 	}
 }
 

@@ -127,12 +127,18 @@ func printMatch(w io.Writer, m api.Match, view matchView) {
 
 // matchTimeDetail says when a match is, where that time came from, and how far
 // off it is, since "Sat 14:32" alone does not say whether that has happened.
+//
+// The date is left off only for a match happening today, the same rule a
+// listing follows: looking up a match from a past season and being told "Sat
+// 14:32" named one of a season's worth of Saturdays, and the relative time
+// beside it ("2 years ago") was the only clue which.
 func matchTimeDetail(m api.Match, now time.Time) string {
 	epoch, source := frc.BestTime(m)
 	if epoch == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s (%s, %s)", frc.FormatTime(epoch, time.Local, false), source, frc.RelativeEpoch(epoch, now))
+	withDate := frc.NeedsDate([]api.Match{m}, time.Local, now)
+	return fmt.Sprintf("%s (%s, %s)", frc.FormatTime(epoch, time.Local, withDate, now), source, frc.RelativeEpoch(epoch, now))
 }
 
 // stationList renders an alliance as its driver stations, which is how teams

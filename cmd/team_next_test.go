@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 // during2024ctharServer serves team 177's season and its matches at the event
@@ -33,7 +34,9 @@ func TestTeamNextAutoDetectsTheCurrentEvent(t *testing.T) {
 		"Station:    R1\n" +
 		"Partners:   1073, 5507\n" +
 		"Opponents:  230, 195, 558\n" +
-		"Time:       " + localTime(1711299600) + " (predicted)\n"
+		// The match is tomorrow, so the time carries its date: "Sun 13:00" on
+		// a Saturday is a weekday the reader has to work out for themselves.
+		"Time:       " + localDateTime(1711299600) + " (predicted)\n"
 	if !strings.HasPrefix(out, want) {
 		t.Errorf("team next =\n%s\nwant it to start with\n%s", out, want)
 	}
@@ -45,6 +48,31 @@ func TestTeamNextCountsDownToTheMatch(t *testing.T) {
 	out, _, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
 	requireNoError(t, err, "")
 	requireContains(t, out, "Starts in:  18m")
+}
+
+// The weekday alone is right for the one case it was written for: a match
+// today, read by someone standing at the event, who knows what day it is.
+func TestTeamNextLeavesTheDateOffAMatchToday(t *testing.T) {
+	withNow(t, time.Unix(1711299600-1080, 0))
+	srv := during2024ctharServer(t)
+	out, _, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, "")
+	requireContains(t, out, "Time:       "+localTime(1711299600)+" (predicted)")
+}
+
+// A match in another season carries its year as well. "Sun 13:00" on a match
+// from two seasons ago names one of a hundred Sundays.
+func TestTeamNextDatesAMatchFromAnotherSeason(t *testing.T) {
+	withNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":                     event2024ctharJSON,
+		"/team/frc177/event/2024cthar/matches": teamMatches177At2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "next", "177", "2024cthar", "--format", "table")
+	requireNoError(t, err, "")
+
+	want := time.Unix(1711299600, 0).In(time.Local).Format(frc.YearTimeLayout)
+	requireContains(t, out, want+" (predicted)")
 }
 
 // A match whose time has come and gone is overdue, not "in -12m".
