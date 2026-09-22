@@ -101,6 +101,6 @@ func (c *Client) fetch(path string) ([]byte, error) {
 		return body, nil
 	default:
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateErrorBody(string(body)))
 	}
 }
