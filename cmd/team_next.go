@@ -109,7 +109,7 @@ func printNextMatch(cmd *cobra.Command, m api.Match, event api.Event, team strin
 
 	timeCell := ""
 	if epoch != nil {
-		timeCell = fmt.Sprintf("%s (%s)", frc.FormatTime(epoch, time.Local), source)
+		timeCell = fmt.Sprintf("%s (%s)", frc.FormatTime(epoch, time.Local, false), source)
 	}
 
 	pairs := []string{

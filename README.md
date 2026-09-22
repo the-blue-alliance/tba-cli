@@ -573,10 +573,10 @@ defaults to every year a team has won anything.
 
 ```
 $ tba event matches 2024cthar --level playoff
-Match    Key                Red              Blue              Score (R-B)  Winner  Time       Time Source  Status
--------  -----------------  ---------------  ----------------  -----------  ------  ---------  -----------  ---------
-SF 13    2024cthar_sf13m1   177, 1073, 5507  230, 195, 558     102-118      blue    Sun 13:03  actual       Played
-Final 1  2024cthar_f1m1     177, 1073, 5507  230, 195, 558                          Sun 14:55  predicted    Scheduled
+Match    Key                Red              Blue              Score (R-B)  Winner  Time       When    Time Source  Status
+-------  -----------------  ---------------  ----------------  -----------  ------  ---------  ------  -----------  ---------
+SF 13    2024cthar_sf13m1   177, 1073, 5507  230, 195, 558     102-118      blue    Sun 13:03          actual       Played
+Final 1  2024cthar_f1m1     177, 1073, 5507  230, 195, 558                          Sun 14:55  in 52m  predicted    Scheduled
 ```
 
 Matches always come back in the order the event plays them — qualification matches by number, then the elimination rounds — never alphabetically by key, which would put `qm10` before `qm2` and the finals before the quarterfinals.
@@ -606,7 +606,7 @@ Which form a playoff match gets depends on the event's bracket, so these command
 
 When a mark appears in `table` output, the legend `* surrogate  ! disqualified` is printed to stderr, so it explains the table on screen without landing in a file you piped it into.
 
-**Times.** `Time` is shown in your local time zone, and `Time Source` says where it came from: `actual` for a match that has been played, `predicted` for the queue's live estimate, `scheduled` for the published schedule. Drop the source with `--columns` if you do not want it.
+**Times.** `Time` is shown in your local time zone. It is a weekday and a clock — `Sat 11:22` — when every match in the listing falls on the same day, and carries the date — `Mar 23 11:22` — when the listing spans more than one, which a season listing always does. `When` counts down to a match still to come (`in 18m`, `2h ago` for one that is running late) and is empty for one already played, whose score is the answer. `Time Source` says where the time came from: `actual` for a match that has been played, `predicted` for the queue's live estimate, `scheduled` for the published schedule. Drop any of them with `--columns`.
 
 **Filters.**
 
@@ -765,13 +765,13 @@ Output is append-only. Nothing is cleared, nothing is redrawn, and the cursor ne
 
 ```
 $ tba event watch 2024cthar
-Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status
-------  -------------  ---------------  ---------------  -----------  ------  ---------  -----------  ---------
-Qual 1  2024cthar_qm1  177, 1073, 5507  230, 1071, 4055  88-61        red     Fri 14:00  actual       Played
-Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153                       Fri 14:10  predicted    Scheduled
-Qual 3  2024cthar_qm3  177, 1073, 5507  195, 1124, 6153                       Fri 14:20  predicted    Scheduled
+Match   Key            Red              Blue             Score (R-B)  Winner  Time       When    Time Source  Status
+------  -------------  ---------------  ---------------  -----------  ------  ---------  ------  -----------  ---------
+Qual 1  2024cthar_qm1  177, 1073, 5507  230, 1071, 4055  88-61        red     Fri 14:00          actual       Played
+Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153                       Fri 14:10  in 8m   predicted    Scheduled
+Qual 3  2024cthar_qm3  177, 1073, 5507  195, 1124, 6153                       Fri 14:20  in 18m  predicted    Scheduled
 --- 14:32:07 (poll 2) ---
-Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153  101-99       red     Fri 14:10  actual       Played
+Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153  101-99       red     Fri 14:10          actual       Played
 ```
 
 Column widths are fixed by that first table, so the rows below it stay in line.

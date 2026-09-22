@@ -600,9 +600,13 @@ type watchTableSink struct {
 	rankHeaders []string
 	rankWidths  []int
 	legendShown bool
+	// withDate is settled by the first poll, so that the rows printed later
+	// write their times the same way as the table above them.
+	withDate bool
 }
 
 func (s *watchTableSink) snapshot(_ int, _ time.Time, matches []api.Match, rankings *api.EventRankings) error {
+	s.withDate = frc.SpansDays(matches, time.Local)
 	rows := s.matchRows(matches)
 	s.matchWidths = watchWidths(matchHeaders, rows)
 	if err := output.Render(s.out, output.Table{Headers: matchHeaders, Rows: rows},
@@ -662,6 +666,10 @@ func (s *watchTableSink) matchRow(m api.Match) []string {
 		score = fmt.Sprintf("%d-%d", red.Score, blue.Score)
 	}
 	epoch, source := frc.BestTime(m)
+	when := ""
+	if !frc.Played(m) {
+		when = frc.RelativeEpoch(epoch, nowFunc())
+	}
 	return []string{
 		frc.MatchLabel(m, s.playoffType),
 		m.Key,
@@ -669,7 +677,8 @@ func (s *watchTableSink) matchRow(m api.Match) []string {
 		output.Colorize(blueCell, output.Blue, s.color),
 		score,
 		colorizeAlliance(frc.Winner(m), s.color),
-		frc.FormatTime(epoch, time.Local),
+		frc.FormatTime(epoch, time.Local, s.withDate),
+		when,
 		source,
 		frc.MatchStatus(m),
 	}

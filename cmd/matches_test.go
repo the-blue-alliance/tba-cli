@@ -12,10 +12,16 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
-// localTime renders a Unix timestamp the way a match listing does, so the
-// expectations below do not depend on the machine's time zone.
+// localTime renders a Unix timestamp the way a single-day match listing does,
+// so the expectations below do not depend on the machine's time zone.
 func localTime(epoch int64) string {
-	return time.Unix(epoch, 0).In(time.Local).Format("Mon 15:04")
+	return time.Unix(epoch, 0).In(time.Local).Format(frc.TimeLayout)
+}
+
+// localDateTime is localTime for a listing that spans more than one day, which
+// carries the date as well.
+func localDateTime(epoch int64) string {
+	return time.Unix(epoch, 0).In(time.Local).Format(frc.DatedTimeLayout)
 }
 
 func eventMatchesServer(t *testing.T) *httptest.Server {
@@ -46,17 +52,22 @@ func TestEventMatchesColumns(t *testing.T) {
 	requireNoError(t, err, "")
 
 	records := parseCSV(t, out)
-	wantHeader := []string{"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner", "Time", "Time Source", "Status"}
+	wantHeader := []string{
+		"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner",
+		"Time", "When", "Time Source", "Status",
+	}
 	if !equalStrings(records[0], wantHeader) {
 		t.Errorf("header = %v, want %v", records[0], wantHeader)
 	}
 
-	// Qual 12: played, red wins, and a surrogate on blue.
+	// Qual 12: played, red wins, and a surrogate on blue. The event ran from
+	// Friday to Sunday, so its times carry the date; a played match has no
+	// countdown left to print.
 	want := []string{
 		"Qual 12", "2024cthar_qm12",
 		"177, 1073, 5507", "230, 1071, 4055*",
 		"88-61", "red",
-		localTime(1711130820), "actual", "Played",
+		localDateTime(1711130820), "", "actual", "Played",
 	}
 	if got := findRow(t, records, "2024cthar_qm12"); !equalStrings(got, want) {
 		t.Errorf("qm12 row =\n%v\nwant\n%v", got, want)
@@ -66,6 +77,7 @@ func TestEventMatchesColumns(t *testing.T) {
 // An unplayed match scores -1/-1; the score column stays blank and the status
 // says so. Its time is the queue's prediction, not a result.
 func TestEventMatchesLeavesAnUnplayedScoreBlank(t *testing.T) {
+	withNow(t, time.Unix(1711122000-1080, 0))
 	srv := eventMatchesServer(t)
 	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
@@ -74,7 +86,7 @@ func TestEventMatchesLeavesAnUnplayedScoreBlank(t *testing.T) {
 		"Qual 2", "2024cthar_qm2",
 		"558, 3467, 2168", "195, 1124, 6153",
 		"", "",
-		localTime(1711122000), "predicted", "Scheduled",
+		localDateTime(1711122000), "in 18m", "predicted", "Scheduled",
 	}
 	if got := findRow(t, parseCSV(t, out), "2024cthar_qm2"); !equalStrings(got, want) {
 		t.Errorf("unplayed row =\n%v\nwant\n%v", got, want)
@@ -420,7 +432,7 @@ func TestEventMatchesTimeSourceIsADroppableColumn(t *testing.T) {
 	if !equalStrings(records[0], []string{"Match", "Time"}) {
 		t.Errorf("header = %v", records[0])
 	}
-	if records[1][1] != localTime(1711122000) {
+	if records[1][1] != localDateTime(1711122000) {
 		t.Errorf("time = %q", records[1][1])
 	}
 }
@@ -459,7 +471,7 @@ func TestEventMatchesFor2015(t *testing.T) {
 		"Qual 7", "2015ctwat_qm7",
 		"177, 1071, 2168", "230, 195, 558",
 		"44-44", "tie",
-		localTime(1427464800), "scheduled", "Played",
+		localTime(1427464800), "", "scheduled", "Played",
 	}
 	if got := findRow(t, parseCSV(t, out), "2015ctwat_qm7"); !equalStrings(got, want) {
 		t.Errorf("row =\n%v\nwant\n%v", got, want)
@@ -708,4 +720,78 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// One competition day needs no date on every row: the weekday and the clock
+// are what a team in the pits reads.
+func TestEventMatchesOmitsTheDateWithinOneDay(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localTime(1711120920) {
+		t.Errorf("time = %q, want %q", got, localTime(1711120920))
+	}
+}
+
+// A listing that spans days writes the date, because a weekday alone could be
+// any weekend of the season.
+func TestEventMatchesAddsTheDateAcrossDays(t *testing.T) {
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	row := findRow(t, parseCSV(t, out), "2024cthar_f1m2")
+	if got := row[6]; got != localDateTime(1711307040) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1711307040))
+	}
+}
+
+// A season's listing always spans days, so every row carries its date.
+func TestTeamMatchesSeasonTimesCarryTheDate(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": teamMatches177Season2024JSON,
+		"/team/frc177/events/2024":  teamEvents177In2024JSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, "")
+
+	// Column 7 is Time, one to the right of the season listing's Event column.
+	if got := findRow2(t, parseCSV(t, out), "2024ctwat_qm5")[7]; got != localDateTime(1709913780) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1709913780))
+	}
+}
+
+// The countdown answers "when", which only a match still to come has: a played
+// one has a score instead, and a relative time on it would change every run.
+func TestEventMatchesWhenCountsDownUnplayedMatchesOnly(t *testing.T) {
+	withNow(t, time.Unix(1711122000-7200, 0))
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	records := parseCSV(t, out)
+	if got := findRow(t, records, "2024cthar_qm2")[7]; got != "in 2h" {
+		t.Errorf("When = %q, want %q", got, "in 2h")
+	}
+	for _, key := range []string{"2024cthar_qm3", "2024cthar_qm7", "2024cthar_qm12", "2024cthar_f1m2"} {
+		if got := findRow(t, records, key)[7]; got != "" {
+			t.Errorf("When for the played %s = %q, want it empty", key, got)
+		}
+	}
+}
+
+// findRow2 is findRow for a season listing, whose Key column sits behind the
+// Event column.
+func findRow2(t *testing.T, records [][]string, key string) []string {
+	t.Helper()
+	for _, row := range records[1:] {
+		if len(row) > 2 && row[2] == key {
+			return row
+		}
+	}
+	t.Fatalf("no row for %q in %v", key, records)
+	return nil
 }

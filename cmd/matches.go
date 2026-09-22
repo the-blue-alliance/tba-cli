@@ -16,10 +16,15 @@ import (
 // `team matches` share them so that a user who learns one listing can read the
 // other, and so that --columns and --sort take the same names in both.
 //
-// The time and its source are two columns rather than one decorated value: a
-// script wants "Sat 14:32" without having to strip a marker off it, and anyone
-// who does not care can drop the source with --columns.
-var matchHeaders = []string{"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner", "Time", "Time Source", "Status"}
+// The time, how far off it is and where it came from are three columns rather
+// than one decorated value: a script wants "Sat 14:32" without having to strip
+// a marker off it, and anyone who does not care can drop the rest with
+// --columns.
+//
+// Time carries the date as well when the listing spans more than one day.
+// When counts down to a match still to come — "in 18m" — and is empty for one
+// already played, whose result is the answer to "when".
+var matchHeaders = []string{"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner", "Time", "When", "Time Source", "Status"}
 
 // eventColumn names the extra first column a season-wide `team matches`
 // listing carries. It holds the event key rather than the event's name, which
@@ -129,9 +134,19 @@ func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor f
 // row per match under matchHeaders. It also reports whether any cell carries a
 // surrogate or DQ mark, which is what decides if the legend is worth printing.
 //
+// Whether the times carry a date is decided here, once, from the matches it is
+// given: a listing that covers a single day does not need one on every row.
+//
 // color is passed in rather than resolved here so that the callers that write
 // to a file — `event export` — can ask for the same cells without escapes.
 func matchTableRows(matches []api.Match, playoffTypeFor func(api.Match) *int, color bool) (rows [][]string, marked bool) {
+	return matchRows(matches, playoffTypeFor, color, frc.SpansDays(matches, time.Local), nowFunc())
+}
+
+// matchRows is matchTableRows for a caller that has already settled the date
+// question for a wider table than the rows it is drawing now: `event watch`
+// prints one poll's changes under a header the first poll sized.
+func matchRows(matches []api.Match, playoffTypeFor func(api.Match) *int, color, withDate bool, now time.Time) (rows [][]string, marked bool) {
 	rows = make([][]string, len(matches))
 	for i, m := range matches {
 		red, blue := m.Alliances[frc.AllianceRed], m.Alliances[frc.AllianceBlue]
@@ -149,6 +164,14 @@ func matchTableRows(matches []api.Match, playoffTypeFor func(api.Match) *int, co
 		}
 
 		epoch, source := frc.BestTime(m)
+		// A countdown only means something for a match still to come. On a
+		// played one it would say how long ago the result landed, which the
+		// score already covers, and it would change every time the listing is
+		// printed.
+		when := ""
+		if !frc.Played(m) {
+			when = frc.RelativeEpoch(epoch, now)
+		}
 		rows[i] = []string{
 			frc.MatchLabel(m, playoffTypeFor(m)),
 			m.Key,
@@ -156,7 +179,8 @@ func matchTableRows(matches []api.Match, playoffTypeFor func(api.Match) *int, co
 			output.Colorize(blueCell, output.Blue, color),
 			score,
 			colorizeAlliance(frc.Winner(m), color),
-			frc.FormatTime(epoch, time.Local),
+			frc.FormatTime(epoch, time.Local, withDate),
+			when,
 			source,
 			frc.MatchStatus(m),
 		}

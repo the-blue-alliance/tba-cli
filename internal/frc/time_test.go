@@ -60,7 +60,7 @@ func TestBestTimeTreatsZeroAsAbsent(t *testing.T) {
 
 func TestFormatTime(t *testing.T) {
 	// 2024-03-22 18:00:00 UTC was a Friday.
-	if got := frc.FormatTime(epoch(1711130400), time.UTC); got != "Fri 18:00" {
+	if got := frc.FormatTime(epoch(1711130400), time.UTC, false); got != "Fri 18:00" {
 		t.Errorf("FormatTime = %q, want %q", got, "Fri 18:00")
 	}
 }
@@ -70,16 +70,16 @@ func TestFormatTimeRespectsTheLocation(t *testing.T) {
 	if err != nil {
 		t.Skipf("no tzdata available: %v", err)
 	}
-	if got := frc.FormatTime(epoch(1711130400), loc); got != "Fri 14:00" {
+	if got := frc.FormatTime(epoch(1711130400), loc, false); got != "Fri 14:00" {
 		t.Errorf("FormatTime = %q, want %q", got, "Fri 14:00")
 	}
 }
 
 func TestFormatTimeWithoutATime(t *testing.T) {
-	if got := frc.FormatTime(nil, time.UTC); got != "" {
+	if got := frc.FormatTime(nil, time.UTC, false); got != "" {
 		t.Errorf("FormatTime(nil) = %q, want %q", got, "")
 	}
-	if got := frc.FormatTime(epoch(0), time.UTC); got != "" {
+	if got := frc.FormatTime(epoch(0), time.UTC, false); got != "" {
 		t.Errorf("FormatTime(0) = %q, want %q", got, "")
 	}
 }
@@ -88,7 +88,7 @@ func TestFormatTimeWithoutATime(t *testing.T) {
 // reads off their phone.
 func TestFormatTimeDefaultsToLocal(t *testing.T) {
 	want := time.Unix(1711130400, 0).In(time.Local).Format(frc.TimeLayout)
-	if got := frc.FormatTime(epoch(1711130400), nil); got != want {
+	if got := frc.FormatTime(epoch(1711130400), nil, false); got != want {
 		t.Errorf("FormatTime = %q, want %q", got, want)
 	}
 }
@@ -151,5 +151,73 @@ func TestRelativeEpoch(t *testing.T) {
 	}
 	if got := frc.RelativeEpoch(epoch(0), now); got != "" {
 		t.Errorf("RelativeEpoch(0) = %q, want %q", got, "")
+	}
+}
+
+// A listing that spans more than one day writes the date instead of the
+// weekday, because "Sat 11:22" could be any Saturday of the season.
+func TestFormatTimeWithTheDate(t *testing.T) {
+	if got := frc.FormatTime(epoch(1711130400), time.UTC, true); got != "Mar 22 18:00" {
+		t.Errorf("FormatTime = %q, want %q", got, "Mar 22 18:00")
+	}
+	if got := frc.FormatTime(nil, time.UTC, true); got != "" {
+		t.Errorf("FormatTime(nil) = %q, want %q", got, "")
+	}
+}
+
+// One competition day needs no date on every row.
+func TestSpansDaysWithinOneDay(t *testing.T) {
+	matches := []api.Match{
+		{ActualTime: epoch(1711130400)}, // 2024-03-22 18:00 UTC
+		{ActualTime: epoch(1711141200)}, // 2024-03-22 21:00 UTC
+	}
+	if frc.SpansDays(matches, time.UTC) {
+		t.Error("SpansDays = true, want false for two times on 2024-03-22 UTC")
+	}
+}
+
+func TestSpansDaysAcrossDays(t *testing.T) {
+	matches := []api.Match{
+		{ActualTime: epoch(1711130400)}, // 2024-03-22 UTC
+		{ActualTime: epoch(1711299600)}, // 2024-03-24 UTC
+	}
+	if !frc.SpansDays(matches, time.UTC) {
+		t.Error("SpansDays = false, want true for times two days apart")
+	}
+}
+
+// A schedule that has not been published says nothing about how many days the
+// listing covers, so timeless matches are ignored rather than counted as a
+// second day.
+func TestSpansDaysIgnoresMatchesWithoutATime(t *testing.T) {
+	matches := []api.Match{
+		{ActualTime: epoch(1711130400)},
+		{},
+		{PredictedTime: epoch(0)},
+	}
+	if frc.SpansDays(matches, time.UTC) {
+		t.Error("SpansDays = true, want false when only one match has a time")
+	}
+	if frc.SpansDays(nil, time.UTC) {
+		t.Error("SpansDays(nil) = true, want false")
+	}
+}
+
+// The days are counted where the reader is, not in UTC: two matches either
+// side of midnight UTC are one evening in Hartford.
+func TestSpansDaysUsesTheGivenLocation(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skipf("no tzdata available: %v", err)
+	}
+	matches := []api.Match{
+		{ActualTime: epoch(1711148400)}, // 2024-03-22 19:00 EDT
+		{ActualTime: epoch(1711155600)}, // 2024-03-22 21:00 EDT
+	}
+	if frc.SpansDays(matches, loc) {
+		t.Error("SpansDays = true, want false for one evening in New York")
+	}
+	if !frc.SpansDays(matches, time.UTC) {
+		t.Error("SpansDays = false in UTC, where those times straddle midnight")
 	}
 }
