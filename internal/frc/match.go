@@ -88,9 +88,12 @@ const (
 	PlayoffBracket16Team   = 1
 	PlayoffBracket4Team    = 2
 	PlayoffAvgScore8Team   = 3
-	PlayoffRoundRobin6Team = 6
-	PlayoffDoubleElim8Team = 10
-	PlayoffDoubleElim4Team = 11
+	PlayoffRoundRobin6Team = 4
+	// PlayoffDoubleElim8TeamLegacy is the 2022 offseason trial format; only the
+	// 2023+ codes below label semifinals as single double-elimination matches.
+	PlayoffDoubleElim8TeamLegacy = 5
+	PlayoffDoubleElim8Team       = 10
+	PlayoffDoubleElim4Team       = 11
 )
 
 // FirstDoubleElimYear is the first season FRC ran the double-elimination

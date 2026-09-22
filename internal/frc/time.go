@@ -65,9 +65,9 @@ func FormatTime(epoch *int64, loc *time.Location) string {
 func Relative(t, now time.Time) string {
 	d := t.Sub(now)
 	if d < 0 {
-		return magnitude(-d) + " ago"
+		return Magnitude(-d) + " ago"
 	}
-	return "in " + magnitude(d)
+	return "in " + Magnitude(d)
 }
 
 // RelativeEpoch is Relative for an optional Unix timestamp, returning "" when
@@ -79,9 +79,14 @@ func RelativeEpoch(epoch *int64, now time.Time) string {
 	return Relative(time.Unix(*epoch, 0), now)
 }
 
-// magnitude renders a non-negative duration with a single coarse unit, because
-// a countdown of "1h 3m 12s" is harder to read at a glance than "1h".
-func magnitude(d time.Duration) string {
+// Magnitude renders a non-negative duration with a single coarse unit,
+// because a countdown of "1h 3m 12s" is harder to read at a glance than "1h".
+// A negative duration is measured as its absolute value, so a caller that has
+// already chosen a "before"/"after" wording cannot print a minus sign.
+func Magnitude(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
 	switch {
 	case d < time.Minute:
 		return fmt.Sprintf("%ds", int(d/time.Second))
