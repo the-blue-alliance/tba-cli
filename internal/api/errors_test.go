@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -43,11 +44,11 @@ func TestLongAPIErrorBodyIsTruncatedInTheMessage(t *testing.T) {
 	rec := &recorder{}
 	srv := newServer(t, rec, testResponse{status: "500", body: strings.Repeat("x", 5000)})
 
-	c, err := NewClient(srv.URL)
+	c, err := NewClient(srv.URL, WithRetries(0))
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	_, err = c.GetRaw("/status")
+	_, err = c.GetRaw(context.Background(), "/status")
 	if err == nil {
 		t.Fatal("want an error for a 500")
 	}

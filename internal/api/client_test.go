@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -51,10 +52,11 @@ func (r *recorder) all() []*http.Request {
 }
 
 type testResponse struct {
-	status       string
+	status       string // decimal HTTP status; empty means 200
 	body         string
 	etag         string
 	lastModified string
+	retryAfter   string
 }
 
 // newServer serves one canned response per request, in order. The last entry
@@ -76,14 +78,16 @@ func newServer(t *testing.T, rec *recorder, responses ...testResponse) *httptest
 		if resp.lastModified != "" {
 			w.Header().Set("Last-Modified", resp.lastModified)
 		}
+		if resp.retryAfter != "" {
+			w.Header().Set("Retry-After", resp.retryAfter)
+		}
 		code := http.StatusOK
-		switch resp.status {
-		case "304":
-			code = http.StatusNotModified
-		case "404":
-			code = http.StatusNotFound
-		case "500":
-			code = http.StatusInternalServerError
+		if resp.status != "" {
+			parsed, err := strconv.Atoi(resp.status)
+			if err != nil {
+				panic("bad test status " + resp.status)
+			}
+			code = parsed
 		}
 		w.WriteHeader(code)
 		_, _ = io.WriteString(w, resp.body)
@@ -123,7 +127,7 @@ func TestGetSendsAuthAndUserAgentHeaders(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 	var status APIStatus
-	if err := c.Get("/status", &status); err != nil {
+	if err := c.Get(t.Context(), "/status", &status); err != nil {
 		t.Fatalf("Get: %v", err)
 	}
 	if status.CurrentSeason != 2024 {
@@ -155,7 +159,7 @@ func TestGetRawReturnsTheBodyUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	raw, err := c.GetRaw("/event/2024cthar/insights")
+	raw, err := c.GetRaw(t.Context(), "/event/2024cthar/insights")
 	if err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
@@ -173,7 +177,7 @@ func TestSuccessfulResponseIsCachedWithItsETag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	if _, err := c.GetRaw("/team/frc177"); err != nil {
+	if _, err := c.GetRaw(t.Context(), "/team/frc177"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
 
@@ -212,7 +216,7 @@ func TestConditionalRequestReturnsTheCachedBodyOn304(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	first, err := c.GetRaw("/team/frc177")
+	first, err := c.GetRaw(t.Context(), "/team/frc177")
 	if err != nil {
 		t.Fatalf("first GetRaw: %v", err)
 	}
@@ -221,7 +225,7 @@ func TestConditionalRequestReturnsTheCachedBodyOn304(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	second, err := c2.GetRaw("/team/frc177")
+	second, err := c2.GetRaw(t.Context(), "/team/frc177")
 	if err != nil {
 		t.Fatalf("second GetRaw: %v", err)
 	}
@@ -262,10 +266,10 @@ func TestLastModifiedIsSentAsIfModifiedSince(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	if _, err := c.GetRaw("/x"); err != nil {
+	if _, err := c.GetRaw(t.Context(), "/x"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
-	if _, err := c.GetRaw("/x"); err != nil {
+	if _, err := c.GetRaw(t.Context(), "/x"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
 
@@ -285,7 +289,7 @@ func TestSetUseCacheFalseSkipsConditionalHeadersAndDoesNotWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	if _, err := warm.GetRaw("/warm"); err != nil {
+	if _, err := warm.GetRaw(t.Context(), "/warm"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
 	before, err := os.ReadDir(cacheEntriesDir(cacheDir))
@@ -298,10 +302,10 @@ func TestSetUseCacheFalseSkipsConditionalHeadersAndDoesNotWrite(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 	c.SetUseCache(false)
-	if _, err := c.GetRaw("/warm"); err != nil {
+	if _, err := c.GetRaw(t.Context(), "/warm"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
-	if _, err := c.GetRaw("/cold"); err != nil {
+	if _, err := c.GetRaw(t.Context(), "/cold"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
 
@@ -324,7 +328,72 @@ func TestSetUseCacheFalseSkipsConditionalHeadersAndDoesNotWrite(t *testing.T) {
 	}
 }
 
-func TestNotModifiedWithoutACachedEntryIsAnError(t *testing.T) {
+func TestNotModifiedWithoutACachedEntryIsRetriedBare(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec,
+		testResponse{status: "304"},
+		testResponse{body: `{"key":"frc177","nickname":"Bobcat Robotics"}`},
+	)
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	body, err := c.GetRaw(t.Context(), "/never-cached")
+	if err != nil {
+		t.Fatalf("a 304 with no cache entry should be retried bare: %v", err)
+	}
+	if !strings.Contains(string(body), "Bobcat Robotics") {
+		t.Errorf("body = %s", body)
+	}
+
+	reqs := rec.all()
+	if len(reqs) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(reqs))
+	}
+	for i, r := range reqs {
+		if got := r.Header.Get("If-None-Match"); got != "" {
+			t.Errorf("request %d sent If-None-Match %q", i, got)
+		}
+		if got := r.Header.Get("If-Modified-Since"); got != "" {
+			t.Errorf("request %d sent If-Modified-Since %q", i, got)
+		}
+	}
+}
+
+func TestNotModifiedIsRetriedBareEvenWithAStaleCacheEntry(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec,
+		testResponse{body: `{"a":1}`, etag: `"etag-1"`},
+		testResponse{status: "304", etag: `"etag-1"`},
+	)
+
+	// Warm a cache entry, then take the cache away: a second client with
+	// caching off sends no validators, and a 304 leaves it nothing to serve.
+	warm, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if _, err := warm.GetRaw(t.Context(), "/x"); err != nil {
+		t.Fatalf("warm GetRaw: %v", err)
+	}
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.SetUseCache(false)
+	if _, err := c.GetRaw(t.Context(), "/x"); err == nil {
+		t.Fatal("want an error once the bare retry also answers 304")
+	}
+	if n := len(rec.all()); n != 3 {
+		t.Errorf("made %d requests, want 3 (warm, conditional, bare)", n)
+	}
+}
+
+func TestNotModifiedTwiceWithoutACachedEntryIsAnError(t *testing.T) {
 	apiEnv(t)
 	rec := &recorder{}
 	srv := newServer(t, rec, testResponse{status: "304"})
@@ -333,12 +402,55 @@ func TestNotModifiedWithoutACachedEntryIsAnError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	_, err = c.GetRaw("/never-cached")
+	_, err = c.GetRaw(t.Context(), "/never-cached")
 	if err == nil {
 		t.Fatal("want an error for a 304 with no cache entry")
 	}
 	if !strings.Contains(err.Error(), "304") {
 		t.Errorf("error = %v", err)
+	}
+	if n := len(rec.all()); n != 2 {
+		t.Errorf("made %d requests, want 2 (conditional, then bare)", n)
+	}
+}
+
+func TestACachedEntryAnswersA304WithoutASecondRequest(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec,
+		testResponse{body: `{"a":1}`, etag: `"etag-1"`},
+		testResponse{status: "304", etag: `"etag-1"`},
+	)
+
+	warm, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if _, err := warm.GetRaw(t.Context(), "/x"); err != nil {
+		t.Fatalf("warm GetRaw: %v", err)
+	}
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	body, err := c.GetRaw(t.Context(), "/x")
+	if err != nil {
+		t.Fatalf("GetRaw: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("body: %v", err)
+	}
+	if got["a"] != float64(1) {
+		t.Errorf("body = %s, want the cached body", body)
+	}
+	reqs := rec.all()
+	if len(reqs) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(reqs))
+	}
+	if got := reqs[1].Header.Get("If-None-Match"); got != `"etag-1"` {
+		t.Errorf("second request If-None-Match = %q", got)
 	}
 }
 
@@ -351,7 +463,7 @@ func TestNon2xxIncludesTheStatusCodeAndBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	_, err = c.GetRaw("/team/frc999999")
+	_, err = c.GetRaw(t.Context(), "/team/frc999999")
 	if err == nil {
 		t.Fatal("want an error for a 404")
 	}
@@ -368,11 +480,11 @@ func TestServerErrorIsReported(t *testing.T) {
 	rec := &recorder{}
 	srv := newServer(t, rec, testResponse{status: "500", body: "boom"})
 
-	c, err := NewClient(srv.URL)
+	c, err := NewClient(srv.URL, WithRetries(0))
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	if _, err := c.GetRaw("/status"); err == nil || !strings.Contains(err.Error(), "500") {
+	if _, err := c.GetRaw(t.Context(), "/status"); err == nil || !strings.Contains(err.Error(), "500") {
 		t.Errorf("error = %v, want one mentioning 500", err)
 	}
 }
@@ -384,11 +496,11 @@ func TestTransportFailureIsWrapped(t *testing.T) {
 	url := srv.URL
 	srv.Close()
 
-	c, err := NewClient(url)
+	c, err := NewClient(url, WithRetries(0))
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	_, err = c.GetRaw("/status")
+	_, err = c.GetRaw(t.Context(), "/status")
 	if err == nil {
 		t.Fatal("want an error when the server is unreachable")
 	}
@@ -407,7 +519,7 @@ func TestGetReportsMalformedJSON(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 	var status APIStatus
-	if err := c.Get("/status", &status); err == nil {
+	if err := c.Get(t.Context(), "/status", &status); err == nil {
 		t.Fatal("want a decode error")
 	}
 }
@@ -424,7 +536,7 @@ func TestNotModifiedRefreshesValidatedAt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	if _, err := c.GetRaw("/status"); err != nil {
+	if _, err := c.GetRaw(context.Background(), "/status"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
 
@@ -437,7 +549,7 @@ func TestNotModifiedRefreshesValidatedAt(t *testing.T) {
 		t.Fatal("the first response did not record ValidatedAt")
 	}
 
-	body, err := c.GetRaw("/status")
+	body, err := c.GetRaw(context.Background(), "/status")
 	if err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
@@ -471,7 +583,7 @@ func TestNotModifiedDoesNotTouchTheCacheWhenCachingIsOff(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 	c.SetUseCache(false)
-	if _, err := c.GetRaw("/status"); err == nil {
+	if _, err := c.GetRaw(context.Background(), "/status"); err == nil {
 		t.Fatal("want an error for a 304 with no cached entry")
 	}
 }
@@ -499,7 +611,7 @@ func TestGetContextAbortsWhenTheContextIsCancelled(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		var v map[string]any
-		done <- c.GetContext(ctx, "/status", &v)
+		done <- c.Get(ctx, "/status", &v)
 	}()
 
 	select {
@@ -524,7 +636,7 @@ func TestGetRawContextHonoursTheContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if _, err := c.GetRawContext(ctx, "/status"); err == nil {
+	if _, err := c.GetRaw(ctx, "/status"); err == nil {
 		t.Fatal("want an error for a cancelled context")
 	}
 	if n := len(rec.all()); n != 0 {
@@ -542,13 +654,13 @@ func TestGetAndGetRawStillWorkWithoutAContext(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 	var v map[string]any
-	if err := c.Get("/status", &v); err != nil {
+	if err := c.Get(context.Background(), "/status", &v); err != nil {
 		t.Fatalf("Get: %v", err)
 	}
 	if v["current_season"] != float64(2024) {
 		t.Errorf("current_season = %v", v["current_season"])
 	}
-	if _, err := c.GetRaw("/status"); err != nil {
+	if _, err := c.GetRaw(context.Background(), "/status"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
 }

@@ -22,7 +22,7 @@ func newStatusCmd() *cobra.Command {
 			}
 
 			var status api.APIStatus
-			if err := client.GetContext(cmd.Context(), "/status", &status); err != nil {
+			if err := client.Get(cmd.Context(), "/status", &status); err != nil {
 				return err
 			}
 

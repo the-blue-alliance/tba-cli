@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
 func TestRootHelpListsAllTopLevelCommands(t *testing.T) {
@@ -45,8 +47,9 @@ func TestSendsAuthAndUserAgentHeaders(t *testing.T) {
 	if got := reqs[0].Headers.Get("X-TBA-Auth-Key"); got != "test-key" {
 		t.Errorf("X-TBA-Auth-Key = %q, want test-key", got)
 	}
-	if got := reqs[0].Headers.Get("User-Agent"); got != "tba-cli" {
-		t.Errorf("User-Agent = %q, want tba-cli", got)
+	wantUA := "tba-cli/" + version.Version
+	if got := reqs[0].Headers.Get("User-Agent"); got != wantUA {
+		t.Errorf("User-Agent = %q, want %q", got, wantUA)
 	}
 	if reqs[0].Method != "GET" {
 		t.Errorf("method = %q, want GET", reqs[0].Method)

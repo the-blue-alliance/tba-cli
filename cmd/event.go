@@ -46,7 +46,7 @@ func newEventViewCmd() *cobra.Command {
 				return err
 			}
 			var event api.Event
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/event/%s", args[0]), &event); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s", args[0]), &event); err != nil {
 				return err
 			}
 			return outputData(cmd, event, func() {
@@ -81,7 +81,7 @@ func newEventListCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var events []api.Event
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/events/%d", year), &events); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/events/%d", year), &events); err != nil {
 				return err
 			}
 			rows := make([][]string, len(events))
@@ -111,7 +111,7 @@ func newEventTeamsCmd() *cobra.Command {
 				return err
 			}
 			var teams []api.Team
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/event/%s/teams", args[0]), &teams); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/teams", args[0]), &teams); err != nil {
 				return err
 			}
 			rows := make([][]string, len(teams))
@@ -139,7 +139,7 @@ func newEventMatchesCmd() *cobra.Command {
 				return err
 			}
 			var matches []api.Match
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/event/%s/matches", args[0]), &matches); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/matches", args[0]), &matches); err != nil {
 				return err
 			}
 			rows := make([][]string, len(matches))
@@ -174,7 +174,7 @@ func newEventRankingsCmd() *cobra.Command {
 				return err
 			}
 			var rankings api.EventRankings
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/event/%s/rankings", args[0]), &rankings); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/rankings", args[0]), &rankings); err != nil {
 				return err
 			}
 			rows := make([][]string, len(rankings.Rankings))
@@ -206,7 +206,7 @@ func newEventAlliancesCmd() *cobra.Command {
 				return err
 			}
 			var alliances []api.EventAlliance
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/event/%s/alliances", args[0]), &alliances); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/alliances", args[0]), &alliances); err != nil {
 				return err
 			}
 			rows := make([][]string, len(alliances))
@@ -245,7 +245,7 @@ func newEventAwardsCmd() *cobra.Command {
 				return err
 			}
 			var awards []api.Award
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/event/%s/awards", args[0]), &awards); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/awards", args[0]), &awards); err != nil {
 				return err
 			}
 			rows := make([][]string, len(awards))
@@ -286,7 +286,7 @@ func newEventOPRsCmd() *cobra.Command {
 				return err
 			}
 			var oprs api.EventOPRs
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/event/%s/oprs", args[0]), &oprs); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/oprs", args[0]), &oprs); err != nil {
 				return err
 			}
 			teamKeys := make([]string, 0, len(oprs.OPRs))
@@ -350,7 +350,7 @@ func newRawEventCmd(use, short, resource, example string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			raw, err := client.GetRawContext(cmd.Context(), fmt.Sprintf("/event/%s/%s", args[0], resource))
+			raw, err := client.GetRaw(cmd.Context(), fmt.Sprintf("/event/%s/%s", args[0], resource))
 			if err != nil {
 				return err
 			}
