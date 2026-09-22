@@ -760,15 +760,15 @@ func TestEventExportLeavesNoFilesBehindWhenADatasetFails(t *testing.T) {
 func failNthRename(t *testing.T, n int) {
 	t.Helper()
 	calls := 0
-	original := renameFile
-	renameFile = func(from, to string) error {
+	original := exportRename
+	exportRename = func(from, to string) error {
 		calls++
 		if calls == n {
 			return errors.New("rename refused")
 		}
 		return original(from, to)
 	}
-	t.Cleanup(func() { renameFile = original })
+	t.Cleanup(func() { exportRename = original })
 }
 
 // Renaming N of M files and then failing used to leave a directory that was

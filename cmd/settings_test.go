@@ -44,7 +44,6 @@ func emptyConfigDir(t *testing.T) string {
 	return dir
 }
 
-
 func TestConfigFileSuppliesADefault(t *testing.T) {
 	writeConfig(t, "retries: 0\n")
 	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})

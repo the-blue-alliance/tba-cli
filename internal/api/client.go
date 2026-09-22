@@ -20,6 +20,7 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/cache"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
+	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
@@ -241,7 +242,7 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 		// Offline output is indistinguishable from live output otherwise, and
 		// a week-old ranking read as today's is the kind of mistake the user
 		// only finds out about later.
-		c.notef("note: offline: %s from cache (%s ago)", path, cache.FormatAge(c.now().Sub(cached.FetchedAt)))
+		c.notef("note: offline: %s from cache (%s ago)", path, humanize.Age(max(0, c.now().Sub(cached.FetchedAt))))
 		return []byte(cached.Body), nil
 	}
 
@@ -257,7 +258,7 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 	if err != nil && cached != nil && ctx.Err() == nil {
 		if reason, ok := fallbackReason(err); ok {
 			c.notef("note: %s unavailable (%s); using cached copy from %s ago",
-				path, reason, cache.FormatAge(c.now().Sub(cached.FetchedAt)))
+				path, reason, humanize.Age(max(0, c.now().Sub(cached.FetchedAt))))
 			return []byte(cached.Body), nil
 		}
 	}
