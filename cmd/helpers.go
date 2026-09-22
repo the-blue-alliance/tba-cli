@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -226,8 +225,4 @@ func validateMatchKey(arg string) error {
 		return clierr.Usage("%q is not a valid match key (expected something like 2024cthar_qm12)", arg)
 	}
 	return nil
-}
-
-func currentYear() int {
-	return time.Now().Year()
 }

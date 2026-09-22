@@ -70,7 +70,10 @@ func newTeamListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, _ := cmd.Flags().GetInt("year")
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
 			maxPages, _ := cmd.Flags().GetInt("max-pages")
 			var allTeams []api.Team
 			var cappedAt int
@@ -106,7 +109,7 @@ func newTeamListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	addYearFlag(c)
 	c.Flags().Int("max-pages", 30, "Stop after this many pages of 500 teams")
 	return c
 }
@@ -123,7 +126,10 @@ func newTeamEventsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, _ := cmd.Flags().GetInt("year")
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
 			var events []api.Event
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", teamKey(args[0]), year), &events); err != nil {
 				return err
@@ -135,7 +141,7 @@ func newTeamEventsCmd() *cobra.Command {
 			return outputTable(cmd, events, []string{"Key", "Name", "Start Date", "Location"}, rows)
 		},
 	}
-	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	addYearFlag(c)
 	return c
 }
 
@@ -184,7 +190,10 @@ func newTeamMatchesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, _ := cmd.Flags().GetInt("year")
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
 			var matches []api.Match
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year), &matches); err != nil {
 				return err
@@ -196,7 +205,7 @@ func newTeamMatchesCmd() *cobra.Command {
 			return outputTable(cmd, matches, []string{"Key", "Level", "Winner"}, rows)
 		},
 	}
-	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	addYearFlag(c)
 	return c
 }
 
@@ -222,6 +231,9 @@ Dean's List or Woodie Flowers that go to a person rather than to the team.`,
 				return err
 			}
 			key := teamKey(args[0])
+			// Awards are the one --year that does not mean "this season":
+			// its default is every year a team has won anything, so it is
+			// read from the flag alone rather than resolved from a season.
 			year, _ := cmd.Flags().GetInt("year")
 			path := fmt.Sprintf("/team/%s/awards", key)
 			if year > 0 {
@@ -322,7 +334,10 @@ func newTeamMediaCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, _ := cmd.Flags().GetInt("year")
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
 			var media []api.Media
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/media/%d", teamKey(args[0]), year), &media); err != nil {
 				return err
@@ -334,7 +349,7 @@ func newTeamMediaCmd() *cobra.Command {
 			return outputTable(cmd, media, []string{"Type", "Key", "URL"}, rows)
 		},
 	}
-	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	addYearFlag(c)
 	return c
 }
 
