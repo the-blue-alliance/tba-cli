@@ -68,8 +68,14 @@ func newTeamListCmd() *cobra.Command {
 				return err
 			}
 			year, _ := cmd.Flags().GetInt("year")
+			maxPages, _ := cmd.Flags().GetInt("max-pages")
 			var allTeams []api.Team
+			var cappedAt int
 			for page := 0; ; page++ {
+				if maxPages > 0 && page >= maxPages {
+					cappedAt = maxPages
+					break
+				}
 				var teams []api.Team
 				path := fmt.Sprintf("/teams/%d/%d", year, page)
 				if err := client.Get(cmd.Context(), path, &teams); err != nil {
@@ -88,10 +94,17 @@ func newTeamListCmd() *cobra.Command {
 					output.FormatLocation(t.City, t.StateProv, t.Country),
 				}
 			}
-			return outputTable(cmd, allTeams, []string{"Number", "Name", "Location"}, rows)
+			if err := outputTable(cmd, allTeams, []string{"Number", "Name", "Location"}, rows); err != nil {
+				return err
+			}
+			if cappedAt > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "note: stopped after %d pages; raise --max-pages to fetch more\n", cappedAt)
+			}
+			return nil
 		},
 	}
 	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	c.Flags().Int("max-pages", 30, "Stop after this many pages of 500 teams")
 	return c
 }
 
