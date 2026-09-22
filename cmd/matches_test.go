@@ -242,8 +242,8 @@ func TestEventMatchesFilterByTeam(t *testing.T) {
 // A team that played no matches is an empty listing, not an error.
 func TestEventMatchesFilterByTeamWithNoMatches(t *testing.T) {
 	srv := eventMatchesServer(t)
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "9999", "--format", "csv")
-	requireNoError(t, err, "")
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "9999", "--format", "csv")
+	requireNoError(t, err, errOut)
 	if got := csvColumn(t, out, 1); len(got) != 0 {
 		t.Errorf("matches = %v, want none", got)
 	}
@@ -438,7 +438,8 @@ func TestEventMatchesTimeSourceIsADroppableColumn(t *testing.T) {
 }
 
 // A 2021 remote event ran no matches. The listing is empty, and that is not an
-// error.
+// error — but a bare header row is not an answer either, so the reason goes to
+// stderr, where it cannot land in a file the table was piped into.
 func TestEventMatchesWithNoMatches(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2021ctwat":         event2021ctwatJSON,
@@ -453,8 +454,104 @@ func TestEventMatchesWithNoMatches(t *testing.T) {
 	if len(lines(out)) != 2 {
 		t.Errorf("want a header and its separator only, got:\n%s", out)
 	}
+	if want := "note: no matches posted yet for 2021ctwat\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// Every format a person reads gets the note; JSON does not, because an empty
+// array already says it and its reader is a program.
+func TestEventMatchesEmptyNoteByFormat(t *testing.T) {
+	for _, format := range []string{"table", "csv", "tsv", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+			_, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", format)
+			requireNoError(t, err, errOut)
+			if want := "note: no matches posted yet for 2021ctwat\n"; errOut != want {
+				t.Errorf("stderr = %q, want %q", errOut, want)
+			}
+		})
+	}
+}
+
+func TestEventMatchesEmptyJSONIsAnEmptyArray(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--json")
+	requireNoError(t, err, errOut)
+	if strings.TrimSpace(out) != "[]" {
+		t.Errorf("stdout = %q, want an empty array", out)
+	}
 	if errOut != "" {
-		t.Errorf("stderr = %q", errOut)
+		t.Errorf("stderr = %q, want nothing alongside JSON", errOut)
+	}
+}
+
+// A filter that matched nothing is a different answer from an event with no
+// schedule, and says so.
+func TestEventMatchesNoteWhenTheTeamFilterEmptiesTheListing(t *testing.T) {
+	srv := eventMatchesServer(t)
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "9999", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no matches for team 9999 at 2024cthar\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+func TestEventMatchesNoteWhenTheLevelFilterEmptiesTheListing(t *testing.T) {
+	srv := eventMatchesServer(t)
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--level", "qf", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no qf matches for 2024cthar\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// An event whose matches are all played has nothing upcoming, which is what
+// asking on the Monday after looks like.
+func TestEventMatchesNoteWhenNothingIsUpcoming(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2019ctwat":         event2019ctwatJSON,
+		"/event/2019ctwat/matches": matches2019ctwatJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2019ctwat", "--upcoming", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no upcoming matches for 2019ctwat\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// A team's season listing names the team and the season it found nothing in.
+func TestTeamMatchesNoteWhenASeasonIsEmpty(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/team/frc177/matches/2024": "[]"})
+	_, errOut, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no matches posted yet for team 177 in 2024\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// At one event it names the event, the way the question was asked.
+func TestTeamMatchesNoteAtAnEvent(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/event/2021ctwat/matches": "[]",
+	})
+	_, errOut, err := runCmd(t, srv, "team", "matches", "177", "--event", "2021ctwat", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no matches posted yet for 2021ctwat\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// A listing with rows in it says nothing at all.
+func TestEventMatchesSaysNothingWhenItHasRows(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2019ctwat":         event2019ctwatJSON,
+		"/event/2019ctwat/matches": matches2019ctwatJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2019ctwat", "--format", "table")
+	requireNoError(t, err, errOut)
+	if errOut != "" {
+		t.Errorf("stderr = %q, want nothing", errOut)
 	}
 }
 

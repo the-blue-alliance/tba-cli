@@ -45,7 +45,12 @@ func newTeamNextCmd() *cobra.Command {
 			playoffTypeFor := constantPlayoffType(event.PlayoffType)
 
 			if all, _ := cmd.Flags().GetBool("all"); all {
-				return printMatchTable(cmd, upcoming, playoffTypeFor)
+				listing := matchListing{
+					scope:        fmt.Sprintf("team %s at %s", output.TeamNumberFromKey(team), event.Key),
+					hadMatches:   len(matches) > 0,
+					onlyUpcoming: true,
+				}
+				return printMatchTable(cmd, upcoming, playoffTypeFor, listing)
 			}
 			if len(upcoming) == 0 {
 				return fmt.Errorf("no upcoming match for team %s at %s",
