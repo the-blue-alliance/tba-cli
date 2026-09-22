@@ -68,11 +68,18 @@ func resolveFormat(cmd *cobra.Command) (string, error) {
 	explicit, _ := normalizeFormat(raw)
 
 	if explicit != "" && explicit != "json" {
+		// Say where the format came from when it was not typed on this command
+		// line, so that "drop --format table" is not advice about a flag the
+		// user never passed.
+		chosen := "--format " + raw
+		if s.Source("format") != sourceFlag {
+			chosen = fmt.Sprintf("--format %s from %s", raw, s.origin("format"))
+		}
 		if jqFlag != "" {
-			return "", clierr.Usage("--jq requires JSON output; drop --format %s or use --format json", raw)
+			return "", clierr.Usage("--jq requires JSON output; drop %s or use --format json", chosen)
 		}
 		if jsonFlag {
-			return "", clierr.Usage("--json requires JSON output; drop --format %s or use --format json", raw)
+			return "", clierr.Usage("--json requires JSON output; drop %s or use --format json", chosen)
 		}
 	}
 	if explicit != "" {

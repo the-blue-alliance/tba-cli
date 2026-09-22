@@ -229,6 +229,18 @@ func TestFormatFromTheConfigFileAppliesOnATerminal(t *testing.T) {
 	}
 }
 
+func TestAConflictingFormatSaysWhereItCameFrom(t *testing.T) {
+	emptyConfigDir(t)
+	t.Setenv("TBA_FORMAT", "table")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, _, err := runCmd(t, srv, "team", "view", "177", "--jq", ".nickname")
+	requireErrorContains(t, err, "TBA_FORMAT")
+	if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+	}
+}
+
 func TestFormatFromTheEnvironmentAppliesEverywhere(t *testing.T) {
 	emptyConfigDir(t)
 	t.Setenv("TBA_FORMAT", "table")
