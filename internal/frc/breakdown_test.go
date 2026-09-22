@@ -407,6 +407,61 @@ func TestCompareBreakdownsDropsRowsNeitherAllianceScored(t *testing.T) {
 	}
 }
 
+// compare2026JSON is a recent season's shape: an unfilled slot is the string
+// "None", and the game's own constants ride along with what was scored.
+const compare2026JSON = `{
+  "key": "2026cthar_qm7",
+  "score_breakdown": {
+    "red": {
+      "totalPoints": 96, "rp": 3, "autoPoints": 24, "foulCount": 0,
+      "autoTowerRobot1": "None", "endgameRobot1": "Parked",
+      "coopertitionThreshold": 12, "ensembleBonusThreshold": 30
+    },
+    "blue": {
+      "totalPoints": 74, "rp": 1, "autoPoints": 12, "foulCount": 0,
+      "autoTowerRobot1": "None", "endgameRobot1": "None",
+      "coopertitionThreshold": 12, "ensembleBonusThreshold": 30
+    }
+  }
+}`
+
+// "None" on both sides is the same non-event as a pair of zeroes, and a
+// threshold is the season's rulebook rather than anything the alliances did.
+func TestCompareBreakdownsDropsNoneRowsAndThresholds(t *testing.T) {
+	rows := frc.CompareBreakdowns(mustMatch(t, compare2026JSON), false)
+	for _, key := range []string{"autoTowerRobot1", "coopertitionThreshold", "ensembleBonusThreshold"} {
+		if _, ok := rowFor(rows, key); ok {
+			t.Errorf("%s should have been dropped from the default view: %v", key, labelsOf(rows))
+		}
+	}
+	// One side parked and the other did not, so the row is the match.
+	if row, ok := rowFor(rows, "endgameRobot1"); !ok || row.Red != "Parked" || row.Blue != "None" {
+		t.Errorf("endgameRobot1 = %v, want it kept as (Parked, None)", row)
+	}
+}
+
+func TestCompareBreakdownsFullKeepsNoneRowsAndThresholds(t *testing.T) {
+	rows := frc.CompareBreakdowns(mustMatch(t, compare2026JSON), true)
+	for _, key := range []string{"autoTowerRobot1", "coopertitionThreshold", "ensembleBonusThreshold"} {
+		if _, ok := rowFor(rows, key); !ok {
+			t.Errorf("--full should have kept %s: %v", key, labelsOf(rows))
+		}
+	}
+}
+
+// The scoring summary is however many leading rows score, earn or explain
+// points; the game's own detail starts after them.
+func TestPointsBandLen(t *testing.T) {
+	rows := frc.CompareBreakdowns(mustMatch(t, compare2026JSON), false)
+	// Total Points, RP, Auto Points -- then Endgame Robot 1.
+	if got := frc.PointsBandLen(rows); got != 3 {
+		t.Errorf("PointsBandLen = %d, want 3 (%v)", got, labelsOf(rows))
+	}
+	if got := frc.PointsBandLen(nil); got != 0 {
+		t.Errorf("PointsBandLen(nil) = %d, want 0", got)
+	}
+}
+
 // --full is for the moment you want the row that says nothing happened.
 func TestCompareBreakdownsFullKeepsEverything(t *testing.T) {
 	rows := frc.CompareBreakdowns(mustMatch(t, compare2024JSON), true)

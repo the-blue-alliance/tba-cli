@@ -265,9 +265,11 @@ var penaltyKeys = []string{"foulCount", "techFoulCount", "adjustPoints"}
 // The order is the total, then the ranking points, then everything else that
 // scores points, then the penalties, then the rest alphabetically.
 //
-// Unless full is set, a row both alliances left at zero is dropped: a 2024
-// breakdown carries some forty fields per alliance, most of them zero, and the
-// ones that moved are the story.
+// Unless full is set, a row neither alliance did anything in is dropped — zero,
+// false, "None" or absent on both sides — along with the season's own
+// constants, the thresholds a bonus is measured against. A 2024 breakdown
+// carries some forty fields per alliance, most of them nothing, and the ones
+// that moved are the story.
 func CompareBreakdowns(m api.Match, full bool) []BreakdownRow {
 	red := breakdownIndex(AllianceBreakdown(m, AllianceRed))
 	blue := breakdownIndex(AllianceBreakdown(m, AllianceBlue))
@@ -290,12 +292,36 @@ func CompareBreakdowns(m api.Match, full bool) []BreakdownRow {
 	rows := make([]BreakdownRow, 0, len(keys))
 	for _, key := range keys {
 		row := BreakdownRow{Key: key, Label: HumanizeKey(key), Red: red[key], Blue: blue[key]}
-		if !full && row.Red == row.Blue && isNothing(row.Red) {
+		if !full && (isNothing(row.Red) && isNothing(row.Blue) || isThreshold(key)) {
 			continue
 		}
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// isThreshold reports whether a field is one of the season's own constants —
+// the number of notes a coopertition bonus needs, the points an ensemble
+// bonus is worth — rather than something an alliance did. They are the same
+// in every match of the season, so both columns always agree and the row says
+// nothing about the match; --full still has them for anyone checking the
+// game manual against the data.
+func isThreshold(key string) bool {
+	return strings.Contains(strings.ToLower(key), "threshold")
+}
+
+// PointsBandLen is how many of a breakdown's leading rows are the scoring
+// summary — the total, the ranking points, everything else that scores, and
+// the penalties that explain the total — as opposed to the game's own detail
+// underneath. A caller separates the two with it; 0 or len(rows) means there
+// is nothing to separate.
+func PointsBandLen(rows []BreakdownRow) int {
+	for i, row := range rows {
+		if breakdownRank(row.Key) == rankOther {
+			return i
+		}
+	}
+	return len(rows)
 }
 
 func breakdownIndex(kvs []KV) map[string]string {
@@ -308,9 +334,13 @@ func breakdownIndex(kvs []KV) map[string]string {
 
 // isNothing reports whether a rendered value is the game's "did not happen":
 // zero, false or absent. Such a row is only worth printing under --full.
+//
+// "None" is in the list because recent seasons write an unfilled slot that way
+// — a string, not a null — so "Auto Tower Robot 1  None  None" is a row about
+// a robot that did nothing, spelled differently from the zeroes beside it.
 func isNothing(value string) bool {
-	switch strings.TrimSpace(value) {
-	case "", "0", "no":
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "0", "no", "none":
 		return true
 	default:
 		return false

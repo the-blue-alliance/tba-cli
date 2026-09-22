@@ -39,11 +39,61 @@ func TestMatchViewTable(t *testing.T) {
 		"------------  ---  ----\n" +
 		"Total Points  88   61  \n" +
 		"Auto Points   20   10  \n" +
+		"\n" +
 		"Melody        yes  no  \n" +
 		"\nVideos\n" +
 		"  https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
 	if out != want {
 		t.Errorf("match view table =\n%s\nwant\n%s", out, want)
+	}
+}
+
+// A row nobody did anything in is noise however the season spells "nothing":
+// "None" on both sides reads exactly like a pair of zeroes. The game's own
+// constants say nothing about the match either, and both columns always agree
+// on them.
+func TestMatchViewDropsNoneRowsAndSeasonConstants(t *testing.T) {
+	withNow(t, time.Unix(1774531500+3600, 0))
+	srv := newFakeTBA(t, map[string]any{"/match/2026cthar_qm7": matchView2026JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2026cthar_qm7", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	for _, gone := range []string{"Auto Tower Robot 1", "Auto Tower Robot 2", "Threshold"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("%q survived the default view:\n%s", gone, out)
+		}
+	}
+	// One side did something, so the row is still the story of the match.
+	requireContains(t, out, "Endgame Robot 1  Parked")
+}
+
+// --full is the escape hatch: everything the API sent, thresholds included.
+func TestMatchViewFullKeepsNoneRowsAndSeasonConstants(t *testing.T) {
+	withNow(t, time.Unix(1774531500+3600, 0))
+	srv := newFakeTBA(t, map[string]any{"/match/2026cthar_qm7": matchView2026JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2026cthar_qm7", "--full", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	for _, want := range []string{"Auto Tower Robot 1", "Coopertition Threshold", "Ensemble Bonus Threshold"} {
+		requireContains(t, out, want)
+	}
+}
+
+// The scoring summary and the game's own detail are two different readings of
+// the same table, and a blank line is enough to say so.
+func TestMatchViewSeparatesThePointsBandFromTheDetail(t *testing.T) {
+	withNow(t, time.Unix(1774531500+3600, 0))
+	srv := newFakeTBA(t, map[string]any{"/match/2026cthar_qm7": matchView2026JSON})
+	out, errOut, err := runCmd(t, srv, "match", "view", "2026cthar_qm7", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	want := "Total Points     96      74  \n" +
+		"RP               3       1   \n" +
+		"Auto Points      24      12  \n" +
+		"\n" +
+		"Endgame Robot 1  Parked  None\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("breakdown is not banded:\n%s\nwant it to contain\n%s", out, want)
 	}
 }
 

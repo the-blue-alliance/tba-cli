@@ -67,7 +67,7 @@ func (t Table) SelectColumns(spec string) (Table, error) {
 
 	// Column selection leaves the rows where they are, so the dividers
 	// between them still point at the right gaps.
-	out := Table{Headers: make([]string, len(idx)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers}
+	out := Table{Headers: make([]string, len(idx)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers, Breaks: t.Breaks}
 	for n, i := range idx {
 		out.Headers[n] = t.Headers[i]
 	}
@@ -110,7 +110,7 @@ func (t Table) DropEmptyColumns() Table {
 		return t
 	}
 
-	out := Table{Headers: make([]string, len(keep)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers}
+	out := Table{Headers: make([]string, len(keep)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers, Breaks: t.Breaks}
 	for n, i := range keep {
 		out.Headers[n] = t.Headers[i]
 	}

@@ -236,6 +236,44 @@ func TestRenderDividersAreSkippedByDelimitedFormats(t *testing.T) {
 	}
 }
 
+// A break is the quieter divider: the rows below are a different kind of thing
+// from the rows above, which needs a gap rather than a sentence.
+func TestRenderTableDrawsBreaks(t *testing.T) {
+	got := render(t, Table{
+		Headers: []string{"Stat", "Red"},
+		Rows:    [][]string{{"Total Points", "96"}, {"Endgame Robot 1", "Parked"}},
+		Breaks:  map[int]bool{0: true},
+	}, RenderOptions{Format: "table"})
+
+	want := "Stat             Red   \n" +
+		"---------------  ------\n" +
+		"Total Points     96    \n" +
+		"\n" +
+		"Endgame Robot 1  Parked\n"
+	if got != want {
+		t.Errorf("table =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// A break after the last row would only add a blank line to whatever comes
+// next, and a blank line in a data file is a broken record.
+func TestRenderBreaksAreSkippedAtTheEndAndByOtherFormats(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Stat", "Red"},
+		Rows:    [][]string{{"Total Points", "96"}},
+		Breaks:  map[int]bool{0: true, 9: true},
+	}
+	if got := render(t, tbl, RenderOptions{Format: "table"}); got != "Stat          Red\n------------  ---\nTotal Points  96 \n" {
+		t.Errorf("table = %q", got)
+	}
+	for _, format := range []string{"csv", "tsv", "markdown"} {
+		got := render(t, tbl, RenderOptions{Format: format})
+		if n := len(lines(got)); n > 3 {
+			t.Errorf("%s has %d lines, want no blank one:\n%q", format, n, got)
+		}
+	}
+}
+
 // An empty divider is nothing to draw, and one past the last row has no gap to
 // sit in.
 func TestRenderIgnoresEmptyAndOutOfRangeDividers(t *testing.T) {
