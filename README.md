@@ -4,6 +4,15 @@ A command-line interface for [The Blue Alliance](https://www.thebluealliance.com
 
 ## Installation
 
+### Homebrew
+
+```
+brew install the-blue-alliance/tap/tba
+```
+
+The cask installs the binary, its man pages and completions for bash, zsh and
+fish. It is macOS only; on Linux, take a release archive.
+
 ### Download a release
 
 Download a prebuilt binary for your platform from the [Releases](https://github.com/the-blue-alliance/tba-cli/releases) page.
@@ -671,8 +680,14 @@ That runs `.github/workflows/release.yml`, which runs GoReleaser with
 `.goreleaser.yml`: it builds every platform with the version, commit and commit
 date stamped into the binary, generates the man pages and completion scripts
 from the command tree, builds the archives and checksums, writes grouped release
-notes from the commits since the last tag and announces the release on Slack
+notes from the commits since the last tag, pushes the Homebrew cask to
+`the-blue-alliance/homebrew-tap` and announces the release on Slack
 (`SLACK_WEBHOOK_URL`).
+
+Two secrets have to exist on the repository: `SLACK_WEBHOOK_URL`, and
+`HOMEBREW_TAP_TOKEN`, a token with write access to the tap repository — the
+default `GITHUB_TOKEN` cannot push to another repository. A prerelease tag
+(`v1.2.3-rc1`) skips the tap, so only full releases reach `brew`.
 
 Man pages and completions are generated, never checked in, so they cannot drift
 from the flags the binary has. To produce them locally:
