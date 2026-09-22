@@ -28,7 +28,17 @@ func NewRootCmd() *cobra.Command {
 		// Flags are checked once, before any command does work, so that a
 		// contradictory --format is reported without first hitting the API.
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := resolveFormat(cmd)
+			// Resolve flags, environment and config file into one view before
+			// anything reads a setting, then check the ones whose value can be
+			// wrong, so that a bad --format is reported without first hitting
+			// the API.
+			if err := initSettings(cmd); err != nil {
+				return err
+			}
+			if _, err := resolveFormat(cmd); err != nil {
+				return err
+			}
+			_, err := colorMode(cmd)
 			return err
 		},
 	}
