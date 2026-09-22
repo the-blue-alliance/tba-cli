@@ -8,18 +8,40 @@ import (
 	"strings"
 )
 
-// IsTTY reports whether w is a terminal. It returns true only when w is an
-// *os.File backed by a character device.
+// Unwrapper is implemented by writers that decorate another writer, such as
+// the one that records write failures around stdout. IsTTY looks through
+// them so a wrapped terminal is still recognised as a terminal.
+type Unwrapper interface {
+	Unwrap() io.Writer
+}
+
+// TerminalReporter lets a writer state outright whether it is a terminal.
+// Tests use it to exercise the terminal code paths without a real one.
+type TerminalReporter interface {
+	IsTerminal() bool
+}
+
+// IsTTY reports whether w is a terminal: an *os.File backed by a character
+// device, possibly behind one or more wrappers, or anything that says so via
+// TerminalReporter.
 func IsTTY(w io.Writer) bool {
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
+	for w != nil {
+		switch v := w.(type) {
+		case TerminalReporter:
+			return v.IsTerminal()
+		case *os.File:
+			fi, err := v.Stat()
+			if err != nil {
+				return false
+			}
+			return fi.Mode()&os.ModeCharDevice != 0
+		case Unwrapper:
+			w = v.Unwrap()
+		default:
+			return false
+		}
 	}
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return false
 }
 
 // PrintKeyValue writes alternating key/value pairs with the values aligned.

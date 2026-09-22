@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -240,5 +241,46 @@ func TestFormatLocation(t *testing.T) {
 		if got := FormatLocation(c.city, c.state, c.country); got != c.want {
 			t.Errorf("FormatLocation(%q,%q,%q) = %q, want %q", c.city, c.state, c.country, got, c.want)
 		}
+	}
+}
+
+// wrapped decorates another writer the way the CLI's stdout recorder does.
+type wrapped struct{ w io.Writer }
+
+func (w wrapped) Write(p []byte) (int, error) { return w.w.Write(p) }
+func (w wrapped) Unwrap() io.Writer           { return w.w }
+
+// saysTerminal is a writer that declares its own terminal-ness.
+type saysTerminal struct {
+	bytes.Buffer
+	tty bool
+}
+
+func (s *saysTerminal) IsTerminal() bool { return s.tty }
+
+func TestIsTTYSeesThroughWrappers(t *testing.T) {
+	f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Skipf("cannot open %s: %v", os.DevNull, err)
+	}
+	defer f.Close()
+	// Whatever the device answers, a wrapper around it must answer the same.
+	if got, want := IsTTY(wrapped{wrapped{f}}), IsTTY(f); got != want {
+		t.Errorf("IsTTY(wrapped device) = %v, want %v", got, want)
+	}
+	if IsTTY(wrapped{&bytes.Buffer{}}) {
+		t.Error("a wrapped buffer is still not a TTY")
+	}
+}
+
+func TestIsTTYTrustsATerminalReporter(t *testing.T) {
+	if !IsTTY(&saysTerminal{tty: true}) {
+		t.Error("a writer that says it is a terminal should count as one")
+	}
+	if IsTTY(&saysTerminal{tty: false}) {
+		t.Error("a writer that says it is not a terminal should not count as one")
+	}
+	if !IsTTY(wrapped{&saysTerminal{tty: true}}) {
+		t.Error("the reporter should be found behind a wrapper")
 	}
 }

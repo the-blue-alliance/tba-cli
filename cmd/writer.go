@@ -1,6 +1,10 @@
 package cmd
 
-import "io"
+import (
+	"io"
+
+	"github.com/the-blue-alliance/tba-cli/internal/output"
+)
 
 // recordingWriter remembers the first failure from the writer underneath.
 //
@@ -27,3 +31,10 @@ func (r *recordingWriter) Write(p []byte) (int, error) {
 
 // Err returns the first write failure, if there was one.
 func (r *recordingWriter) Err() error { return r.err }
+
+// Unwrap exposes the wrapped writer, so that terminal detection still sees
+// the real stdout underneath the recorder.
+func (r *recordingWriter) Unwrap() io.Writer { return r.w }
+
+// Compile-time check: the recorder must stay transparent to output.IsTTY.
+var _ output.Unwrapper = (*recordingWriter)(nil)

@@ -169,6 +169,27 @@ func runCmd(t *testing.T, srv *httptest.Server, args ...string) (stdout, stderr 
 // runCmdStdin is runCmd with a canned stdin, for commands that prompt.
 func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
+	return runCmdOn(t, srv, &bytes.Buffer{}, stdin, args...)
+}
+
+// terminalBuffer is a buffer that claims to be a terminal, so tests can walk
+// the code paths a real user at a terminal gets: table by default, color on.
+type terminalBuffer struct{ bytes.Buffer }
+
+func (*terminalBuffer) IsTerminal() bool { return true }
+
+// runCmdTTY is runCmd with stdout pretending to be a terminal.
+func runCmdTTY(t *testing.T, srv *httptest.Server, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return runCmdOn(t, srv, &terminalBuffer{}, "", args...)
+}
+
+// runCmdOn runs a fresh command tree with out as its stdout.
+func runCmdOn(t *testing.T, srv *httptest.Server, out interface {
+	io.Writer
+	String() string
+}, stdin string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
 
 	// Each run gets throwaway auth/cache/config state. A test that needs the
 	// same directory across two runs (e.g. cache revalidation) can set the
@@ -178,8 +199,8 @@ func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...strin
 	setEnvUnlessSet(t, "TBA_CONFIG_DIR", t.TempDir())
 
 	root := NewRootCmd()
-	var outBuf, errBuf bytes.Buffer
-	root.SetOut(&outBuf)
+	var errBuf bytes.Buffer
+	root.SetOut(out)
 	root.SetErr(&errBuf)
 	root.SetIn(strings.NewReader(stdin))
 
@@ -190,7 +211,7 @@ func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...strin
 	root.SetArgs(full)
 
 	err = Run(context.Background(), root)
-	return outBuf.String(), errBuf.String(), err
+	return out.String(), errBuf.String(), err
 }
 
 func setEnvUnlessSet(t *testing.T, key, value string) {
