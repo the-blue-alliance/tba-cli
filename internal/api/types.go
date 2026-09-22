@@ -82,6 +82,7 @@ type Ranking struct {
 	MatchesPlayed int        `json:"matches_played"`
 	DQ            int        `json:"dq"`
 	SortOrders    []float64  `json:"sort_orders"`
+	ExtraStats    []float64  `json:"extra_stats"`
 }
 
 type WLTRecord struct {
@@ -91,8 +92,9 @@ type WLTRecord struct {
 }
 
 type EventRankings struct {
-	Rankings      []Ranking       `json:"rankings"`
-	SortOrderInfo []SortOrderInfo `json:"sort_order_info"`
+	Rankings       []Ranking       `json:"rankings"`
+	SortOrderInfo  []SortOrderInfo `json:"sort_order_info"`
+	ExtraStatsInfo []SortOrderInfo `json:"extra_stats_info"`
 }
 
 type SortOrderInfo struct {
@@ -105,12 +107,24 @@ type EventAlliance struct {
 	Picks    []string        `json:"picks"`
 	Status   *AllianceStatus `json:"status"`
 	Declines []string        `json:"declines"`
+	Backup   *AllianceBackup `json:"backup"`
+}
+
+// AllianceBackup records a backup team swap: In replaced Out.
+type AllianceBackup struct {
+	Out string `json:"out"`
+	In  string `json:"in"`
 }
 
 type AllianceStatus struct {
-	Status string     `json:"status"`
-	Level  string     `json:"level"`
-	Record *WLTRecord `json:"record"`
+	Status             string     `json:"status"`
+	Level              string     `json:"level"`
+	Record             *WLTRecord `json:"record"`
+	CurrentLevelRecord *WLTRecord `json:"current_level_record"`
+	PlayoffAverage     *float64   `json:"playoff_average"`
+	// DoubleElimRound is only sent for double-elimination brackets
+	// (2023 onwards), e.g. "Round 4".
+	DoubleElimRound *string `json:"double_elim_round"`
 }
 
 type Award struct {
@@ -142,10 +156,11 @@ type Robot struct {
 }
 
 type DistrictRanking struct {
-	TeamKey     string `json:"team_key"`
-	Rank        int    `json:"rank"`
-	PointTotal  int    `json:"point_total"`
-	RookieBonus int    `json:"rookie_bonus"`
+	TeamKey     string                `json:"team_key"`
+	Rank        int                   `json:"rank"`
+	PointTotal  int                   `json:"point_total"`
+	RookieBonus int                   `json:"rookie_bonus"`
+	EventPoints []DistrictEventPoints `json:"event_points"`
 }
 
 type EventOPRs struct {
@@ -161,4 +176,70 @@ type APIStatus struct {
 	ContBuildEnabled bool        `json:"contbuild_enabled"`
 	AndroidSettings  interface{} `json:"android"`
 	IOSSettings      interface{} `json:"ios"`
+}
+
+// DistrictEventPoints is one event's contribution to a team's district ranking.
+// DistrictCMP marks the district championship, which is scored separately from
+// the qualifying events.
+type DistrictEventPoints struct {
+	EventKey       string `json:"event_key"`
+	DistrictCMP    bool   `json:"district_cmp"`
+	QualPoints     int    `json:"qual_points"`
+	AlliancePoints int    `json:"alliance_points"`
+	AwardPoints    int    `json:"award_points"`
+	ElimPoints     int    `json:"elim_points"`
+	Total          int    `json:"total"`
+}
+
+// EventDistrictPoints is the district points one event awarded, keyed by team.
+type EventDistrictPoints struct {
+	Points      map[string]DistrictPointsDetail `json:"points"`
+	Tiebreakers map[string]DistrictTiebreaker   `json:"tiebreakers"`
+}
+
+// DistrictPointsDetail is one team's district points at a single event.
+type DistrictPointsDetail struct {
+	QualPoints     int `json:"qual_points"`
+	AlliancePoints int `json:"alliance_points"`
+	AwardPoints    int `json:"award_points"`
+	ElimPoints     int `json:"elim_points"`
+	Total          int `json:"total"`
+}
+
+// DistrictTiebreaker holds the values that break a district points tie.
+type DistrictTiebreaker struct {
+	HighestQualScores []int `json:"highest_qual_scores"`
+	QualWins          int   `json:"qual_wins"`
+}
+
+// TeamEventStatus is a team's standing at one event. Every section is optional:
+// a team that has not played yet has no Qual, and one that was not picked has
+// no Alliance.
+type TeamEventStatus struct {
+	Qual              *TeamEventQualStatus     `json:"qual"`
+	Alliance          *TeamEventAllianceStatus `json:"alliance"`
+	Playoff           *AllianceStatus          `json:"playoff"`
+	AllianceStatusStr string                   `json:"alliance_status_str"`
+	PlayoffStatusStr  string                   `json:"playoff_status_str"`
+	OverallStatusStr  string                   `json:"overall_status_str"`
+	NextMatchKey      *string                  `json:"next_match_key"`
+	LastMatchKey      *string                  `json:"last_match_key"`
+}
+
+// TeamEventQualStatus is the qualification-round half of a team event status.
+type TeamEventQualStatus struct {
+	NumTeams      int             `json:"num_teams"`
+	Status        string          `json:"status"`
+	Ranking       *Ranking        `json:"ranking"`
+	SortOrderInfo []SortOrderInfo `json:"sort_order_info"`
+}
+
+// TeamEventAllianceStatus says which alliance picked a team, and in what slot.
+// Pick is 0 for the captain, 1 and 2 for the first and second picks, and -1 for
+// a backup team called in mid-playoffs.
+type TeamEventAllianceStatus struct {
+	Name   string          `json:"name"`
+	Number int             `json:"number"`
+	Pick   int             `json:"pick"`
+	Backup *AllianceBackup `json:"backup"`
 }
