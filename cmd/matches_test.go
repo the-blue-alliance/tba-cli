@@ -642,17 +642,45 @@ func TestTeamMatchesFilterByLevel(t *testing.T) {
 	}
 }
 
-// team matches takes --team too, so the same filters work everywhere a match
-// listing does.
-func TestTeamMatchesFilterByTeam(t *testing.T) {
+// `team matches 177` is already about one team, so a --team of its own could
+// only disagree with the argument — and `--team 254` used to print an empty
+// table rather than say so.
+func TestTeamMatchesHasNoTeamFlag(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/matches/2024": matches2024ctharJSON,
 	})
-	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--team", "5507", "--format", "csv")
+	_, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--team", "254")
+	requireErrorContains(t, err, "unknown flag: --team")
+	if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+	}
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a rejected flag should not reach the API, got %v", got)
+	}
+}
+
+// The listing about an event keeps --team: there, narrowing to one team is the
+// whole point.
+func TestEventMatchesKeepsTheTeamFlag(t *testing.T) {
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "5507", "--format", "csv")
 	requireNoError(t, err, "")
 	want := []string{"2024cthar_qm12", "2024cthar_sf13m1", "2024cthar_f1m2"}
-	if got := csvColumn(t, out, 2); !equalStrings(got, want) {
+	if got := csvColumn(t, out, 1); !equalStrings(got, want) {
 		t.Errorf("matches = %v, want %v", got, want)
+	}
+}
+
+// The filters that do make sense on a team's listing still do.
+func TestTeamMatchesKeepsTheOtherFilters(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": matches2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024",
+		"--level", "playoff", "--format", "csv")
+	requireNoError(t, err, "")
+	if got := csvColumn(t, out, 2); !equalStrings(got, []string{"2024cthar_sf13m1", "2024cthar_f1m2"}) {
+		t.Errorf("matches = %v", got)
 	}
 }
 

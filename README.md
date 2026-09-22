@@ -612,7 +612,7 @@ When a mark appears in `table` output, the legend `* surrogate  ! disqualified` 
 
 | Flag | Description |
 |------|-------------|
-| `--team N` | Only matches this team played in; `177` and `frc177` both work |
+| `--team N` | (`event matches` only) Only matches this team played in; `177` and `frc177` both work |
 | `--level qm\|playoff\|ef\|qf\|sf\|f` | Only this level; `playoff` means every elimination level at once |
 | `--upcoming` | Only matches that have not been played, soonest first |
 | `--event KEY` | (`team matches` only) One event instead of a whole season |
