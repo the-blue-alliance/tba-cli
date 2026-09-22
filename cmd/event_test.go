@@ -131,15 +131,16 @@ func TestEventMatches(t *testing.T) {
 	requireNoError(t, err, "")
 
 	got := lines(out)
-	if got[0] != "Key            Level  Red  Blue  Winner" {
+	if got[0] != "Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status" {
 		t.Errorf("header = %q", got[0])
 	}
-	if got[2] != "2024cthar_qm1  qm     88   61    red   " {
-		t.Errorf("row 1 = %q", got[2])
-	}
-	if got[3] != "2024cthar_qm2  qm     45   72    blue  " {
-		t.Errorf("row 2 = %q", got[3])
-	}
+	requireContains(t, got[2], "Qual 1")
+	requireContains(t, got[2], "2024cthar_qm1")
+	requireContains(t, got[2], "88-61")
+	requireContains(t, got[2], "red")
+	requireContains(t, got[3], "Qual 2")
+	requireContains(t, got[3], "45-72")
+	requireContains(t, got[3], "blue")
 }
 
 func TestEventMatchesJSONRoundTrips(t *testing.T) {
