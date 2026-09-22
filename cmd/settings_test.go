@@ -300,6 +300,68 @@ func TestABadSettingNamesItsLayer(t *testing.T) {
 	requireErrorContains(t, err, "retries cannot be negative (from TBA_RETRIES)")
 }
 
+// viper coerced an unparseable environment value instead of refusing it, and
+// the results were silent and wrong: TBA_RETRIES=abc turned retries off,
+// TBA_TIMEOUT=5 meant five nanoseconds, so every request timed out and nothing
+// said why.
+func TestUnparseableEnvironmentSettingsAreRefused(t *testing.T) {
+	cases := []struct {
+		name  string
+		env   [2]string
+		wants []string
+	}{
+		{"retries", [2]string{"TBA_RETRIES", "abc"}, []string{`TBA_RETRIES "abc"`, "a whole number"}},
+		{"timeout no unit", [2]string{"TBA_TIMEOUT", "5"}, []string{`TBA_TIMEOUT "5"`, "5s"}},
+		{"timeout nonsense", [2]string{"TBA_TIMEOUT", "soon"}, []string{`TBA_TIMEOUT "soon"`, "duration"}},
+		{"no-color", [2]string{"TBA_NO_COLOR", "yes please"}, []string{`TBA_NO_COLOR "yes please"`, "boolean"}},
+		{"no-cache", [2]string{"TBA_NO_CACHE", "sometimes"}, []string{`TBA_NO_CACHE "sometimes"`, "boolean"}},
+		{"year", [2]string{"TBA_YEAR", "twenty twenty-four"}, []string{`TBA_YEAR "twenty twenty-four"`, "a whole number"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			emptyConfigDir(t)
+			t.Setenv(c.env[0], c.env[1])
+			srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+			_, _, err := runCmd(t, srv, "team", "view", "177")
+			if err == nil {
+				t.Fatalf("%s=%q went through unremarked", c.env[0], c.env[1])
+			}
+			for _, want := range c.wants {
+				requireErrorContains(t, err, want)
+			}
+			if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+				t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+			}
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a bad setting should be caught before any request, got %v", got)
+			}
+		})
+	}
+}
+
+// Precedence still holds: a flag beats the environment, including a variable
+// that could not have been used anyway.
+func TestAFlagStillBeatsAnUnparseableEnvironmentSetting(t *testing.T) {
+	emptyConfigDir(t)
+	t.Setenv("TBA_RETRIES", "abc")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, stderr, err := runCmd(t, srv, "team", "view", "177", "--retries", "0")
+	requireNoError(t, err, stderr)
+}
+
+// A value of the right shape but the wrong size is somebody else's complaint,
+// and those complaints already name the variable.
+func TestARangeErrorFromTheEnvironmentKeepsItsOwnWording(t *testing.T) {
+	emptyConfigDir(t)
+	t.Setenv("TBA_YEAR", "1800")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, _, err := runCmd(t, srv, "event", "list")
+	requireErrorContains(t, err, "TBA_YEAR 1800 is not an FRC season")
+}
+
 func TestValidRetriesAndTimeoutAreLeftAlone(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -106,6 +107,9 @@ func initSettings(cmd *cobra.Command) error {
 // the config file's, with the layer named when it is not the flag the user
 // would otherwise go looking for.
 func (s *settingsSet) validate() error {
+	if err := s.validateEnv(); err != nil {
+		return err
+	}
 	if s.Int("retries") < 0 {
 		return s.settingError("retries", "retries cannot be negative")
 	}
@@ -113,6 +117,76 @@ func (s *settingsSet) validate() error {
 		return s.settingError("timeout", "timeout must be positive")
 	}
 	return nil
+}
+
+// validateEnv refuses an environment value the setting cannot hold.
+//
+// viper coerced instead, and quietly: TBA_RETRIES=abc became 0, which turns
+// retries off, and TBA_TIMEOUT=5 became five nanoseconds, after which every
+// request timed out and nothing said why. `tba config set retries abc` had
+// been refused all along — the same text in the environment is the same
+// mistake, and config.Key.ParseValue is the same judge.
+//
+// format and color are left out: their accepted words are listed where they
+// are read, and base-url is judged when a request is built, both with better
+// messages than a generic one could be. So is a variable a flag has already
+// overridden, because precedence is the whole point of the layering: a flag
+// still beats whatever the environment holds.
+func (s *settingsSet) validateEnv() error {
+	for _, k := range config.Keys {
+		switch k.Kind {
+		case config.KindBool, config.KindInt, config.KindDuration:
+		default:
+			continue
+		}
+		if s.Source(k.Name) != sourceEnv {
+			continue
+		}
+		name := envKey(k.Name)
+		raw := os.Getenv(name)
+		_, err := k.ParseValue(raw)
+		if err == nil {
+			continue
+		}
+		// Only the shape is judged here, in the environment's own terms,
+		// because "5" looks like a perfectly good timeout until you learn it
+		// means five nanoseconds. A value of the right shape but the wrong
+		// size — retries: -1, year: 1800 — belongs to whoever knows the range,
+		// and those messages already name the layer the value came from.
+		if !parsesAs(k.Kind, raw) {
+			return clierr.Usage("%s %q is not %s", name, raw, envWant(k.Kind))
+		}
+	}
+	return nil
+}
+
+// parsesAs reports whether raw is a value of that kind at all, leaving how
+// large or small it is to ParseValue.
+func parsesAs(kind config.Kind, raw string) bool {
+	var err error
+	switch kind {
+	case config.KindBool:
+		_, err = strconv.ParseBool(raw)
+	case config.KindInt:
+		_, err = strconv.Atoi(raw)
+	case config.KindDuration:
+		_, err = time.ParseDuration(raw)
+	}
+	return err == nil
+}
+
+// envWant is the shape a value of that kind has to have, for an error message.
+func envWant(kind config.Kind) string {
+	switch kind {
+	case config.KindBool:
+		return "a boolean (true or false)"
+	case config.KindInt:
+		return "a whole number"
+	case config.KindDuration:
+		return "a duration; write the unit, as in 5s or 1m"
+	default:
+		return "a valid value"
+	}
 }
 
 // settingError reports a bad value, naming where it came from unless it came
