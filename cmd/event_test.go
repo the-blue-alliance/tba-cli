@@ -14,10 +14,13 @@ func TestEventViewTable(t *testing.T) {
 	want := "Event:     NE District Hartford Event\n" +
 		"Key:       2024cthar\n" +
 		"Type:      District\n" +
+		"District:  New England (ne)\n" +
 		"Location:  Hartford, CT, USA\n" +
 		"Venue:     Hartford Public High School\n" +
 		"Dates:     2024-03-22 to 2024-03-24\n" +
-		"Week:      3\n"
+		"Week:      4\n" +
+		"Playoff:   Double elimination (8 alliances)\n" +
+		"Webcast:   https://www.twitch.tv/nefirst_red\n"
 	if out != want {
 		t.Errorf("event view table =\n%q\nwant\n%q", out, want)
 	}

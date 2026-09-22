@@ -54,17 +54,32 @@ func newEventViewCmd() *cobra.Command {
 			return outputData(cmd, event, func() {
 				week := "N/A"
 				if event.Week != nil {
-					week = strconv.Itoa(*event.Week)
+					week = humanWeek(event.Week)
 				}
-				output.PrintKeyValue(cmd.OutOrStdout(),
+				pairs := []string{
 					"Event", event.Name,
 					"Key", event.Key,
 					"Type", event.EventTypeStr,
+				}
+				pairs = appendPair(pairs, "District", districtName(event.District))
+				pairs = append(pairs,
 					"Location", output.FormatLocation(event.City, event.StateProv, event.Country),
 					"Venue", event.LocationName,
 					"Dates", fmt.Sprintf("%s to %s", event.StartDate, event.EndDate),
 					"Week", week,
 				)
+				pairs = appendPair(pairs, "Playoff", playoffTypeName(event.PlayoffType))
+				pairs = appendPair(pairs, "Timezone", event.Timezone)
+				pairs = appendPair(pairs, "Website", event.Website)
+				if event.FirstEventCode != nil {
+					pairs = appendPair(pairs, "First Code", *event.FirstEventCode)
+				}
+				// One line per webcast: an event can stream several fields at
+				// once, and each needs its own link.
+				for _, w := range event.Webcasts {
+					pairs = appendPair(pairs, "Webcast", webcastURL(w))
+				}
+				output.PrintKeyValue(cmd.OutOrStdout(), pairs...)
 			})
 		},
 	}

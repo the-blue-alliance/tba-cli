@@ -33,6 +33,11 @@ type Event struct {
 	Webcasts     []Webcast `json:"webcasts"`
 	PlayoffType  *int      `json:"playoff_type"`
 	District     *District `json:"district"`
+	Website      string    `json:"website"`
+	Timezone     string    `json:"timezone"`
+	// FirstEventCode is the event's code in FIRST's own systems, which is not
+	// always the same as EventCode and is absent for unofficial events.
+	FirstEventCode *string `json:"first_event_code"`
 }
 
 type Webcast struct {
