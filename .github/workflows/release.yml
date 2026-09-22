@@ -10,8 +10,12 @@ permissions:
 
 # One release at a time, and never cancel one: a half-finished release has
 # already published artifacts. Two tags pushed together queue up instead.
+#
+# The group is fixed rather than keyed on the ref, because a ref-keyed group
+# only serialises a tag against itself — which cannot happen — and let two
+# different tags release side by side over the same repository.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
