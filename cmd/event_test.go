@@ -299,3 +299,39 @@ func TestEventSubcommandsAreRegistered(t *testing.T) {
 		}
 	}
 }
+
+// The raw event sub-resources have no stable schema: table mode passes the
+// body through and every other format falls back to JSON.
+func TestRawEventCommandsHonorFormat(t *testing.T) {
+	cases := []struct {
+		command string
+		path    string
+		body    string
+	}{
+		{"district-points", "/event/2024cthar/district_points", districtPoints2024ctharJSON},
+		{"predictions", "/event/2024cthar/predictions", predictions2024ctharJSON},
+		{"insights", "/event/2024cthar/insights", insights2024ctharJSON},
+	}
+	for _, tc := range cases {
+		t.Run(tc.command, func(t *testing.T) {
+			for _, format := range []string{"json", "csv", "tsv", "markdown"} {
+				t.Run(format, func(t *testing.T) {
+					srv := newFakeTBA(t, map[string]any{tc.path: tc.body})
+					out, _, err := runCmd(t, srv, "event", tc.command, "2024cthar", "--format", format)
+					requireNoError(t, err, "")
+					if _, ok := decodeJSON(t, out).(map[string]any); !ok {
+						t.Fatalf("want a JSON object, got:\n%s", out)
+					}
+				})
+			}
+			t.Run("table", func(t *testing.T) {
+				srv := newFakeTBA(t, map[string]any{tc.path: tc.body})
+				out, _, err := runCmd(t, srv, "event", tc.command, "2024cthar", "--format", "table")
+				requireNoError(t, err, "")
+				if strings.TrimSpace(out) != strings.TrimSpace(tc.body) {
+					t.Errorf("table mode should pass the body through, got:\n%s", out)
+				}
+			})
+		})
+	}
+}

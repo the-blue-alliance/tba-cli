@@ -73,11 +73,6 @@ func resolveFormat(cmd *cobra.Command) (string, error) {
 	return "table", nil
 }
 
-func wantJSON(cmd *cobra.Command) bool {
-	f, err := resolveFormat(cmd)
-	return err == nil && f == "json"
-}
-
 func jqExpr(cmd *cobra.Command) string {
 	jqFlag, _ := cmd.Flags().GetString("jq")
 	return jqFlag

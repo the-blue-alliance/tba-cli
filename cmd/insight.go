@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
 func newInsightCmd() *cobra.Command {
@@ -41,11 +40,9 @@ func newRawInsightCmd(use, short, resource string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if wantJSON(cmd) {
-				return output.PrintJSONWithFilter(cmd.OutOrStdout(), raw, jqExpr(cmd))
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(raw))
-			return nil
+			return outputData(cmd, raw, func() {
+				fmt.Fprintln(cmd.OutOrStdout(), string(raw))
+			})
 		},
 	}
 	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
