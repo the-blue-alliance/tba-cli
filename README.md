@@ -795,7 +795,7 @@ For `csv` and `tsv` each file carries exactly the columns the matching `tba even
 
 **Reproducibility.** Two exports of the same data produce byte-identical files. Nothing written carries a timestamp or a version string, every listing has a fixed order (matches in play order, teams by number, rankings by rank, oprs by team, awards by award type then team), lines end with LF on every platform, and files arrive with mode `0644`.
 
-**Nothing half-done.** Every file is written to a temporary file in the target directory, and the whole set is renamed into place only once all of them have been fetched. A failure part way through — a 500 on the seventh dataset — leaves the directory exactly as it was. An existing file is never overwritten without `--force`, and the clash is found before the first request, with every conflicting path listed at once:
+**Nothing half-done.** Every file is written to a temporary file in the target directory, and the whole set is renamed into place only once all of them have been fetched. A failure part way through — a 500 on the seventh dataset, or a rename the filesystem refuses on the third file — leaves the directory exactly as it was: files already renamed are taken back out, and under `--force` the files that were replaced are put back. An existing file is never overwritten without `--force`, and the clash is found before the first request, and again immediately before the renames, so a file that appeared while the export was fetching is refused rather than silently replaced. Every conflicting path is listed at once:
 
 ```
 $ tba event export 2024cthar --to csv

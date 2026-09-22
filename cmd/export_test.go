@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -473,6 +474,119 @@ func TestEventExportLeavesNoFilesBehindWhenADatasetFails(t *testing.T) {
 	}
 	if body, _ := os.ReadFile(keep); string(body) != "keep me\n" {
 		t.Errorf("the pre-existing file changed: %q", body)
+	}
+}
+
+// failNthRename makes the nth rename fail, so a test can stand in the middle
+// of the rename phase and look at the directory. Only that one call fails:
+// putting the directory back is itself done with renames.
+func failNthRename(t *testing.T, n int) {
+	t.Helper()
+	calls := 0
+	original := renameFile
+	renameFile = func(from, to string) error {
+		calls++
+		if calls == n {
+			return errors.New("rename refused")
+		}
+		return original(from, to)
+	}
+	t.Cleanup(func() { renameFile = original })
+}
+
+// Renaming N of M files and then failing used to leave a directory that was
+// neither the old export nor the new one.
+func TestEventExportRenameFailureLeavesNothingBehind(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	failNthRename(t, 3)
+
+	_, _, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir)
+	if err == nil {
+		t.Fatal("a failing rename should fail the export")
+	}
+	requireErrorContains(t, err, "rename refused")
+	if got := dirEntries(t, dir); len(got) != 0 {
+		t.Errorf("directory = %v, want nothing: not the files that were renamed, not the staged ones", got)
+	}
+}
+
+// --force replaces files that are already there, so a failure has to put them
+// back: half of last week's export overwritten and the rest untouched is the
+// worst of both.
+func TestEventExportRenameFailureRestoresTheFilesForceReplaced(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	before := map[string]string{}
+	for _, dataset := range exportDatasetNames {
+		body := "last week's " + dataset + "\n"
+		before[dataset] = body
+		if err := os.WriteFile(exportedPath(dir, dataset, "csv"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failNthRename(t, len(exportDatasetNames)+3)
+
+	_, _, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir, "--force")
+	if err == nil {
+		t.Fatal("a failing rename should fail the export")
+	}
+	for dataset, want := range before {
+		got := readExported(t, dir, dataset, "csv")
+		if got != want {
+			t.Errorf("%s = %q, want the original %q back", dataset, got, want)
+		}
+	}
+	if got := dirEntries(t, dir); len(got) != len(exportDatasetNames) {
+		t.Errorf("directory = %v, want only the %d original files", got, len(exportDatasetNames))
+	}
+}
+
+// A successful --force run keeps no copies of what it replaced: the aside
+// files are not the user's business and would show up in the next export's
+// clash check if they were left behind.
+func TestEventExportForceLeavesNoBackupsBehind(t *testing.T) {
+	srv := newExportServer(t)
+	dir := t.TempDir()
+	for _, dataset := range exportDatasetNames {
+		if err := os.WriteFile(exportedPath(dir, dataset, "csv"), []byte("stale\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", dir, "--force")
+	requireNoError(t, err, stderr)
+
+	if got := dirEntries(t, dir); len(got) != len(exportDatasetNames) {
+		t.Errorf("directory = %v, want exactly the %d exported files", got, len(exportDatasetNames))
+	}
+}
+
+// The overwrite check runs again immediately before the renames. The fetches
+// in between take seconds, which is plenty of time for someone to write one
+// of these names in another terminal.
+func TestEventExportRefusesAFileThatAppearedWhileItWasFetching(t *testing.T) {
+	dir := t.TempDir()
+	appeared := filepath.Join(dir, "2024cthar-matches.csv")
+	if err := os.WriteFile(appeared, []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tmp, err := os.CreateTemp(dir, ".tba-export-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	err = commitExport(dir, []staged{{temp: tmp.Name(), final: appeared}}, false)
+	if err == nil {
+		t.Fatal("want a refusal for a file that appeared after the first check")
+	}
+	requireErrorContains(t, err, "refusing to overwrite")
+	requireErrorContains(t, err, appeared)
+	if body, _ := os.ReadFile(appeared); string(body) != "mine\n" {
+		t.Errorf("the file that appeared was modified: %q", body)
 	}
 }
 

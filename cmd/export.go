@@ -32,6 +32,15 @@ const exportFileMode = 0o644
 // a shell glob, and the suffix is what os.CreateTemp fills with random digits.
 const exportTempPattern = ".tba-export-*"
 
+// exportBackupPattern names the copies --force takes of the files it is about
+// to replace, so that a rename failing part way through the set can put the
+// directory back the way it found it.
+const exportBackupPattern = ".tba-export-backup-*"
+
+// renameFile is os.Rename, replaceable so that a test can see what an export
+// does when the filesystem refuses half way through the rename phase.
+var renameFile = os.Rename
+
 func newEventExportCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "export <key>",
@@ -360,7 +369,6 @@ func runEventExport(cmd *cobra.Command, opts exportOptions) error {
 	// once every one of them is on disk. Renaming within a directory is the
 	// cheapest thing the filesystem does, so the window where an export is
 	// visibly incomplete is as small as it can be made.
-	type staged struct{ temp, final string }
 	var pending []staged
 	discard := func() {
 		for _, s := range pending {
@@ -397,27 +405,116 @@ func runEventExport(cmd *cobra.Command, opts exportOptions) error {
 		summary.Written = append(summary.Written, paths[i])
 	}
 
-	for _, s := range pending {
-		if err := os.Rename(s.temp, s.final); err != nil {
-			discard()
-			return err
-		}
+	if err := commitExport(opts.dir, pending, opts.force); err != nil {
+		discard()
+		return err
 	}
 	return reportExport(cmd, opts, summary)
 }
 
-// refuseExistingFiles reports every file that is already there, so that one
-// run tells the user about all of them rather than one per attempt.
-func refuseExistingFiles(paths []string) error {
+// staged is one file on its way into place: the temporary copy that holds its
+// bytes, and the name it is going to have.
+type staged struct{ temp, final string }
+
+// commitExport renames the staged files into place. Either all of them arrive
+// or none of them do, and a run that fails leaves the directory exactly as it
+// found it.
+//
+// The check for existing files is made here as well as at the start of the
+// run. The fetches in between take seconds — long enough for another process,
+// or the user in another terminal, to write one of these names — and a file
+// that appeared in the meantime is precisely the file that must not be
+// silently replaced.
+//
+// Under --force the files that are about to be replaced are moved aside
+// rather than overwritten. Renaming N of M files and then failing used to
+// leave a directory that was neither the old export nor the new one, with no
+// way back to either.
+func commitExport(dir string, pending []staged, force bool) error {
+	finals := make([]string, len(pending))
+	for i, s := range pending {
+		finals[i] = s.final
+	}
+	existing := existingFiles(finals)
+	if len(existing) > 0 && !force {
+		return overwriteError(existing)
+	}
+
+	// backups maps each copy set aside to the name it came from.
+	var backups []staged
+	undo := func(renamed []string) {
+		for _, p := range renamed {
+			_ = os.Remove(p)
+		}
+		for _, b := range backups {
+			_ = renameFile(b.temp, b.final)
+		}
+	}
+
+	for _, p := range existing {
+		aside, err := reserveExportName(dir, exportBackupPattern)
+		if err != nil {
+			undo(nil)
+			return err
+		}
+		if err := renameFile(p, aside); err != nil {
+			_ = os.Remove(aside)
+			undo(nil)
+			return err
+		}
+		backups = append(backups, staged{temp: aside, final: p})
+	}
+
+	var renamed []string
+	for _, s := range pending {
+		if err := renameFile(s.temp, s.final); err != nil {
+			undo(renamed)
+			return err
+		}
+		renamed = append(renamed, s.final)
+	}
+	for _, b := range backups {
+		_ = os.Remove(b.temp)
+	}
+	return nil
+}
+
+// reserveExportName claims a name in dir that nothing else will take, for a
+// file that is about to be renamed into it.
+func reserveExportName(dir, pattern string) (string, error) {
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(name)
+		return "", err
+	}
+	return name, nil
+}
+
+// existingFiles returns the paths that are already there, in the order given.
+func existingFiles(paths []string) []string {
 	var clashes []string
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
 			clashes = append(clashes, p)
 		}
 	}
-	if len(clashes) == 0 {
-		return nil
+	return clashes
+}
+
+// refuseExistingFiles reports every file that is already there, so that one
+// run tells the user about all of them rather than one per attempt.
+func refuseExistingFiles(paths []string) error {
+	if clashes := existingFiles(paths); len(clashes) > 0 {
+		return overwriteError(clashes)
 	}
+	return nil
+}
+
+func overwriteError(clashes []string) error {
 	return fmt.Errorf("refusing to overwrite %d existing file(s); pass --force to replace them:\n  %s",
 		len(clashes), strings.Join(clashes, "\n  "))
 }
