@@ -182,6 +182,7 @@ func TestEveryEventSubcommandValidatesItsKey(t *testing.T) {
 		{"event", "matches"},
 		{"event", "rankings"},
 		{"event", "alliances"},
+		{"event", "team-statuses"},
 		{"event", "awards"},
 		{"event", "oprs"},
 		{"event", "district-points"},
