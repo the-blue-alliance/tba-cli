@@ -47,6 +47,9 @@ func NewRootCmd() *cobra.Command {
 			if _, err := resolveFormat(cmd); err != nil {
 				return err
 			}
+			if err := checkJQ(cmd); err != nil {
+				return err
+			}
 			_, err := colorMode(cmd)
 			return err
 		},

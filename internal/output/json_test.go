@@ -193,6 +193,24 @@ func TestPrintJSONWithFilterMultipleRawStrings(t *testing.T) {
 	}
 }
 
+func TestValidateJQ(t *testing.T) {
+	for _, expr := range []string{"", ".", ".[0].key", ".[] | select(.key == \"a\")", ".a.b?"} {
+		if err := ValidateJQ(expr); err != nil {
+			t.Errorf("ValidateJQ(%q) = %v, want it accepted", expr, err)
+		}
+	}
+	for _, expr := range []string{".[", "{", ". |", "..foo"} {
+		err := ValidateJQ(expr)
+		if err == nil {
+			t.Errorf("ValidateJQ(%q) = nil, want an error", expr)
+			continue
+		}
+		if !strings.Contains(err.Error(), "invalid jq expression") {
+			t.Errorf("ValidateJQ(%q) = %v", expr, err)
+		}
+	}
+}
+
 func TestPrintJSONWithFilterRawIgnoredWithoutAnExpression(t *testing.T) {
 	var buf bytes.Buffer
 	if err := PrintJSONWithFilter(&buf, "a string", "", true); err != nil {

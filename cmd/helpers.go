@@ -135,6 +135,19 @@ func jqExpr(cmd *cobra.Command) string {
 	return settings(cmd).String("jq")
 }
 
+// checkJQ rejects a --jq expression that is not a jq program.
+//
+// It runs before the command does any work, so a typo costs no request, and it
+// is a usage error: an expression that does not parse is a mistake in the
+// command line. An expression that parses but then fails on the data is a
+// failure of the run, and keeps exit 1.
+func checkJQ(cmd *cobra.Command) error {
+	if err := output.ValidateJQ(jqExpr(cmd)); err != nil {
+		return clierr.Wrap(clierr.KindUsage, err)
+	}
+	return nil
+}
+
 // rawOutput reports whether --raw-output was given: jq string results are
 // printed without their quotes, as jq -r does.
 func rawOutput(cmd *cobra.Command) bool {

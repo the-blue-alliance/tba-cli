@@ -332,6 +332,31 @@ func TestSortOnANonListJSONPayloadIsAUsageError(t *testing.T) {
 	}
 }
 
+// A jq expression that does not parse is a mistake in the command line, so it
+// exits 2 and costs no request; one that parses but fails on the data is a
+// failure of the run, and stays exit 1.
+func TestMalformedJQIsAUsageError(t *testing.T) {
+	for _, expr := range []string{".[", "{", "..foo", ". |"} {
+		t.Run(expr, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+			err := requireExitCode(t, clierr.ExitUsage, srv, "district", "list", "--year", "2024", "--jq", expr)
+			requireErrorContains(t, err, "invalid jq expression")
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a usage error must not reach the API, got %v", got)
+			}
+		})
+	}
+}
+
+func TestJQRuntimeFailureIsARuntimeError(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	// A valid program that cannot be applied to this data.
+	err := requireExitCode(t, clierr.ExitFailure, srv, "district", "list", "--year", "2024", "--jq", ".[] | .key + 1")
+	if err == nil {
+		t.Fatal("want an error")
+	}
+}
+
 // An empty table is ambiguous: nothing there, or a filter that cancelled
 // itself out, or a mistyped key. The note says which, on stderr, so stdout
 // stays a well-formed empty table.
