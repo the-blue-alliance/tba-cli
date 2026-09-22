@@ -1252,49 +1252,49 @@ invocation looks like. The group commands also answer to their plurals:
 
 | Command | Description |
 |---------|-------------|
-| `tba auth login` | Store a TBA API key, after checking it against the API |
+| `tba auth login` | Authenticate with the TBA API |
 | `tba auth logout` | Remove the stored API key |
-| `tba auth status` | Show whether a key is stored and whether it works |
+| `tba auth status` | Show authentication status |
 | `tba cache clear` | Remove all cached responses |
 | `tba cache info` | Show the cache directory, size and entry ages |
-| `tba cache list` | List cached responses, one row each |
-| `tba cache prune` | Remove cache entries untouched for `--older-than` (default 30d) |
-| `tba completion <shell>` | Print a completion script for bash, zsh, fish or powershell |
+| `tba cache list` | List cached responses |
+| `tba cache prune` | Remove cache entries older than a given age (`--older-than`, default 30d) |
+| `tba completion <shell>` | Generate the completion script for bash, zsh, fish or powershell |
 | `tba config get <key>` | Print one setting's effective value |
-| `tba config list` | Show every setting with its value and source |
+| `tba config list` | Show every setting with its effective value and source |
 | `tba config path` | Print the path of the config file |
 | `tba config set <key> <value>` | Write a setting to the config file |
 | `tba config unset <key>` | Remove a setting from the config file |
 | `tba district events <key>` | List a district's events |
-| `tba district list` | List districts (defaults to the current season) |
-| `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--pre-dcmp`, `--detail`) |
+| `tba district list` | List a season's districts |
+| `tba district rankings <key>` | Show a district's season rankings (`--cutoff N`, `--pre-dcmp`, `--detail`) |
 | `tba district teams <key>` | List a district's teams |
 | `tba docs completions` | Write bash, zsh and fish completion scripts (hidden) |
 | `tba docs man` | Write man pages for every command (hidden) |
 | `tba docs markdown` | Write markdown documentation for every command (hidden) |
-| `tba event alliances <key>` | Show playoff alliances and how far each got |
+| `tba event alliances <key>` | Show playoff alliances |
 | `tba event awards <key>` | Show an event's awards |
-| `tba event district-points <key>` | Show district points (`--tiebreakers`) |
-| `tba event export <key> --to csv\|tsv\|json` | Export an event's datasets to files (`--dir`, `--only`, `--prefix`, `--force`, `--dry-run`) |
-| `tba event insights <key>` | Show event insights (`--level qual\|playoff`) |
-| `tba event list` | List events (defaults to the current season), with `--week`, `--type`, `--district`, `--state`, `--country` and `--team` filters |
+| `tba event district-points <key>` | Show the district points an event awarded (`--tiebreakers`) |
+| `tba event export <key> --to csv\|tsv\|json` | Export an event's data to files (`--dir`, `--only`, `--prefix`, `--force`, `--dry-run`) |
+| `tba event insights <key>` | Show the statistics TBA computed for an event (`--level qual\|playoff`) |
+| `tba event list` | List a season's events (`--week`, `--type`, `--district`, `--state`, `--country`, `--team`) |
 | `tba event matches <key>` | List an event's matches (`--team`, `--level`, `--upcoming`) |
-| `tba event oprs <key>` | Show OPR/DPR/CCWM, highest OPR first |
-| `tba event predictions <key>` | Show match predictions (`--rankings`, `--stats`) |
+| `tba event oprs <key>` | Show OPR, DPR and CCWM for each team |
+| `tba event predictions <key>` | Show TBA's match predictions (`--rankings`, `--stats`) |
 | `tba event rankings <key>` | Show qualification rankings |
 | `tba event team-statuses <key>` | Show where every team at an event stands (`--overall`) |
 | `tba event teams <key>` | List the teams at an event |
 | `tba event view <key>` | Show an event's details |
-| `tba event watch <key>` | Follow an event live (`--interval`, `--for`, `--max-polls`, `--rankings`, `--team`) |
+| `tba event watch <key>` | Follow an event's matches as they are played (`--interval`, `--for`, `--max-polls`, `--rankings`, `--team`) |
 | `tba insight leaderboards` | Show a season's leaderboards (`--board`, `--limit N`, `--expand`) |
 | `tba insight notables` | Show a season's notable teams (`--board`) |
-| `tba match view <key>` | Show one match in full, with its score breakdown (`--full`) |
+| `tba match view <key>` | Show one match in full (`--full`) |
 | `tba open <target>` | Open a team, event or match on thebluealliance.com (`--print`) |
-| `tba status` | Show the TBA API status |
+| `tba status` | Show TBA API status |
 | `tba team awards <number>` | List a team's awards (`--year`, `--type`) |
-| `tba team districts <number>` | List the districts a team has been in |
-| `tba team events <number>` | List the events a team attends in a season |
-| `tba team list` | List all teams (defaults to the current season) |
+| `tba team districts <number>` | List a team's districts |
+| `tba team events <number>` | List a team's events |
+| `tba team list` | List a season's teams |
 | `tba team matches <number>` | List a team's matches (`--event`, `--level`, `--upcoming`) |
 | `tba team media <number>` | List a team's media |
 | `tba team next <number> [event]` | Show a team's next match (`--all`) |
@@ -1303,7 +1303,7 @@ invocation looks like. The group commands also answer to their plurals:
 | `tba team standing <number> [event]` | Show how a team stands at an event |
 | `tba team view <number>` | Show a team's details |
 | `tba team years <number>` | List the seasons a team has competed in |
-| `tba version` | Show the version and build metadata |
+| `tba version` | Show the tba version |
 
 `tba docs` is hidden from `tba --help`: it exists to generate the man pages,
 markdown reference and completion scripts that a release archive ships, and it

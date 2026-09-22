@@ -27,7 +27,7 @@ func newDistrictCmd() *cobra.Command {
 func newDistrictListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
-		Short: "List districts for a year",
+		Short: "List a season's districts",
 		Example: `  tba district list --year 2024
   tba districts list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -58,7 +58,7 @@ func newDistrictListCmd() *cobra.Command {
 func newDistrictEventsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "events <key>",
-		Short: "List district events",
+		Short: "List a district's events",
 		Example: `  tba district events 2024ne
   tba district events 2024ne --format csv`,
 		Args: exactArgs(1, "a district key (e.g. tba district events 2024ne)"),
@@ -84,7 +84,7 @@ func newDistrictEventsCmd() *cobra.Command {
 func newDistrictTeamsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "teams <key>",
-		Short: "List district teams",
+		Short: "List a district's teams",
 		Example: `  tba district teams 2024ne
   tba district teams 2024ne --format tsv`,
 		Args: exactArgs(1, "a district key (e.g. tba district teams 2024ne)"),
@@ -110,7 +110,7 @@ func newDistrictTeamsCmd() *cobra.Command {
 func newDistrictRankingsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "rankings <key>",
-		Short: "Show district rankings",
+		Short: "Show a district's season rankings",
 		Long: `Show a district's season rankings, one row per team.
 
 A team's points come from its two qualifying district events, shown as Event 1

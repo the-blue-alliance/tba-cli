@@ -47,7 +47,7 @@ type cacheInfoReport struct {
 func newCacheInfoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "info",
-		Short: "Show cache directory, size and entry ages",
+		Short: "Show the cache directory, size and entry ages",
 		Example: `  tba cache info
   tba cache info --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -36,10 +36,10 @@ func newTeamCmd() *cobra.Command {
 func newTeamViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <number>",
-		Short: "View team info",
+		Short: "Show a team's details",
 		Example: `  tba team view 177
   tba team view frc177 --format json
-  tba team view 1073 --jq .nickname -r`,
+  tba team view 177 --jq .nickname -r`,
 		Args: exactArgs(1, "a team number (e.g. tba team view 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateTeamArg(args[0]); err != nil {
@@ -69,7 +69,7 @@ func newTeamViewCmd() *cobra.Command {
 func newTeamListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
-		Short: "List teams",
+		Short: "List a season's teams",
 		Example: `  tba team list --year 2024
   tba teams list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -111,7 +111,7 @@ func newTeamListCmd() *cobra.Command {
 func newTeamEventsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "events <number>",
-		Short: "List team events",
+		Short: "List a team's events",
 		Example: `  tba team events 177 --year 2024
   tba team events frc177 --year 2024 --format csv`,
 		Args: exactArgs(1, "a team number (e.g. tba team events 177)"),
@@ -183,7 +183,7 @@ to drive a loop over a team's whole history.`,
 func newTeamMatchesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "matches <number>",
-		Short: "List team matches for a year",
+		Short: "List a team's matches",
 		Long: `List the matches a team played, for one event or for a whole season.
 
 A season spans several events, and every one of them has a Qual 12, so the
@@ -243,7 +243,7 @@ match table.`,
 func newTeamAwardsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "awards <number>",
-		Short: "List team awards",
+		Short: "List a team's awards",
 		Long: `List the awards a team has won, most recent season first.
 
 Without --year this is the team's whole award history. The event column shows
@@ -260,7 +260,7 @@ an error that lists them.`,
 		Example: `  tba team awards 177
   tba team awards frc177 --year 2024 --format markdown
   tba team awards 177 --type impact
-  tba team awards 177 --type 9`,
+  tba team awards 177 --type 0`,
 		Args: exactArgs(1, "a team number (e.g. tba team awards 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateTeamArg(args[0]); err != nil {
@@ -396,7 +396,7 @@ func teamEventNames(cmd *cobra.Command, client *api.Client, key string, wanted b
 func newTeamMediaCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "media <number>",
-		Short: "List team media",
+		Short: "List a team's media",
 		Example: `  tba team media 177 --year 2024
   tba team media frc177 --year 2024 --jq '.[].view_url' -r`,
 		Args: exactArgs(1, "a team number (e.g. tba team media 177)"),
@@ -430,7 +430,7 @@ func newTeamMediaCmd() *cobra.Command {
 func newTeamRobotsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "robots <number>",
-		Short: "List team robots",
+		Short: "List a team's robots",
 		Example: `  tba team robots 177
   tba team robots frc177 --format csv`,
 		Args: exactArgs(1, "a team number (e.g. tba team robots 177)"),
@@ -458,7 +458,7 @@ func newTeamRobotsCmd() *cobra.Command {
 func newTeamDistrictsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "districts <number>",
-		Short: "List team districts",
+		Short: "List a team's districts",
 		Example: `  tba team districts 177
   tba team districts frc177 --format json`,
 		Args: exactArgs(1, "a team number (e.g. tba team districts 177)"),
