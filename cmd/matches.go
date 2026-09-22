@@ -116,13 +116,14 @@ func tableColorEnabled(cmd *cobra.Command, format string) (bool, error) {
 	return output.ColorEnabledFor(cmd.OutOrStdout(), mode), nil
 }
 
-// colorizeAlliance paints an alliance color in its own color. "tie" and the
+// colorizeAlliance paints the name of an alliance in its own color, whether it
+// is spelled as the API does ("red") or as a label ("Red"). "tie" and the
 // empty string of an unplayed match are left alone.
 func colorizeAlliance(s string, color bool) string {
-	switch s {
-	case frc.AllianceRed:
+	switch {
+	case strings.EqualFold(s, frc.AllianceRed):
 		return output.Colorize(s, output.Red, color)
-	case frc.AllianceBlue:
+	case strings.EqualFold(s, frc.AllianceBlue):
 		return output.Colorize(s, output.Blue, color)
 	default:
 		return s
