@@ -138,8 +138,11 @@ func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor f
 		return err
 	}
 
+	// The clock is read once, here at the command layer, and handed down;
+	// the row builders never consult it themselves.
+	now := nowFunc()
 	headers := matchHeaders
-	rows, marked := matchTableRows(matches, playoffTypeFor, color)
+	rows, marked := matchTableRows(matches, playoffTypeFor, color, now)
 	if listing.withEvent {
 		headers = headersWithEvent()
 		for i := range rows {
@@ -213,8 +216,7 @@ func emptyMatchNote(cmd *cobra.Command, listing matchListing) string {
 //
 // color is passed in rather than resolved here so that the callers that write
 // to a file — `event export` — can ask for the same cells without escapes.
-func matchTableRows(matches []api.Match, playoffTypeFor func(api.Match) *int, color bool) (rows [][]string, marked bool) {
-	now := nowFunc()
+func matchTableRows(matches []api.Match, playoffTypeFor func(api.Match) *int, color bool, now time.Time) (rows [][]string, marked bool) {
 	return matchRows(matches, playoffTypeFor, color, frc.NeedsDate(matches, time.Local, now), now)
 }
 
