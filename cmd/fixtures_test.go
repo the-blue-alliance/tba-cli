@@ -548,6 +548,19 @@ const predictions2024ctharJSON = `{
   ]
 }`
 
+// Two matches the model will not separate: one at an exact half, one with two
+// equal predicted scores. Both name a winner anyway.
+const predictionsTied2024ctharJSON = `{
+  "match_predictions": {
+    "qual": {
+      "2024cthar_qm20": {"red": {"score": 88.4}, "blue": {"score": 72.1}, "winning_alliance": "red", "prob": 0.5},
+      "2024cthar_qm21": {"red": {"score": 80}, "blue": {"score": 80}, "winning_alliance": "red", "prob": 0.6142},
+      "2024cthar_qm22": {"red": {"score": 84.2}, "blue": {"score": 63.1}, "winning_alliance": "red", "prob": 0.7853}
+    },
+    "playoff": {}
+  }
+}`
+
 // The matches behind the predictions above, as /event/2024cthar/matches sends
 // them: the same keys, so the prediction table can label them and name the
 // teams. The final is deliberately missing, since a prediction can name a

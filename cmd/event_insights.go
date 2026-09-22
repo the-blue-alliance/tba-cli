@@ -31,7 +31,8 @@ teams, both from the event's match list; that list is fetched once alongside
 the predictions, and an event without one still gets its labels from the match
 keys. A match the model has nothing to say about comes back as a 0-0
 prediction, and its winner and confidence are left blank rather than reported
-as a coin flip.
+as a coin flip. So is one the model calls even: an exact 50% or two equal
+predicted scores is the model declining to pick, not a prediction of red.
 
 --rankings switches to the predicted qualification ranking, Team | Predicted
 Rank | Range, where Range bounds the rank the model allows for.
@@ -184,7 +185,7 @@ func matchPredictionTable(rounds *api.MatchPredictionRounds, byKey map[string]ap
 				m = matchFromKey(k)
 			}
 			winner, confidence := allianceLabel(p.WinningAlliance), formatConfidence(p.Prob)
-			if unmodelled(p) {
+			if unmodelled(p) || tied(p) {
 				// TBA answers for a match it cannot model with 0-0, and then
 				// names a winner anyway at a confidence of about a half.
 				// "Red / 50%" is not a prediction; it is the absence of one.
@@ -209,6 +210,17 @@ func matchPredictionTable(rounds *api.MatchPredictionRounds, byKey map[string]ap
 // expected to score exactly nothing, which no real prediction does.
 func unmodelled(p api.MatchPrediction) bool {
 	return p.Red.Score == 0 && p.Blue.Score == 0
+}
+
+// tied reports whether the model has called it even: an exact half, or two
+// alliances it expects to score the same. Naming a winner there is picking a
+// side the model did not pick, and "Red / 50.00%" reads as a prediction when
+// it is the model saying it cannot separate them.
+func tied(p api.MatchPrediction) bool {
+	if p.Prob != nil && *p.Prob == 0.5 {
+		return true
+	}
+	return p.Red.Score == p.Blue.Score
 }
 
 // allianceLabel titles an alliance colour, leaving an unpredicted match blank
