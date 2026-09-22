@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"time"
@@ -140,9 +141,32 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	w := cmd.OutOrStdout()
 	table := output.Table{Headers: headers, Rows: rows}
 
-	if format == "json" {
-		return output.PrintJSONWithFilter(w, data, jqExpr(cmd), rawOutput(cmd))
+	// Sorting runs before column selection so that a table can be ordered by a
+	// column the user chose not to display.
+	sortSpec, _ := cmd.Flags().GetString("sort")
+	var order []int
+	if sortSpec != "" {
+		if order, err = table.SortOrder(sortSpec); err != nil {
+			return err
+		}
+		table = table.Reorder(order)
 	}
+
+	columns, _ := cmd.Flags().GetString("columns")
+	if format == "json" {
+		if columns != "" {
+			return errors.New("--columns applies to tabular formats; use --jq to shape JSON")
+		}
+		// --sort is about the order of the result, not its shape, so it also
+		// reorders the JSON array the table was built from.
+		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
+	}
+	if columns != "" {
+		if table, err = table.SelectColumns(columns); err != nil {
+			return err
+		}
+	}
+
 	noHeaders, _ := cmd.Flags().GetBool("no-headers")
 	return output.Render(w, table, output.RenderOptions{
 		Format:    format,

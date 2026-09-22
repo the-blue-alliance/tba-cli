@@ -129,6 +129,9 @@ func (t Table) Reorder(order []int) Table {
 // affects the tabular formats, which is better than reshaping a payload we do
 // not understand.
 func PermuteSlice(data interface{}, order []int) interface{} {
+	if len(order) == 0 {
+		return data
+	}
 	v := reflect.ValueOf(data)
 	if !v.IsValid() {
 		return data
