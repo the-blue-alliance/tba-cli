@@ -30,6 +30,7 @@ func newEventCmd() *cobra.Command {
 	eventCmd.AddCommand(newEventDistrictPointsCmd())
 	eventCmd.AddCommand(newEventPredictionsCmd())
 	eventCmd.AddCommand(newEventInsightsCmd())
+	eventCmd.AddCommand(newEventExportCmd())
 	return eventCmd
 }
 

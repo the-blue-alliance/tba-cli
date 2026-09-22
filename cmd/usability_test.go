@@ -186,6 +186,7 @@ func TestEveryEventSubcommandValidatesItsKey(t *testing.T) {
 		{"event", "awards"},
 		{"event", "oprs"},
 		{"event", "district-points"},
+		{"event", "export"},
 		{"event", "predictions"},
 		{"event", "insights"},
 	}

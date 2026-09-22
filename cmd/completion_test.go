@@ -53,7 +53,7 @@ func TestEventKeyCompletionFromAWarmCache(t *testing.T) {
 
 func TestEventKeyCompletionCoversEveryEventSubcommand(t *testing.T) {
 	warmCache(t, "event", "list", "--year", "2024")
-	for _, sub := range []string{"view", "teams", "matches", "rankings", "alliances", "awards", "oprs"} {
+	for _, sub := range []string{"view", "teams", "matches", "rankings", "alliances", "awards", "oprs", "export"} {
 		t.Run(sub, func(t *testing.T) {
 			got := complete(t, nil, "event", sub, "2024ct")
 			if len(got) != 1 || !strings.HasPrefix(got[0], "2024cthar\t") {
