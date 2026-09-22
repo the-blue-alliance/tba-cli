@@ -755,6 +755,56 @@ const districtRankingsDCMPFlip2024neJSON = `[
   }
 ]`
 
+// districtRankingsPreDCMPTies2024neJSON has two teams level on pre-DCMP points
+// once the district championship is taken back off, which is what a real
+// district's standings are full of.
+const districtRankingsPreDCMPTies2024neJSON = `[
+  {
+    "team_key": "frc177",
+    "rank": 1,
+    "rookie_bonus": 0,
+    "point_total": 160,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 12, "alliance_points": 16, "award_points": 5, "elim_points": 17, "total": 50},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 16, "award_points": 5, "elim_points": 17, "total": 50},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 15, "alliance_points": 15, "award_points": 10, "elim_points": 20, "total": 60}
+    ]
+  },
+  {
+    "team_key": "frc1073",
+    "rank": 2,
+    "rookie_bonus": 0,
+    "point_total": 150,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 10, "alliance_points": 15, "award_points": 5, "elim_points": 15, "total": 45},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 15, "award_points": 5, "elim_points": 18, "total": 50},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 15, "alliance_points": 10, "award_points": 10, "elim_points": 20, "total": 55}
+    ]
+  },
+  {
+    "team_key": "frc5507",
+    "rank": 3,
+    "rookie_bonus": 0,
+    "point_total": 140,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 11, "alliance_points": 14, "award_points": 5, "elim_points": 15, "total": 45},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 16, "award_points": 5, "elim_points": 17, "total": 50},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 10, "alliance_points": 10, "award_points": 5, "elim_points": 20, "total": 45}
+    ]
+  },
+  {
+    "team_key": "frc230",
+    "rank": 4,
+    "rookie_bonus": 0,
+    "point_total": 130,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 8, "alliance_points": 12, "award_points": 0, "elim_points": 15, "total": 35},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 10, "alliance_points": 12, "award_points": 5, "elim_points": 18, "total": 45},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 15, "alliance_points": 15, "award_points": 0, "elim_points": 20, "total": 50}
+    ]
+  }
+]`
+
 const teamAwards177JSON = `[
   {
     "name": "Regional Chairman's Award",
