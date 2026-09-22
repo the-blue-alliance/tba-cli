@@ -248,3 +248,92 @@ type TeamEventAllianceStatus struct {
 	Pick   int             `json:"pick"`
 	Backup *AllianceBackup `json:"backup"`
 }
+
+// InsightLeaderboard is one board from /insights/leaderboards/{year}. Name is
+// the machine name the API uses, e.g. "typed_leaderboard_blue_banners".
+type InsightLeaderboard struct {
+	Name string                 `json:"name"`
+	Year int                    `json:"year"`
+	Data InsightLeaderboardData `json:"data"`
+}
+
+// InsightLeaderboardData holds a board's rankings, best first. KeyType says
+// what the keys name: "team", "event" or "match".
+type InsightLeaderboardData struct {
+	KeyType  string                      `json:"key_type"`
+	Rankings []InsightLeaderboardRanking `json:"rankings"`
+}
+
+// InsightLeaderboardRanking is one value and every key that reached it. A tie
+// is expressed as several keys sharing a single entry.
+type InsightLeaderboardRanking struct {
+	Keys  []string `json:"keys"`
+	Value float64  `json:"value"`
+}
+
+// InsightNotable is one board from /insights/notables/{year}, e.g.
+// "notables_hall_of_fame".
+type InsightNotable struct {
+	Name string             `json:"name"`
+	Year int                `json:"year"`
+	Data InsightNotableData `json:"data"`
+}
+
+// InsightNotableData holds the teams a notable board lists.
+type InsightNotableData struct {
+	Entries []InsightNotableEntry `json:"entries"`
+}
+
+// InsightNotableEntry is one team on a notable board. Context names whatever
+// earned the entry -- the events, years or awards behind it.
+type InsightNotableEntry struct {
+	TeamKey string   `json:"team_key"`
+	Context []string `json:"context"`
+}
+
+// EventPredictions is /event/{key}/predictions. Every section is optional: an
+// event TBA has not modelled answers with an empty object or null.
+type EventPredictions struct {
+	MatchPredictions     *MatchPredictionRounds `json:"match_predictions"`
+	MatchPredictionStats map[string]interface{} `json:"match_prediction_stats"`
+	RankingPredictions   []RankingPrediction    `json:"ranking_predictions"`
+	StatMeanVars         map[string]interface{} `json:"stat_mean_vars"`
+}
+
+// MatchPredictionRounds splits the predicted matches into the qualification
+// and playoff rounds, each keyed by match key.
+type MatchPredictionRounds struct {
+	Qual    map[string]MatchPrediction `json:"qual"`
+	Playoff map[string]MatchPrediction `json:"playoff"`
+}
+
+// MatchPrediction is one predicted match. Prob is the model's confidence in
+// WinningAlliance, as a fraction; it is a pointer because a prediction that
+// carries no probability must not be read as a confidence of zero.
+type MatchPrediction struct {
+	Red             AlliancePrediction `json:"red"`
+	Blue            AlliancePrediction `json:"blue"`
+	WinningAlliance string             `json:"winning_alliance"`
+	Prob            *float64           `json:"prob"`
+}
+
+// AlliancePrediction is one alliance's predicted performance. Everything past
+// the score is season-specific, so only the score is modelled.
+type AlliancePrediction struct {
+	Score float64 `json:"score"`
+}
+
+// RankingPrediction is one team's predicted finish. The API sends it as the
+// pair ["frc177", [1, 1, 2.5, 0, 0]]: Values[0] is the predicted rank and the
+// remaining numbers bound it. See its UnmarshalJSON.
+type RankingPrediction struct {
+	TeamKey string
+	Values  []float64
+}
+
+// EventInsights is /event/{key}/insights. The statistics are season-specific,
+// so each round stays an untyped object that the caller renders generically.
+type EventInsights struct {
+	Qual    map[string]interface{} `json:"qual"`
+	Playoff map[string]interface{} `json:"playoff"`
+}
