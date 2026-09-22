@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // recordedRequest captures what a command actually sent to the API.
@@ -28,6 +30,8 @@ type fakeState struct {
 	mu       sync.Mutex
 	bodies   map[string][]byte
 	etags    map[string]string
+	statuses map[string]int
+	delays   map[string]time.Duration
 	requests []recordedRequest
 }
 
@@ -47,8 +51,10 @@ func newFakeTBA(t *testing.T, routes map[string]any) *httptest.Server {
 	t.Helper()
 
 	st := &fakeState{
-		bodies: make(map[string][]byte, len(routes)),
-		etags:  make(map[string]string),
+		bodies:   make(map[string][]byte, len(routes)),
+		etags:    make(map[string]string),
+		statuses: make(map[string]int),
+		delays:   make(map[string]time.Duration),
 	}
 	for path, v := range routes {
 		st.bodies[path] = toJSONBytes(t, v)
@@ -64,9 +70,24 @@ func newFakeTBA(t *testing.T, routes map[string]any) *httptest.Server {
 		})
 		body, ok := st.bodies[r.URL.Path]
 		etag := st.etags[r.URL.Path]
+		status := st.statuses[r.URL.Path]
+		delay := st.delays[r.URL.Path]
 		st.mu.Unlock()
 
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-r.Context().Done():
+				return
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
+		if status != 0 {
+			w.WriteHeader(status)
+			_, _ = io.WriteString(w, `{"Error":"status `+strconv.Itoa(status)+`"}`)
+			return
+		}
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"Error":"`+r.URL.Path+` not found"}`)
@@ -135,6 +156,27 @@ func setETag(t *testing.T, srv *httptest.Server, path, etag string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.etags[path] = etag
+}
+
+// setStatus makes the fake answer path with an HTTP status instead of a body,
+// so tests can exercise the retry and error paths.
+func setStatus(t *testing.T, srv *httptest.Server, path string, code int) {
+	t.Helper()
+	st := stateFor(t, srv)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.statuses[path] = code
+}
+
+// setDelay makes the fake hold a request for d before answering, or until the
+// client gives up, which is how the --timeout tests trip the per-request
+// deadline.
+func setDelay(t *testing.T, srv *httptest.Server, path string, d time.Duration) {
+	t.Helper()
+	st := stateFor(t, srv)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.delays[path] = d
 }
 
 // requestsTo returns every request the fake has received so far.
