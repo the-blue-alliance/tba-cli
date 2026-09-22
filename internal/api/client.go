@@ -8,7 +8,9 @@ import (
 	"io"
 	"math"
 	"math/rand/v2"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -62,12 +64,18 @@ type Client struct {
 	baseURL  string
 	cache    *cache.Cache
 	useCache bool
+	offline  bool
 
 	userAgent  string
 	timeout    time.Duration
 	retries    int
 	maxElapsed time.Duration
 	limiter    Limiter
+
+	// notify receives one-line human notes ("using cached copy from 12m
+	// ago"). The package never writes to a stream itself: the caller decides
+	// where a note goes, which in the CLI is stderr.
+	notify func(string)
 
 	// Injectable so that tests can drive the retry loop without sleeping.
 	sleep     func(ctx context.Context, d time.Duration) error
@@ -141,6 +149,21 @@ func WithLimiter(l Limiter) Option {
 	return func(c *Client) { c.limiter = l }
 }
 
+// WithNotifier installs a sink for one-line human notes, such as the warning
+// that a stale cached copy is being served. Each note is a complete line
+// without a trailing newline. Without a notifier the notes are dropped: this
+// package never picks a stream to write to.
+func WithNotifier(f func(string)) Option {
+	return func(c *Client) { c.notify = f }
+}
+
+// WithOffline makes the client answer from the on-disk cache alone. No request
+// is made, no revalidation happens, and a URL that has never been fetched is
+// an error rather than a fetch.
+func WithOffline(b bool) Option {
+	return func(c *Client) { c.offline = b }
+}
+
 func NewClient(baseURL string, opts ...Option) (*Client, error) {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -204,6 +227,13 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 		cached = c.cache.Get(url)
 	}
 
+	if c.offline {
+		if cached == nil {
+			return nil, fmt.Errorf("not cached: %s (run without --offline to fetch)", path)
+		}
+		return []byte(cached.Body), nil
+	}
+
 	body, err := c.send(ctx, url, cached)
 	if errors.Is(err, errStale304) {
 		// Ask again without the conditional headers so a pruned cache entry
@@ -213,7 +243,58 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 			return nil, fmt.Errorf("API returned 304 but no cached response is available")
 		}
 	}
+	if err != nil && cached != nil && ctx.Err() == nil {
+		if reason, ok := fallbackReason(err); ok {
+			c.notef("note: %s unavailable (%s); using cached copy from %s ago",
+				path, reason, cache.FormatAge(c.now().Sub(cached.FetchedAt)))
+			return []byte(cached.Body), nil
+		}
+	}
 	return body, err
+}
+
+// notef hands a one-line note to whatever the caller installed, if anything.
+func (c *Client) notef(format string, args ...interface{}) {
+	if c.notify == nil {
+		return
+	}
+	c.notify(fmt.Sprintf(format, args...))
+}
+
+// fallbackReason reports whether a failed request is the kind where a stale
+// cached copy is better than nothing, and how to describe it in one phrase.
+//
+// The test is "did we fail to reach an answer" rather than "did the server
+// dislike the question": a timeout, a dead connection, a 429 or a 5xx say
+// nothing about the resource, so last week's copy is still the best available
+// answer. A 401 or a 404 is an answer, and serving a cached body over it would
+// hide the very thing the user needs to see.
+func fallbackReason(err error) (string, bool) {
+	var he *httpError
+	if errors.As(err, &he) {
+		if isRetryableStatus(he.status) {
+			return fmt.Sprintf("HTTP %d", he.status), true
+		}
+		return "", false
+	}
+	var ne *netError
+	if errors.As(err, &ne) {
+		if isTimeout(ne.err) {
+			return "timeout", true
+		}
+		return "network error", true
+	}
+	return "", false
+}
+
+// isTimeout reports whether err is a deadline being hit rather than some other
+// transport failure.
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 // send runs one request, retrying retryable failures until the retry budget or
