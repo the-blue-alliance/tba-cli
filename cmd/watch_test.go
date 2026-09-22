@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -957,5 +960,81 @@ func TestEventWatchStopsOnAFinishedEventInJSON(t *testing.T) {
 	got := jsonLines(t, out)
 	if len(got) != 1 || got[0]["type"] != "snapshot" {
 		t.Errorf("want one snapshot line, got:\n%s", out)
+	}
+}
+
+// --- a reader that walked away -----------------------------------------
+
+// withStdoutHangUp makes the hang-up probe answer true from the nth call on,
+// which is how a test breaks a pipe without one.
+func withStdoutHangUp(t *testing.T, from int) {
+	t.Helper()
+	previous := stdoutHungUp
+	calls := 0
+	stdoutHungUp = func(io.Writer) bool {
+		calls++
+		return calls >= from
+	}
+	t.Cleanup(func() { stdoutHungUp = previous })
+}
+
+// `tba event watch ... | head -1` leaves a poller with nobody to talk to: head
+// is gone, but a quiet poll writes nothing, so the broken pipe never surfaces.
+// The descriptor is asked instead, and the watch stops with exit 141 and no
+// message — the reader has already left.
+func TestEventWatchStopsWhenStdoutHangsUp(t *testing.T) {
+	clock := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	withStdoutHangUp(t, 2)
+	srv := watchServer(t)
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	if got := clierr.ExitCode(err); got != clierr.ExitBrokenPipe {
+		t.Errorf("exit code = %d, want %d (broken pipe)", got, clierr.ExitBrokenPipe)
+	}
+	if errOut != "" {
+		t.Errorf("stderr = %q, want nothing: the reader has gone", errOut)
+	}
+	if n := pollCount(t, srv); n != 1 {
+		t.Errorf("polls = %d, want 1: the watch should not poll again", n)
+	}
+	if waits := clock.sleptFor(); len(waits) != 0 {
+		t.Errorf("waited %v, want the watch to stop before the interval", waits)
+	}
+}
+
+// Hung up before the first poll, nothing is fetched at all.
+func TestEventWatchMakesNoRequestWhenStdoutIsAlreadyGone(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	withStdoutHangUp(t, 1)
+	srv := watchServer(t)
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	if got := clierr.ExitCode(err); got != clierr.ExitBrokenPipe {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitBrokenPipe)
+	}
+	if n := pollCount(t, srv); n != 0 {
+		t.Errorf("polls = %d, want none", n)
+	}
+	if errOut != "" {
+		t.Errorf("stderr = %q, want nothing", errOut)
+	}
+}
+
+// A buffer has no descriptor to ask about, which is what every other test in
+// this file relies on.
+func TestStdoutHungUpIgnoresWritersWithoutAFile(t *testing.T) {
+	if hungUp(&bytes.Buffer{}) {
+		t.Error("a buffer cannot hang up")
+	}
+	if writerFile(&bytes.Buffer{}) != nil {
+		t.Error("a buffer has no file behind it")
+	}
+}
+
+// The recording writer the root command wraps stdout in must not hide the file
+// from the probe.
+func TestWriterFileSeesThroughTheRecordingWriter(t *testing.T) {
+	if got := writerFile(&recordingWriter{w: os.Stdout}); got != os.Stdout {
+		t.Errorf("writerFile = %v, want os.Stdout", got)
 	}
 }
