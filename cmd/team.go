@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -203,32 +204,110 @@ func newTeamAwardsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "awards <number>",
 		Short: "List team awards",
+		Long: `List the awards a team has won, most recent season first.
+
+Without --year this is the team's whole award history. The event column shows
+the event's name, which takes one extra request for the team's event list; if
+that request fails the awards are still listed, with the name left blank.
+
+Recipient names the individual who received the award, for awards such as
+Dean's List or Woodie Flowers that go to a person rather than to the team.`,
 		Example: `  tba team awards 177
-  tba team awards frc177 --year 2024 --format markdown`,
+  tba team awards frc177 --year 2024 --format markdown
+  tba team awards 177 --type 0`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
+			key := teamKey(args[0])
 			year, _ := cmd.Flags().GetInt("year")
-			path := fmt.Sprintf("/team/%s/awards", teamKey(args[0]))
+			path := fmt.Sprintf("/team/%s/awards", key)
 			if year > 0 {
-				path = fmt.Sprintf("/team/%s/awards/%d", teamKey(args[0]), year)
+				path = fmt.Sprintf("/team/%s/awards/%d", key, year)
 			}
 			var awards []api.Award
 			if err := client.Get(cmd.Context(), path, &awards); err != nil {
 				return err
 			}
+			if cmd.Flags().Changed("type") {
+				awardType, _ := cmd.Flags().GetInt("type")
+				awards = filterAwardsByType(awards, awardType)
+			}
+			names := teamEventNames(cmd, client, key, len(awards) > 0)
+			sortTeamAwards(awards)
+
 			rows := make([][]string, len(awards))
 			for i, a := range awards {
-				rows[i] = []string{a.EventKey, a.Name, strconv.Itoa(a.Year)}
+				rows[i] = []string{
+					strconv.Itoa(a.Year),
+					names[a.EventKey],
+					a.Name,
+					awardeeNames(a),
+				}
 			}
-			return outputTable(cmd, awards, []string{"Event", "Award", "Year"}, rows)
+			return outputTable(cmd, awards, []string{"Year", "Event", "Award", "Recipient"}, rows)
 		},
 	}
 	c.Flags().Int("year", 0, "Season year (default: all years)")
+	c.Flags().Int("type", -1, "Only awards with this TBA award_type")
 	return c
+}
+
+// filterAwardsByType keeps only the awards with the given award_type.
+func filterAwardsByType(awards []api.Award, awardType int) []api.Award {
+	out := make([]api.Award, 0, len(awards))
+	for _, a := range awards {
+		if a.AwardType == awardType {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// sortTeamAwards puts the most recent season first, with the event key
+// grouping a season's awards together and keeping the order reproducible.
+func sortTeamAwards(awards []api.Award) {
+	sort.SliceStable(awards, func(i, j int) bool {
+		if awards[i].Year != awards[j].Year {
+			return awards[i].Year > awards[j].Year
+		}
+		return awards[i].EventKey < awards[j].EventKey
+	})
+}
+
+// awardeeNames lists the people an award went to. Most awards go to the team
+// itself and have no awardee, which leaves the column empty.
+func awardeeNames(a api.Award) string {
+	var names []string
+	for _, r := range a.Recipients {
+		if r.Awardee != nil && *r.Awardee != "" {
+			names = append(names, *r.Awardee)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// teamEventNames maps event key to event name from the team's full event
+// list, in one request covering every season.
+//
+// It is decoration, not data: a team's awards are worth printing even when
+// the event list cannot be fetched, so a failure here yields an empty map
+// rather than an error.
+func teamEventNames(cmd *cobra.Command, client *api.Client, key string, wanted bool) map[string]string {
+	names := map[string]string{}
+	if !wanted {
+		return names
+	}
+	var events []api.Event
+	if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events", key), &events); err != nil {
+		return names
+	}
+	for _, e := range events {
+		names[e.Key] = e.Name
+	}
+	return names
 }
 
 func newTeamMediaCmd() *cobra.Command {
