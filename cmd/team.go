@@ -78,22 +78,9 @@ func newTeamListCmd() *cobra.Command {
 				return err
 			}
 			maxPages, _ := cmd.Flags().GetInt("max-pages")
-			var allTeams []api.Team
-			var cappedAt int
-			for page := 0; ; page++ {
-				if maxPages > 0 && page >= maxPages {
-					cappedAt = maxPages
-					break
-				}
-				var teams []api.Team
-				path := fmt.Sprintf("/teams/%d/%d", year, page)
-				if err := client.Get(cmd.Context(), path, &teams); err != nil {
-					return err
-				}
-				if len(teams) == 0 {
-					break
-				}
-				allTeams = append(allTeams, teams...)
+			allTeams, cappedAt, err := fetchTeamPages(cmd, client, year, maxPages)
+			if err != nil {
+				return err
 			}
 			rows := make([][]string, len(allTeams))
 			for i, t := range allTeams {
