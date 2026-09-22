@@ -22,7 +22,7 @@ func requireExitCode(t *testing.T, want int, srv *httptest.Server, args ...strin
 
 func TestExitCodeZeroOnSuccess(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
-	requireExitCode(t, clierr.ExitOK, srv, "status")
+	_ = requireExitCode(t, clierr.ExitOK, srv, "status")
 }
 
 func TestExitCodeTwoForUsageMistakes(t *testing.T) {
@@ -39,7 +39,7 @@ func TestExitCodeTwoForUsageMistakes(t *testing.T) {
 	}
 	for _, args := range cases {
 		t.Run(args[0]+" "+args[1], func(t *testing.T) {
-			requireExitCode(t, clierr.ExitUsage, srv, args...)
+			_ = requireExitCode(t, clierr.ExitUsage, srv, args...)
 		})
 	}
 }
@@ -48,7 +48,7 @@ func TestExitCodeFourWhenNoKeyIsConfigured(t *testing.T) {
 	t.Setenv("TBA_AUTH_KEY", "")
 	t.Setenv("TBA_CONFIG_DIR", t.TempDir())
 	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
-	requireExitCode(t, clierr.ExitAuth, srv, "status")
+	_ = requireExitCode(t, clierr.ExitAuth, srv, "status")
 }
 
 func TestExitCodeFourOnHTTP401(t *testing.T) {
