@@ -400,3 +400,60 @@ func TestValidRetriesAndTimeoutAreLeftAlone(t *testing.T) {
 	_, stderr, err := runCmd(t, srv, "team", "view", "177", "--retries", "0", "--timeout", "1s")
 	requireNoError(t, err, stderr)
 }
+
+// The same coercion happened in config.yaml, where it was easier to leave in
+// place: `timeout: 5` there meant five nanoseconds and `retries: abc` turned
+// retries off, while `tba config set` refused both. The file is judged by the
+// same parser now, and says which file.
+func TestUnparseableConfigFileSettingsAreRefused(t *testing.T) {
+	cases := []struct {
+		name  string
+		file  string
+		wants []string
+	}{
+		{"timeout no unit", "timeout: 5\n", []string{`timeout "5" in `, "is not a duration", "5s"}},
+		{"timeout nonsense", "timeout: soon\n", []string{`timeout "soon" in `, "duration"}},
+		{"retries", "retries: abc\n", []string{`retries "abc" in `, "a whole number"}},
+		{"no-cache", "no-cache: sometimes\n", []string{`no-cache "sometimes" in `, "boolean"}},
+		{"year", "year: twenty twenty-four\n", []string{`year "twenty twenty-four" in `, "a whole number"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := writeConfig(t, c.file)
+			srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+			_, _, err := runCmd(t, srv, "team", "view", "177")
+			if err == nil {
+				t.Fatalf("%q went through unremarked", c.file)
+			}
+			for _, want := range append(c.wants, path) {
+				requireErrorContains(t, err, want)
+			}
+			if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+				t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+			}
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a bad setting should be caught before any request, got %v", got)
+			}
+		})
+	}
+}
+
+// A duration with its unit, a whole number and a boolean are what the file is
+// for: the new check must not fail the settings people actually write.
+func TestWellFormedConfigFileSettingsAreLeftAlone(t *testing.T) {
+	writeConfig(t, "timeout: 30s\nretries: 2\nno-cache: true\nyear: 2024\n")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, stderr, err := runCmd(t, srv, "team", "view", "177")
+	requireNoError(t, err, stderr)
+}
+
+// A flag still beats a file value that could not have been used anyway.
+func TestAFlagStillBeatsAnUnparseableConfigFileSetting(t *testing.T) {
+	writeConfig(t, "timeout: 5\n")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, stderr, err := runCmd(t, srv, "team", "view", "177", "--timeout", "30s")
+	requireNoError(t, err, stderr)
+}

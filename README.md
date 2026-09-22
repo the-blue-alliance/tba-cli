@@ -957,6 +957,15 @@ script reads from a pipe — piped output stays JSON. A `--format` flag or
 them alone — a file written by a newer `tba` still works here. A file that
 cannot be parsed at all stops the command before it makes any request.
 
+**A value the key cannot hold** is a usage error wherever it was written, and it
+is found before the first request. `timeout: 5` in the file is not a timeout of
+five seconds — it is five nanoseconds, which used to make every request time out
+with nothing said about why — so it is refused the same way `tba config set
+timeout 5` always was, naming the key, the value and the file:
+`Error: timeout "5" in /home/you/.config/tba/config.yaml is not a duration; write
+the unit, as in 5s or 1m`. `TBA_TIMEOUT=5` is the same error against the
+variable's name.
+
 ```
 $ tba config set format table
 $ tba config list
