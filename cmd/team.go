@@ -22,6 +22,8 @@ func newTeamCmd() *cobra.Command {
 	teamCmd.AddCommand(newTeamEventsCmd())
 	teamCmd.AddCommand(newTeamYearsCmd())
 	teamCmd.AddCommand(newTeamMatchesCmd())
+	teamCmd.AddCommand(newTeamNextCmd())
+	teamCmd.AddCommand(newTeamStandingCmd())
 	teamCmd.AddCommand(newTeamAwardsCmd())
 	teamCmd.AddCommand(newTeamMediaCmd())
 	teamCmd.AddCommand(newTeamRobotsCmd())
