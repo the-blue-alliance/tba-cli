@@ -756,6 +756,83 @@ $ tba event watch 2024cthar --format json \
 ```
 
 `csv`, `tsv` and `markdown` describe a finished table and have nothing to say about a stream, so they are a usage error. `--columns` and `--sort` do not apply either, and are ignored.
+### Exporting an event
+
+`tba event export <key>` writes everything the API knows about an event to files, one per dataset.
+
+**`--to` is required.** It is the only thing that decides the format, and there are three values:
+
+```
+$ tba event export 2024cthar --to csv
+2024cthar-event.csv
+2024cthar-teams.csv
+2024cthar-matches.csv
+2024cthar-rankings.csv
+2024cthar-alliances.csv
+2024cthar-awards.csv
+2024cthar-oprs.csv
+2024cthar-district-points.csv
+2024cthar-team-statuses.csv
+```
+
+Nothing is inferred — not from a file name, not from whether you are on a terminal, not from `format:` in your config file. `--format` on this command describes how the command talks to *you*, so `--format csv` here is a usage error that points you back at `--to`. Leaving `--to` out is an error too, rather than a guess.
+
+**The files.** Each dataset becomes `<dir>/<prefix>-<dataset>.<ext>`, where `--dir` defaults to the working directory and `--prefix` defaults to the event key. The nine datasets are `event`, `teams`, `matches`, `rankings`, `alliances`, `awards`, `oprs`, `district-points` and `team-statuses`; `--only` takes a comma-separated subset of those names.
+
+```
+$ tba event export 2024cthar --to json --dir exports --only matches,rankings
+exports/2024cthar-matches.json
+exports/2024cthar-rankings.json
+```
+
+For `csv` and `tsv` each file carries exactly the columns the matching `tba event <dataset>` command prints — the same row builders render both — with a header row and no color. The `event` dataset is a single object rather than a list, so in `csv` and `tsv` it becomes a two-column `Field,Value` listing of the same fields `tba event view` shows. For `json` each file holds the API's own payload, pretty-printed and newline-terminated; it is re-indented rather than re-encoded, so nothing in it is re-escaped or reordered.
+
+**Reproducibility.** Two exports of the same data produce byte-identical files. Nothing written carries a timestamp or a version string, every listing has a fixed order (matches in play order, teams by number, rankings by rank, oprs by team, awards by award type then team), lines end with LF on every platform, and files arrive with mode `0644`.
+
+**Nothing half-done.** Every file is written to a temporary file in the target directory, and the whole set is renamed into place only once all of them have been fetched. A failure part way through — a 500 on the seventh dataset — leaves the directory exactly as it was. An existing file is never overwritten without `--force`, and the clash is found before the first request, with every conflicting path listed at once:
+
+```
+$ tba event export 2024cthar --to csv
+Error: refusing to overwrite 2 existing file(s); pass --force to replace them:
+  2024cthar-matches.csv
+  2024cthar-oprs.csv
+```
+
+`--dry-run` prints the paths it would write and fetches nothing at all.
+
+**A dataset the event does not have** — district points at a regional, alliances before selection — answers 404. That is the API saying it never existed, not a failure, so it is skipped with a note on stderr and the rest of the export goes ahead:
+
+```
+note: skipped district-points: the API has no district-points for this event (HTTP 404)
+wrote 8 file(s) to .
+```
+
+Any other error aborts the whole export.
+
+**Streams.** Written paths go to stdout, one per line, so they can be piped straight into something else. Notes and the summary go to stderr.
+
+```
+$ tba event export 2024cthar --to csv --only matches | xargs wc -l
+```
+
+`--format json` (or `--json`) replaces the path list with a summary object:
+
+```
+$ tba event export 2024cthar --to csv --json --only event,district-points
+{
+  "written": [
+    "2024cthar-event.csv"
+  ],
+  "skipped": [
+    {
+      "dataset": "district-points",
+      "reason": "the API has no district-points for this event (HTTP 404)"
+    }
+  ]
+}
+```
+
+A dry run carries `"dry_run": true` as well, so a script cannot mistake a preview for an export.
 
 ## Scripting
 
@@ -888,6 +965,9 @@ identical archives.
 | `tba event district-points <key>` | Show district points (`--tiebreakers`) |
 | `tba event predictions <key>` | Show match predictions (`--rankings`, `--stats`) |
 | `tba event insights <key>` | Show event insights (`--level qual\|playoff`) |
+| `tba event predictions <key>` | Show predictions |
+| `tba event insights <key>` | Show event insights |
+| `tba event export <key> --to csv\|tsv\|json` | Export an event's datasets to files (`--dir`, `--only`, `--prefix`, `--force`, `--dry-run`) |
 | `tba match view <key>` | View match details |
 | `tba district list` | List districts (defaults to the current season) |
 | `tba district events <key>` | List district events |
