@@ -183,10 +183,10 @@ func TestInsightLeaderboardsOfAnEmptySeason(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/insights/leaderboards/1998": "[]"})
 	out, _, err := runCmd(t, srv, "insight", "leaderboards", "--year", "1998", "--format", "table")
 	requireNoError(t, err, "")
-	// Headers and their rule, and nothing else: a season TBA has no boards for
-	// is an empty table, not an error.
-	if got := lines(out); len(got) != 2 || got[0] != "Leaderboard  Rank  Key  Value" {
-		t.Errorf("output = %q", out)
+	// Nothing at all: a season TBA has no boards for is an empty listing, not
+	// an error -- and not a row of column names with nothing under it either.
+	if out != "" {
+		t.Errorf("output = %q, want nothing", out)
 	}
 }
 

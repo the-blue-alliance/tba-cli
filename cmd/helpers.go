@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
@@ -257,7 +258,7 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 	}
 
 	noHeaders := settings(cmd).Bool("no-headers")
-	if err := output.Render(w, table, output.RenderOptions{
+	if err := renderRows(w, table, output.RenderOptions{
 		Format:    format,
 		NoHeaders: noHeaders,
 		Color:     color,
@@ -268,6 +269,25 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
 	}
 	return nil
+}
+
+// renderRows writes a table in one of the formats a person or a spreadsheet
+// reads — or nothing at all, when there is nothing to put under the headers.
+//
+// A bare header row is not an answer: it is a table pretending to have found
+// something, and piped into a file it is a row of column names with no data
+// under it. The reason there is nothing goes to stderr, where the note already
+// is, so stdout stays exactly the data — which is what the README has always
+// said an empty listing prints. JSON never reaches here: `[]` is a perfectly
+// clear answer, and the reader of it is a program.
+//
+// `event export` renders its own tables, so a file it writes keeps its header
+// whatever it found: a file's header is a schema rather than a view.
+func renderRows(w io.Writer, table output.Table, opts output.RenderOptions) error {
+	if len(table.Rows) == 0 {
+		return nil
+	}
+	return output.Render(w, table, opts)
 }
 
 // identityOrder is the permutation of n rows that changes nothing. It stands

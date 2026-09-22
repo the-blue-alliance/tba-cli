@@ -264,8 +264,12 @@ the same rows.
 that matched nothing, is an empty listing and exit 0 — not an error. The reason
 goes to stderr (`note: no matches posted yet for 2021irhal`, `note: no matches
 for team 177 at 2024cthar`, `note: no upcoming matches for 2024cthar`) so that
-the table on stdout stays exactly the data. `--format json` prints `[]` and says
-nothing.
+the table on stdout stays exactly the data. With no rows there is nothing to
+put under the headers, so `table`, `csv`, `tsv` and `markdown` print nothing at
+all rather than a lone row of column names; `--format json` prints `[]` and says
+nothing. Every listing behaves this way, not just matches. The files
+`event export` writes are the exception: a file's header is a schema, so an
+empty dataset is still written with its header.
 
 #### One match in full
 
