@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"strings"
 	"testing"
 )
@@ -331,5 +332,25 @@ func TestDistrictRankingsJq(t *testing.T) {
 	requireNoError(t, err, "")
 	if strings.TrimSpace(out) != "145" {
 		t.Errorf("jq output = %q", out)
+	}
+}
+
+// district rankings renders through the divider-aware table path; its flag
+// errors must follow the same contract as every other table: a bad --sort or
+// --columns is a usage mistake (exit 2), and --sort on a JSON payload that is
+// a list still reorders it.
+func TestDistrictRankingsFlagErrorsAreUsageErrors(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankings2024neJSON,
+	})
+	_ = requireExitCode(t, clierr.ExitUsage, srv, "district", "rankings", "2024ne", "--format", "table", "--sort=bogus")
+	_ = requireExitCode(t, clierr.ExitUsage, srv, "district", "rankings", "2024ne", "--format", "table", "--columns", "nope")
+	_ = requireExitCode(t, clierr.ExitUsage, srv, "district", "rankings", "2024ne", "--json", "--columns", "rank")
+
+	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--json", "--sort=-total")
+	requireNoError(t, err, "")
+	arr := decodeJSON(t, out).([]any)
+	if first := arr[0].(map[string]any); first["team_key"] != "frc177" {
+		t.Errorf("--sort=-total should put 177 (145 points) first, got %v", first["team_key"])
 	}
 }

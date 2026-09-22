@@ -200,6 +200,15 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 // rankings, event awards, team matches, team search, insights) should pass a
 // note too.
 func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []string, rows [][]string, note string) error {
+	return outputTableWithNote(cmd, data, output.Table{Headers: headers, Rows: rows}, note)
+}
+
+// outputTableWithNote is the one place a built table meets the output flags:
+// --format, --sort, --columns, --no-headers, --color, and the empty-listing
+// note. Every tabular command ends up here, so the flag contract (a bad flag
+// exits 2, --sort reorders JSON only when the payload is a list) holds
+// everywhere without each caller restating it.
+func outputTableWithNote(cmd *cobra.Command, data interface{}, table output.Table, note string) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -211,7 +220,6 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 		return err
 	}
 	w := cmd.OutOrStdout()
-	table := output.Table{Headers: headers, Rows: rows}
 
 	sortSpec := settings(cmd).String("sort")
 
@@ -227,7 +235,7 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 	// "name"` — with a list of the valid ones — for a payload that would have
 	// been refused whichever column was picked, and the same --sort worked in
 	// table form.
-	if format == "json" && sortSpec != "" && !output.CanPermute(data, identityOrder(len(rows))) {
+	if format == "json" && sortSpec != "" && !output.CanPermute(data, identityOrder(len(table.Rows))) {
 		return clierr.Usage("--sort cannot reorder this JSON payload (it is not a list of rows); " +
 			"use --jq to sort it, or drop --format json")
 	}
@@ -265,7 +273,7 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 	}); err != nil {
 		return err
 	}
-	if len(rows) == 0 && note != "" {
+	if len(table.Rows) == 0 && note != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
 	}
 	return nil

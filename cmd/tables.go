@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,44 +15,7 @@ import (
 // exactly the same flags, so --sort, --columns and --format behave the same
 // whichever entry point a command uses.
 func outputTableWith(cmd *cobra.Command, data interface{}, table output.Table) error {
-	format, err := resolveFormat(cmd)
-	if err != nil {
-		return err
-	}
-	color, err := colorMode(cmd)
-	if err != nil {
-		return err
-	}
-	w := cmd.OutOrStdout()
-
-	// Sorting runs before column selection so that a table can be ordered by a
-	// column the user chose not to display.
-	sortSpec := settings(cmd).String("sort")
-	var order []int
-	if sortSpec != "" {
-		if order, err = table.SortOrder(sortSpec); err != nil {
-			return err
-		}
-		table = table.Reorder(order)
-	}
-
-	columns := settings(cmd).String("columns")
-	if format == "json" {
-		if columns != "" {
-			return errors.New("--columns applies to tabular formats; use --jq to shape JSON")
-		}
-		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
-	}
-	if columns != "" {
-		if table, err = table.SelectColumns(columns); err != nil {
-			return err
-		}
-	}
-	return renderRows(w, table, output.RenderOptions{
-		Format:    format,
-		NoHeaders: settings(cmd).Bool("no-headers"),
-		Color:     color,
-	})
+	return outputTableWithNote(cmd, data, table, "")
 }
 
 // dropEmptyColumnsFor removes the columns nothing in the table filled in —
