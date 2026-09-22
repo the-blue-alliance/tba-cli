@@ -685,15 +685,16 @@ func TestEventWatchOfflineServesTheCacheOnceAndStops(t *testing.T) {
 	}
 }
 
-// Offline with nothing cached is a failure, not an empty watch.
+// Offline with nothing cached is a failure, not an empty watch. It exits 5:
+// the event is not here, which is the same answer a 404 gives.
 func TestEventWatchOfflineWithAnEmptyCacheFails(t *testing.T) {
 	srv := watchServer(t)
 	_, errOut, err := runWatch(t, srv, nil, "--offline")
 	if err == nil {
 		t.Fatal("want an error when the cache has never seen this event")
 	}
-	if got := clierr.ExitCode(err); got != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", got, clierr.ExitFailure)
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitNotFound)
 	}
 	if strings.Contains(errOut, "retrying at next interval") {
 		t.Errorf("offline has no next interval to retry at: %q", errOut)

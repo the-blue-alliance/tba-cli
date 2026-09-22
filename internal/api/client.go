@@ -244,7 +244,11 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 
 	if c.offline {
 		if cached == nil {
-			return nil, fmt.Errorf("not cached: %s (run without --offline to fetch)", path)
+			// "we have no copy of that" is the same answer as a 404 as far as
+			// a script is concerned: the thing asked for is not here, and
+			// trying again will not change it. Exit 5, like every other
+			// not-found, rather than 1, which means the run itself failed.
+			return nil, clierr.NotFound("not cached: %s (run without --offline to fetch)", path)
 		}
 		// Say how old the copy is, exactly as the stale-fallback path does.
 		// Offline output is indistinguishable from live output otherwise, and
