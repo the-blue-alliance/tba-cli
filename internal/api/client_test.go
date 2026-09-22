@@ -22,6 +22,12 @@ func apiEnv(t *testing.T) string {
 	return cacheDir
 }
 
+// cacheEntriesDir is where the cache actually writes its files, one level
+// below the configured cache directory.
+func cacheEntriesDir(dir string) string {
+	return filepath.Join(dir, "v1")
+}
+
 type recorder struct {
 	mu       sync.Mutex
 	requests []*http.Request
@@ -168,7 +174,7 @@ func TestSuccessfulResponseIsCachedWithItsETag(t *testing.T) {
 		t.Fatalf("GetRaw: %v", err)
 	}
 
-	entries, err := os.ReadDir(cacheDir)
+	entries, err := os.ReadDir(cacheEntriesDir(cacheDir))
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
@@ -279,7 +285,7 @@ func TestSetUseCacheFalseSkipsConditionalHeadersAndDoesNotWrite(t *testing.T) {
 	if _, err := warm.GetRaw("/warm"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
 	}
-	before, err := os.ReadDir(cacheDir)
+	before, err := os.ReadDir(cacheEntriesDir(cacheDir))
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
@@ -306,7 +312,7 @@ func TestSetUseCacheFalseSkipsConditionalHeadersAndDoesNotWrite(t *testing.T) {
 		}
 	}
 
-	after, err := os.ReadDir(cacheDir)
+	after, err := os.ReadDir(cacheEntriesDir(cacheDir))
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
@@ -400,5 +406,69 @@ func TestGetReportsMalformedJSON(t *testing.T) {
 	var status APIStatus
 	if err := c.Get("/status", &status); err == nil {
 		t.Fatal("want a decode error")
+	}
+}
+
+func TestNotModifiedRefreshesValidatedAt(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec,
+		testResponse{body: `{"a":1}`, etag: `"etag-1"`},
+		testResponse{status: "304", etag: `"etag-1"`},
+	)
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if _, err := c.GetRaw("/status"); err != nil {
+		t.Fatalf("GetRaw: %v", err)
+	}
+
+	url := srv.URL + "/status"
+	before := c.cache.Get(url)
+	if before == nil {
+		t.Fatal("nothing was cached")
+	}
+	if before.ValidatedAt.IsZero() {
+		t.Fatal("the first response did not record ValidatedAt")
+	}
+
+	body, err := c.GetRaw("/status")
+	if err != nil {
+		t.Fatalf("GetRaw: %v", err)
+	}
+	var got map[string]int
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("revalidated body is not JSON: %v", err)
+	}
+	if got["a"] != 1 {
+		t.Errorf("revalidated body = %s", body)
+	}
+
+	after := c.cache.Get(url)
+	if after == nil {
+		t.Fatal("the entry was dropped on revalidation")
+	}
+	if !after.ValidatedAt.After(before.ValidatedAt) {
+		t.Errorf("ValidatedAt = %v, want later than %v", after.ValidatedAt, before.ValidatedAt)
+	}
+	if !after.FetchedAt.Equal(before.FetchedAt) {
+		t.Errorf("revalidation changed FetchedAt: %v -> %v", before.FetchedAt, after.FetchedAt)
+	}
+}
+
+func TestNotModifiedDoesNotTouchTheCacheWhenCachingIsOff(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec, testResponse{status: "304"})
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	c.SetUseCache(false)
+	if _, err := c.GetRaw("/status"); err == nil {
+		t.Fatal("want an error for a 304 with no cached entry")
 	}
 }

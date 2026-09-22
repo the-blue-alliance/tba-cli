@@ -87,6 +87,9 @@ func (c *Client) fetch(path string) ([]byte, error) {
 	switch resp.StatusCode {
 	case http.StatusNotModified:
 		if cached != nil {
+			if c.useCache && c.cache != nil {
+				_ = c.cache.Touch(url)
+			}
 			return []byte(cached.Body), nil
 		}
 		return nil, fmt.Errorf("API returned 304 but no cached response is available")
