@@ -303,6 +303,46 @@ func TestOfflineServesTheCacheWithoutAnyRequest(t *testing.T) {
 	}
 }
 
+// Offline output is byte-for-byte what a live run would have printed, so the
+// age of the copy is the only thing that can tell the two apart.
+func TestOfflineSaysHowOldTheCachedCopyIs(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec, testResponse{body: `{}`})
+	seedCache(t, srv.URL+"/status", `{"current_season":2024}`, 3*time.Hour)
+
+	var notes []string
+	c := notedClient(t, srv.URL, &notes, WithOffline(true))
+
+	if _, err := c.GetRaw(t.Context(), "/status"); err != nil {
+		t.Fatalf("GetRaw: %v", err)
+	}
+	note := onlyNote(t, notes)
+	if want := "note: offline: /status from cache (3h ago)"; note != want {
+		t.Errorf("note = %q, want %q", note, want)
+	}
+	if strings.HasSuffix(note, "\n") {
+		t.Error("a note should not carry its own newline")
+	}
+}
+
+// Nothing was served, so there is nothing to date.
+func TestOfflineSaysNothingWhenThereIsNoCachedCopy(t *testing.T) {
+	apiEnv(t)
+	rec := &recorder{}
+	srv := newServer(t, rec, testResponse{body: `{}`})
+
+	var notes []string
+	c := notedClient(t, srv.URL, &notes, WithOffline(true))
+
+	if _, err := c.GetRaw(t.Context(), "/status"); err == nil {
+		t.Fatal("want an error for a path that was never fetched")
+	}
+	if len(notes) != 0 {
+		t.Errorf("notes = %v, want none", notes)
+	}
+}
+
 func TestOfflineFailsOnAnUncachedPath(t *testing.T) {
 	apiEnv(t)
 	rec := &recorder{}

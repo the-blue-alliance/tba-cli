@@ -106,6 +106,17 @@ func TestOfflineAnswersFromTheCacheWithoutAnyRequest(t *testing.T) {
 	if n := len(requestPaths(t, srv)); n != 1 {
 		t.Errorf("--offline reached the network: %v", requestPaths(t, srv))
 	}
+	// The data is identical to a live run's, so the age of the copy is the
+	// only thing that can tell the user which one they are reading.
+	if !strings.Contains(errOut, "note: offline: /team/frc177 from cache (") {
+		t.Errorf("stderr should date the cached copy:\n%s", errOut)
+	}
+	if !strings.Contains(errOut, "ago)") {
+		t.Errorf("the offline note should carry an age:\n%s", errOut)
+	}
+	if strings.Contains(out, "offline") {
+		t.Errorf("the note belongs on stderr:\n%s", out)
+	}
 }
 
 func TestOfflineFailsOnAnUncachedPath(t *testing.T) {

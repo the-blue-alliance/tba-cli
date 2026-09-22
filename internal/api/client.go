@@ -237,6 +237,11 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 		if cached == nil {
 			return nil, fmt.Errorf("not cached: %s (run without --offline to fetch)", path)
 		}
+		// Say how old the copy is, exactly as the stale-fallback path does.
+		// Offline output is indistinguishable from live output otherwise, and
+		// a week-old ranking read as today's is the kind of mistake the user
+		// only finds out about later.
+		c.notef("note: offline: %s from cache (%s ago)", path, cache.FormatAge(c.now().Sub(cached.FetchedAt)))
 		return []byte(cached.Body), nil
 	}
 
