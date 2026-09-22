@@ -110,6 +110,51 @@ func TestTeamStandingStripsHTMLFromTheStatusString(t *testing.T) {
 	}
 }
 
+// The API answers a team that never went to an event with a bare null, not a
+// 404. Decoded into the status struct it reads as "not ranked yet, not
+// selected, playoffs not started", which is a whole standing for a team that
+// was never there.
+func TestTeamStandingRejectsANullStatus(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc254/event/2024cthar/status": "null",
+	})
+	out, _, err := runCmd(t, srv, "team", "standing", "254", "2024cthar", "--format", "table")
+	requireErrorContains(t, err, "team 254 was not at 2024cthar")
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d (not found)", got, clierr.ExitNotFound)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
+	}
+}
+
+// The JSON form used to print an object of nulls, which a script reads as a
+// real standing.
+func TestTeamStandingRejectsANullStatusInJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc254/event/2024cthar/status": "null",
+	})
+	out, _, err := runCmd(t, srv, "team", "standing", "254", "2024cthar", "--json")
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d (not found)", got, clierr.ExitNotFound)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
+	}
+}
+
+// A team that is at the event but has not played yet gets an object whose
+// sections are all null, which is a different answer from the bare null and
+// stays a successful one.
+func TestTeamStandingKeepsTheNotStartedObject(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/event/2024cthar/status": teamStatusNotStartedJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+	requireContains(t, out, "Rank:      not ranked yet")
+}
+
 // A team that is not attending the event has no status there.
 func TestTeamStandingForATeamNotAtTheEvent(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
