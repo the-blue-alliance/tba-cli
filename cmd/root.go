@@ -18,9 +18,18 @@ import (
 // tests independent of each other.
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:           "tba",
-		Short:         "The Blue Alliance CLI",
-		Long:          "A command-line interface for The Blue Alliance API v3.",
+		Use:   "tba",
+		Short: "The Blue Alliance CLI",
+		Long:  "A command-line interface for The Blue Alliance API v3.",
+		// `tba --help` is where someone lands first, and a list of nouns does
+		// not show what the tool is for. These are the questions people
+		// actually turn up with, in the order they tend to ask them.
+		Example: `  tba team next 177
+  tba event matches 2024cthar --team 177 --upcoming
+  tba event rankings 2024cthar
+  tba team standing 177 2024cthar
+  tba event export 2024cthar --to csv
+  tba event list --week 4 --district ne`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		// Setting Version gives the root a --version flag.
