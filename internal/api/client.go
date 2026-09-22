@@ -186,9 +186,15 @@ func NewClient(baseURL string, opts ...Option) (*Client, error) {
 		randFloat:  rand.Float64,
 		now:        time.Now,
 	}
-	if cc, err := cache.New(); err == nil {
-		c.cache = cc
+	// A cache that cannot be opened is reported rather than shrugged off.
+	// Running cacheless after a silent failure makes every later symptom —
+	// an --offline run insisting nothing is cached, a revalidation that never
+	// happens — describe something other than the actual problem.
+	cc, err := cache.New()
+	if err != nil {
+		return nil, fmt.Errorf("opening the response cache: %w", err)
 	}
+	c.cache = cc
 	for _, opt := range opts {
 		opt(c)
 	}
