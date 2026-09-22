@@ -37,6 +37,26 @@ func writeLegacyAuthFile(t *testing.T, key string) {
 	}
 }
 
+func TestAuthFileFollowsXDGConfigHome(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("TBA_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	if want := filepath.Join(xdg, "tba", "auth.yaml"); mustAuthFile(t) != want {
+		t.Errorf("AuthFile() = %q, want %q", mustAuthFile(t), want)
+	}
+}
+
+func TestTBAConfigDirBeatsXDGConfigHome(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("TBA_CONFIG_DIR", dir)
+
+	if want := filepath.Join(dir, "auth.yaml"); mustAuthFile(t) != want {
+		t.Errorf("AuthFile() = %q, want %q", mustAuthFile(t), want)
+	}
+}
+
 func TestAuthFileFollowsTBAConfigDir(t *testing.T) {
 	dir := configEnv(t)
 	if want := filepath.Join(dir, "auth.yaml"); mustAuthFile(t) != want {
@@ -336,6 +356,7 @@ func TestSaveCreatesTheConfigDirectory(t *testing.T) {
 // the way it does for a user with no home directory.
 func clearHome(t *testing.T) {
 	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("HOMEDRIVE", "")

@@ -201,8 +201,10 @@ func TestTeamEventsDefaultsToCurrentYear(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "events", "177")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 
@@ -233,8 +235,10 @@ func TestTeamMatchesDefaultsToCurrentYear(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "matches", "177")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 
@@ -294,8 +298,10 @@ func TestTeamMediaDefaultsToCurrentYear(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "media", "177")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 

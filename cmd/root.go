@@ -28,7 +28,17 @@ func NewRootCmd() *cobra.Command {
 		// Flags are checked once, before any command does work, so that a
 		// contradictory --format is reported without first hitting the API.
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := resolveFormat(cmd)
+			// Resolve flags, environment and config file into one view before
+			// anything reads a setting, then check the ones whose value can be
+			// wrong, so that a bad --format is reported without first hitting
+			// the API.
+			if err := initSettings(cmd); err != nil {
+				return err
+			}
+			if _, err := resolveFormat(cmd); err != nil {
+				return err
+			}
+			_, err := colorMode(cmd)
 			return err
 		},
 	}
@@ -45,6 +55,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().BoolP("raw-output", "r", false, "With --jq, print string results without quotes (like jq -r)")
 	rootCmd.PersistentFlags().String("base-url", "", "Override API base URL (e.g. http://localhost:8080/api/v3)")
 	rootCmd.PersistentFlags().Bool("no-cache", false, "Disable HTTP response cache for this invocation")
+	rootCmd.PersistentFlags().Bool("offline", false, "Never contact the API; answer from the local cache only")
 	rootCmd.PersistentFlags().String("format", "", "Output format: auto, table, json, csv, tsv, markdown (auto: table on TTY, json otherwise)")
 	rootCmd.PersistentFlags().Duration("timeout", api.DefaultTimeout, "Per-request timeout (e.g. 10s, 1m)")
 	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")
@@ -65,6 +76,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newDocsCmd())
 	rootCmd.AddCommand(newOpenCmd())
+	rootCmd.AddCommand(newConfigCmd())
 
 	// Argument completion is wired onto the finished tree; see completion.go.
 	attachCompletions(rootCmd)

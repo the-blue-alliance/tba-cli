@@ -11,9 +11,15 @@ import (
 
 const DefaultBaseURL = "https://www.thebluealliance.com/api/v3"
 
+// configDir is where tba keeps auth.yaml and config.yaml. TBA_CONFIG_DIR
+// names the directory outright; otherwise the XDG base directory spec picks
+// it, falling back to ~/.config/tba when XDG_CONFIG_HOME is unset.
 func configDir() (string, error) {
 	if d := os.Getenv("TBA_CONFIG_DIR"); d != "" {
 		return d, nil
+	}
+	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
+		return filepath.Join(d, "tba"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

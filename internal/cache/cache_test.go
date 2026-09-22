@@ -487,7 +487,7 @@ func TestNewFailsWithoutAHomeDirectory(t *testing.T) {
 	}
 }
 
-func TestListReturnsEveryEntryOrderedByURL(t *testing.T) {
+func TestEntriesReturnsEveryEntryOrderedByURL(t *testing.T) {
 	c, _ := newTestCache(t)
 	for _, u := range []string{"https://example.test/c", "https://example.test/a", "https://example.test/b"} {
 		if err := c.Put(u, "etag-"+u, "", []byte(`{"n":1}`)); err != nil {
@@ -495,7 +495,7 @@ func TestListReturnsEveryEntryOrderedByURL(t *testing.T) {
 		}
 	}
 
-	entries, err := c.List()
+	entries, err := c.Entries()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -518,9 +518,9 @@ func TestListReturnsEveryEntryOrderedByURL(t *testing.T) {
 	}
 }
 
-func TestListOnAnEmptyCache(t *testing.T) {
+func TestEntriesOnAnEmptyCache(t *testing.T) {
 	c, _ := newTestCache(t)
-	entries, err := c.List()
+	entries, err := c.Entries()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -529,18 +529,18 @@ func TestListOnAnEmptyCache(t *testing.T) {
 	}
 }
 
-func TestListToleratesAMissingEntriesDirectory(t *testing.T) {
+func TestEntriesToleratesAMissingEntriesDirectory(t *testing.T) {
 	c, _ := newTestCacheWithRoot(t)
 	if err := os.RemoveAll(c.EntriesDir()); err != nil {
 		t.Fatalf("RemoveAll: %v", err)
 	}
-	entries, err := c.List()
+	entries, err := c.Entries()
 	if err != nil || len(entries) != 0 {
 		t.Errorf("List = (%v, %v), want (nothing, nil)", entries, err)
 	}
 }
 
-func TestListSkipsDamagedAndForeignFiles(t *testing.T) {
+func TestEntriesSkipsDamagedAndForeignFiles(t *testing.T) {
 	c, entriesDir := newTestCache(t)
 	if err := c.Put("https://example.test/good", "", "", []byte(`{"n":1}`)); err != nil {
 		t.Fatalf("Put: %v", err)
@@ -552,7 +552,7 @@ func TestListSkipsDamagedAndForeignFiles(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	entries, err := c.List()
+	entries, err := c.Entries()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
