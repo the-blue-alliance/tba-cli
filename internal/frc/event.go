@@ -1,6 +1,7 @@
 package frc
 
 import (
+	"sort"
 	"time"
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -114,4 +115,68 @@ func Unplayed(matches []api.Match) []api.Match {
 // fetching the event is worth an extra request.
 func LabelDependsOnPlayoffType(m api.Match) bool {
 	return CompLevelOrder(m.CompLevel) == CompLevelOrder(LevelSemiFinal)
+}
+
+// EventOrder ranks a team's events chronologically, so a season's worth of
+// matches can be grouped the way the team actually played them: Waterbury in
+// week 1 before Hartford in week 3, whatever order the API listed them in.
+//
+// Events with the same start date, and events whose start_date is missing or
+// malformed, fall back to their key, which keeps the ranking total and
+// reproducible. The dates are compared as calendar days, so the machine's time
+// zone cannot reorder two events a day apart.
+func EventOrder(events []api.Event) map[string]int {
+	sorted := make([]api.Event, len(events))
+	copy(sorted, events)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		a, aok := ParseDate(sorted[i].StartDate, time.UTC)
+		b, bok := ParseDate(sorted[j].StartDate, time.UTC)
+		if aok != bok {
+			// A dated event is placed before an undated one, which is not a
+			// real season but is a real API answer.
+			return aok
+		}
+		if aok && !a.Equal(b) {
+			return a.Before(b)
+		}
+		return sorted[i].Key < sorted[j].Key
+	})
+
+	order := make(map[string]int, len(sorted))
+	for _, e := range sorted {
+		if _, seen := order[e.Key]; !seen {
+			order[e.Key] = len(order)
+		}
+	}
+	return order
+}
+
+// GroupByEvent regroups an already-ordered listing so that every event's
+// matches sit together, events in the order given by order (see EventOrder).
+//
+// It is a stable sort and does nothing within an event, so whatever order the
+// caller chose there — playing order, or by the clock for an upcoming listing —
+// survives untouched. An event missing from order sorts after every known one,
+// by key, which is what a listing falls back to when the team's event list
+// could not be fetched.
+func GroupByEvent(matches []api.Match, order map[string]int) {
+	rank := func(m api.Match) (int, bool) {
+		n, ok := order[m.EventKey]
+		return n, ok
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		a, b := matches[i].EventKey, matches[j].EventKey
+		if a == b {
+			return false
+		}
+		ra, aok := rank(matches[i])
+		rb, bok := rank(matches[j])
+		if aok != bok {
+			return aok
+		}
+		if aok && ra != rb {
+			return ra < rb
+		}
+		return a < b
+	})
 }

@@ -221,9 +221,14 @@ func TestTeamMatches(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("want header + separator + 2 rows, got %d:\n%s", len(got), out)
 	}
-	if got[0] != "Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status" {
-		t.Errorf("header = %q", got[0])
+	// A season's listing leads with the event each match belongs to.
+	for _, want := range append([]string{"Event"}, matchHeaders...) {
+		requireContains(t, got[0], want)
 	}
+	if !strings.HasPrefix(got[0], "Event") {
+		t.Errorf("header = %q, want the Event column first", got[0])
+	}
+	requireContains(t, got[2], "2024cthar")
 	requireContains(t, got[2], "Qual 1")
 	requireContains(t, got[2], "2024cthar_qm1")
 	requireContains(t, got[2], "red")

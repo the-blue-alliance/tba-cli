@@ -474,26 +474,95 @@ func TestTeamMatchesColumnsAndOrder(t *testing.T) {
 	requireNoError(t, err, "")
 
 	records := parseCSV(t, out)
-	wantHeader := []string{"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner", "Time", "Time Source", "Status"}
+	wantHeader := append([]string{"Event"}, matchHeaders...)
 	if !equalStrings(records[0], wantHeader) {
 		t.Errorf("header = %v, want %v", records[0], wantHeader)
 	}
 	want := []string{"2024cthar_qm2", "2024cthar_qm3", "2024cthar_qm7", "2024cthar_qm12", "2024cthar_sf13m1", "2024cthar_f1m2"}
-	if got := csvColumn(t, out, 1); !equalStrings(got, want) {
+	if got := csvColumn(t, out, 2); !equalStrings(got, want) {
 		t.Errorf("order = %v, want %v", got, want)
 	}
 }
 
 // Without --event the listing spans a season, so there is no single bracket to
-// ask about and no event is fetched.
-func TestTeamMatchesForAYearFetchesNoEvent(t *testing.T) {
+// ask about: the second request is the team's event list, which orders the
+// groups, not an event fetched for its playoff type.
+func TestTeamMatchesForAYearFetchesTheTeamsEvents(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/matches/2024": matches2024ctharJSON,
+		"/team/frc177/events/2024":  teamEvents177In2024JSON,
 	})
 	_, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); !equalStrings(got, []string{"/team/frc177/matches/2024"}) {
-		t.Errorf("requests = %v", got)
+
+	want := []string{"/team/frc177/matches/2024", "/team/frc177/events/2024"}
+	if got := requestPaths(t, srv); !equalStrings(got, want) {
+		t.Errorf("requests = %v, want %v", got, want)
+	}
+}
+
+// A season's listing is grouped by event, in the order the team competed, and
+// each row says which event it belongs to. Sorted as one list, Waterbury's
+// Qual 46 would land next to Hartford's.
+func TestTeamMatchesGroupsASeasonByEvent(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": teamMatches177Season2024JSON,
+		"/team/frc177/events/2024":  teamEvents177In2024JSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, "")
+
+	records := parseCSV(t, out)
+	if records[0][0] != "Event" {
+		t.Errorf("header = %v, want the Event column first", records[0])
+	}
+	// Waterbury ran in week 1 and Hartford in week 3, though the API listed
+	// the events the other way round.
+	wantKeys := []string{"2024ctwat_qm5", "2024ctwat_qm46", "2024cthar_qm12", "2024cthar_qm46"}
+	if got := csvColumn(t, out, 2); !equalStrings(got, wantKeys) {
+		t.Errorf("order = %v, want %v", got, wantKeys)
+	}
+	wantEvents := []string{"2024ctwat", "2024ctwat", "2024cthar", "2024cthar"}
+	if got := csvColumn(t, out, 0); !equalStrings(got, wantEvents) {
+		t.Errorf("event column = %v, want %v", got, wantEvents)
+	}
+}
+
+// The event list only orders the groups. Without it the listing still groups,
+// by event key, rather than interleaving the season.
+func TestTeamMatchesGroupsWithoutTheEventList(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": teamMatches177Season2024JSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	wantKeys := []string{"2024cthar_qm12", "2024cthar_qm46", "2024ctwat_qm5", "2024ctwat_qm46"}
+	if got := csvColumn(t, out, 2); !equalStrings(got, wantKeys) {
+		t.Errorf("order = %v, want %v", got, wantKeys)
+	}
+}
+
+// One event needs no Event column: every row would carry the same key.
+func TestTeamMatchesAtAnEventHasNoEventColumn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":                     event2024ctharJSON,
+		"/team/frc177/event/2024cthar/matches": teamMatches177At2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--event", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+	if got := parseCSV(t, out)[0][0]; got != "Match" {
+		t.Errorf("first column = %q, want the match label", got)
+	}
+}
+
+// An event listing never carries the column either: the key is in the command.
+func TestEventMatchesHasNoEventColumn(t *testing.T) {
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+	if got := parseCSV(t, out)[0][0]; got != "Match" {
+		t.Errorf("first column = %q, want the match label", got)
 	}
 }
 
@@ -556,7 +625,7 @@ func TestTeamMatchesFilterByLevel(t *testing.T) {
 	})
 	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--level", "playoff", "--format", "csv")
 	requireNoError(t, err, "")
-	if got := csvColumn(t, out, 1); !equalStrings(got, []string{"2024cthar_sf13m1", "2024cthar_f1m2"}) {
+	if got := csvColumn(t, out, 2); !equalStrings(got, []string{"2024cthar_sf13m1", "2024cthar_f1m2"}) {
 		t.Errorf("matches = %v", got)
 	}
 }
@@ -570,7 +639,7 @@ func TestTeamMatchesFilterByTeam(t *testing.T) {
 	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--team", "5507", "--format", "csv")
 	requireNoError(t, err, "")
 	want := []string{"2024cthar_qm12", "2024cthar_sf13m1", "2024cthar_f1m2"}
-	if got := csvColumn(t, out, 1); !equalStrings(got, want) {
+	if got := csvColumn(t, out, 2); !equalStrings(got, want) {
 		t.Errorf("matches = %v, want %v", got, want)
 	}
 }

@@ -581,6 +581,8 @@ Final 1  2024cthar_f1m1     177, 1073, 5507  230, 195, 558                      
 
 Matches always come back in the order the event plays them — qualification matches by number, then the elimination rounds — never alphabetically by key, which would put `qm10` before `qm2` and the finals before the quarterfinals.
 
+**A whole season.** `tba team matches 177 --year 2024` spans several events, and every one of them has a Qual 12, so a season listing is grouped by event — in the order the team competed, which costs one extra request for the team's event list — behind an extra `Event` column holding the event key. `--event KEY` narrows the listing to one event and drops that column.
+
 **Labels.** The `Match` column is what the match is announced by; `Key` keeps the raw key for scripts.
 
 | Label | Meaning |

@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -183,6 +184,12 @@ func newTeamMatchesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "matches <number>",
 		Short: "List team matches for a year",
+		Long: `List the matches a team played, for one event or for a whole season.
+
+A season spans several events, and every one of them has a Qual 12, so the
+listing is grouped by event, in the order the team competed, with an Event
+column naming each. One event's listing drops that column and is simply the
+match table.`,
 		Example: `  tba team matches 177 --year 2024
   tba team matches frc177 --year 2024 --format tsv
   tba team matches 177 --event 2024cthar
@@ -197,32 +204,32 @@ func newTeamMatchesCmd() *cobra.Command {
 				return err
 			}
 
+			team := teamKey(args[0])
 			eventKey, _ := cmd.Flags().GetString("event")
 			var matches []api.Match
-			// Without --event the listing spans a whole season, whose events
-			// may have run different playoff brackets; the labels then fall
-			// back to a guess from each match's own season.
-			playoffTypeFor := constantPlayoffType(nil)
 			if eventKey != "" {
 				if err := validateEventKey(eventKey); err != nil {
 					return err
 				}
-				path := fmt.Sprintf("/team/%s/event/%s/matches", teamKey(args[0]), eventKey)
+				path := fmt.Sprintf("/team/%s/event/%s/matches", team, eventKey)
 				if err := client.Get(cmd.Context(), path, &matches); err != nil {
 					return err
 				}
-				playoffTypeFor = constantPlayoffType(eventPlayoffType(cmd, client, eventKey))
-			} else {
-				year, err := resolveYear(cmd)
-				if err != nil {
-					return err
-				}
-				path := fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year)
-				if err := client.Get(cmd.Context(), path, &matches); err != nil {
-					return err
-				}
+				return renderMatches(cmd, matches, constantPlayoffType(eventPlayoffType(cmd, client, eventKey)))
 			}
-			return renderMatches(cmd, matches, playoffTypeFor)
+
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
+			path := fmt.Sprintf("/team/%s/matches/%d", team, year)
+			if err := client.Get(cmd.Context(), path, &matches); err != nil {
+				return err
+			}
+			// The listing spans a whole season, whose events may have run
+			// different playoff brackets; the labels then fall back to a guess
+			// from each match's own season.
+			return renderSeasonMatches(cmd, matches, constantPlayoffType(nil), teamEventOrder(cmd, client, team, year))
 		},
 	}
 	addYearFlag(c)
@@ -313,6 +320,20 @@ an error that lists them.`,
 	c.Flags().Int("year", 0, "Season year (default: all years)")
 	c.Flags().String("type", "", "Only awards of this kind, by name or TBA award_type code (e.g. impact, 0)")
 	return c
+}
+
+// teamEventOrder ranks the events a team attended in a season, so that a
+// season's matches can be grouped the way the team played them.
+//
+// It is ordering, not data: a season listing is worth printing even when the
+// event list cannot be fetched, so a failure yields a nil order and the
+// listing falls back to grouping by event key.
+func teamEventOrder(cmd *cobra.Command, client *api.Client, team string, year int) map[string]int {
+	var events []api.Event
+	if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", team, year), &events); err != nil {
+		return nil
+	}
+	return frc.EventOrder(events)
 }
 
 // filterAwardsByType keeps only the awards with the given award_type.
