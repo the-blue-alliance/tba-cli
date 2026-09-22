@@ -626,6 +626,8 @@ tba event matches 2024cthar --level playoff --format csv
 
 Filters apply to `--format json` too, so `--jq` and `--format csv` always see the same rows.
 
+**Nothing to show.** An event whose schedule has not been posted, or a filter that matched nothing, is an empty listing and exit 0 — not an error. The reason goes to stderr (`note: no matches posted yet for 2021irhal`, `note: no matches for team 177 at 2024cthar`, `note: no upcoming matches for 2024cthar`) so that the table on stdout stays exactly the data. `--format json` prints `[]` and says nothing.
+
 ### At an event
 
 Three commands answer the questions you have while an event is running.

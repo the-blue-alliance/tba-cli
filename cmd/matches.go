@@ -60,13 +60,14 @@ const validMatchLevels = "qm, playoff, ef, qf, sf, f"
 // playoffTypeFor supplies the bracket format a match's labels depend on. It is
 // a function rather than a value because `team matches` for a whole season
 // spans events that may have run different brackets.
-func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int) error {
+func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, scope string) error {
+	listing := matchListing{scope: scope, hadMatches: len(matches) > 0}
 	matches, err := filterMatches(cmd, matches)
 	if err != nil {
 		return err
 	}
 	orderMatches(cmd, matches)
-	return printMatchTable(cmd, matches, playoffTypeFor)
+	return printMatchListing(cmd, matches, playoffTypeFor, listing)
 }
 
 // renderSeasonMatches prints a listing that spans a whole season. A team plays
@@ -79,14 +80,32 @@ func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(
 // order ranks the event keys (see frc.EventOrder). A nil or partial order —
 // the team's event list could not be fetched — still groups the listing, by
 // event key.
-func renderSeasonMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, order map[string]int) error {
+func renderSeasonMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, order map[string]int, scope string) error {
+	listing := matchListing{scope: scope, hadMatches: len(matches) > 0, withEvent: true}
 	matches, err := filterMatches(cmd, matches)
 	if err != nil {
 		return err
 	}
 	orderMatches(cmd, matches)
 	frc.GroupByEvent(matches, order)
-	return printMatchListing(cmd, matches, playoffTypeFor, true)
+	return printMatchListing(cmd, matches, playoffTypeFor, listing)
+}
+
+// matchListing is what a listing needs in order to explain itself when it
+// comes out empty: what it was about, and whether the API had anything at all
+// before the filters ran — "nothing posted yet" and "your filter matched
+// nothing" are different answers.
+//
+// A listing with no scope says nothing; that is for the callers whose own
+// wording is better than anything this file could compose.
+type matchListing struct {
+	scope      string
+	hadMatches bool
+	withEvent  bool
+	// onlyUpcoming marks a listing that holds nothing but unplayed matches by
+	// construction, such as `team next --all`, which has no --upcoming flag
+	// to read the same fact off.
+	onlyUpcoming bool
 }
 
 // orderMatches applies the order a listing is read in. An upcoming listing
@@ -102,13 +121,14 @@ func orderMatches(cmd *cobra.Command, matches []api.Match) {
 
 // printMatchTable renders matches in the order given. Callers that have
 // already chosen an order — the next-match listing, say — use it directly.
-func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int) error {
-	return printMatchListing(cmd, matches, playoffTypeFor, false)
+func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, listing matchListing) error {
+	return printMatchListing(cmd, matches, playoffTypeFor, listing)
 }
 
 // printMatchListing renders the shared match table, optionally with the Event
-// column a season-wide listing needs.
-func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, withEvent bool) error {
+// column a season-wide listing needs, and says on stderr why it is empty when
+// it is.
+func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, listing matchListing) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -120,7 +140,7 @@ func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor f
 
 	headers := matchHeaders
 	rows, marked := matchTableRows(matches, playoffTypeFor, color)
-	if withEvent {
+	if listing.withEvent {
 		headers = headersWithEvent()
 		for i := range rows {
 			rows[i] = append([]string{matches[i].EventKey}, rows[i]...)
@@ -136,7 +156,40 @@ func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor f
 	if marked && format == "table" {
 		fmt.Fprintln(cmd.ErrOrStderr(), frc.Legend)
 	}
+	// A bare header row is not an answer. JSON is left alone: an empty array
+	// is a perfectly clear one, and a reader of it is a program.
+	if len(matches) == 0 && format != "json" && listing.scope != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", emptyMatchNote(cmd, listing))
+	}
 	return nil
+}
+
+// emptyMatchNote says why a listing is empty, in the terms the user asked the
+// question in: an event with no schedule yet, a team that plays no more
+// matches, a filter that matched nothing.
+func emptyMatchNote(cmd *cobra.Command, listing matchListing) string {
+	upcoming, _ := cmd.Flags().GetBool("upcoming")
+	upcoming = upcoming || listing.onlyUpcoming
+	level, _ := cmd.Flags().GetString("level")
+	level = strings.ToLower(strings.TrimSpace(level))
+
+	where := listing.scope
+	if team, _ := cmd.Flags().GetString("team"); strings.TrimSpace(team) != "" {
+		where = fmt.Sprintf("team %s at %s", output.TeamNumberFromKey(teamKey(team)), listing.scope)
+	}
+
+	switch {
+	case upcoming:
+		return "no upcoming matches for " + where
+	case !listing.hadMatches:
+		// Nothing was filtered out, so the scope alone is the answer: the
+		// schedule has not been posted, or the event ran no matches at all.
+		return "no matches posted yet for " + listing.scope
+	case level != "":
+		return fmt.Sprintf("no %s matches for %s", level, where)
+	default:
+		return "no matches for " + where
+	}
 }
 
 // matchTableRows builds the cells of a match listing, in the order given, one
