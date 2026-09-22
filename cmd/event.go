@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -22,6 +23,7 @@ func newEventCmd() *cobra.Command {
 	eventCmd.AddCommand(newEventMatchesCmd())
 	eventCmd.AddCommand(newEventRankingsCmd())
 	eventCmd.AddCommand(newEventAlliancesCmd())
+	eventCmd.AddCommand(newEventTeamStatusesCmd())
 	eventCmd.AddCommand(newEventAwardsCmd())
 	eventCmd.AddCommand(newEventOPRsCmd())
 	eventCmd.AddCommand(newEventDistrictPointsCmd())
@@ -162,11 +164,25 @@ func newEventRankingsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rankings <key>",
 		Short: "Show event rankings",
+		Long: `Show the qualification rankings for an event.
+
+After Rank, Team, Name, Record, Played and DQ the table carries one column per
+ranking sort order the season defines -- Ranking Score, Avg Match and so on --
+each printed at the precision the API declares, then any extra statistics such
+as Total Ranking Points. The columns therefore differ from season to season.`,
 		Example: `  tba event rankings 2024cthar
-  tba event rankings 2024cthar --format markdown`,
+  tba event rankings 2024cthar --format markdown
+  tba event rankings 2024cthar --columns rank,team,name,"ranking score"
+  tba event rankings 2024cthar --sort=-played`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
+			// Resolved up front so a bad --format fails before any request,
+			// and so JSON output can skip the nickname lookup it never uses.
+			format, err := resolveFormat(cmd)
+			if err != nil {
 				return err
 			}
 			client, err := newClient(cmd)
@@ -177,15 +193,48 @@ func newEventRankingsCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/rankings", args[0]), &rankings); err != nil {
 				return err
 			}
+
+			// Rankings carry team keys but no names, so the nicknames come
+			// from a second call. They are a convenience, not the point of the
+			// command, so a failure there leaves the column blank rather than
+			// failing a ranking table the user already paid for.
+			nicknames := map[string]string{}
+			if format != "json" {
+				var teams []api.Team
+				if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/teams/simple", args[0]), &teams); err == nil {
+					for _, t := range teams {
+						nicknames[t.Key] = t.Nickname
+					}
+				}
+			}
+
+			sort.SliceStable(rankings.Rankings, func(i, j int) bool {
+				return rankings.Rankings[i].Rank < rankings.Rankings[j].Rank
+			})
+
+			headers := []string{"Rank", "Team", "Name", "Record", "Played", "DQ"}
+			for _, info := range rankings.SortOrderInfo {
+				headers = append(headers, info.Name)
+			}
+			for _, info := range rankings.ExtraStatsInfo {
+				headers = append(headers, info.Name)
+			}
+
 			rows := make([][]string, len(rankings.Rankings))
 			for i, r := range rankings.Rankings {
-				record := ""
-				if r.Record != nil {
-					record = fmt.Sprintf("%d-%d-%d", r.Record.Wins, r.Record.Losses, r.Record.Ties)
+				row := []string{
+					strconv.Itoa(r.Rank),
+					output.TeamNumberFromKey(r.TeamKey),
+					nicknames[r.TeamKey],
+					formatWLT(r.Record),
+					strconv.Itoa(r.MatchesPlayed),
+					strconv.Itoa(r.DQ),
 				}
-				rows[i] = []string{strconv.Itoa(r.Rank), output.TeamNumberFromKey(r.TeamKey), record, strconv.Itoa(r.MatchesPlayed)}
+				row = append(row, formatStats(r.SortOrders, rankings.SortOrderInfo)...)
+				row = append(row, formatStats(r.ExtraStats, rankings.ExtraStatsInfo)...)
+				rows[i] = row
 			}
-			return outputTable(cmd, rankings, []string{"Rank", "Team", "Record", "Played"}, rows)
+			return outputTable(cmd, rankings, headers, rows)
 		},
 	}
 }
@@ -194,8 +243,16 @@ func newEventAlliancesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "alliances <key>",
 		Short: "Show event alliances",
+		Long: `Show the playoff alliances at an event, how they were built and how far
+they got.
+
+Captain, Pick 1 and Pick 2 are the three teams in selection order. Backup names
+the team called in mid-playoffs, as "1234 in for 5678" when the API says who it
+replaced. Status and Level come from the alliance's playoff status, and Record
+is its playoff win-loss-tie.`,
 		Example: `  tba event alliances 2024cthar
-  tba event alliances 2024cthar --format json`,
+  tba event alliances 2024cthar --format json
+  tba event alliances 2024cthar --columns alliance,captain,status`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
@@ -209,24 +266,66 @@ func newEventAlliancesCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/alliances", args[0]), &alliances); err != nil {
 				return err
 			}
+			headers := []string{"Alliance", "Captain", "Pick 1", "Pick 2", "Backup", "Status", "Level", "Record", "Declines"}
 			rows := make([][]string, len(alliances))
 			for i, a := range alliances {
+				// Most seasons name their alliances; the ones that do not are
+				// still numbered by selection order.
 				name := fmt.Sprintf("Alliance %d", i+1)
-				if a.Name != nil {
+				if a.Name != nil && *a.Name != "" {
 					name = *a.Name
 				}
-				picks := ""
-				for j, p := range a.Picks {
-					if j > 0 {
-						picks += ", "
-					}
-					picks += output.TeamNumberFromKey(p)
+				status, level, record := "", "", ""
+				if a.Status != nil {
+					status = a.Status.Status
+					level = strings.ToUpper(a.Status.Level)
+					record = formatWLT(a.Status.Record)
 				}
-				rows[i] = []string{name, picks}
+				rows[i] = []string{
+					name,
+					pickAt(a.Picks, 0),
+					pickAt(a.Picks, 1),
+					pickAt(a.Picks, 2),
+					formatBackup(a.Backup),
+					status,
+					level,
+					record,
+					joinTeamNumbers(a.Declines),
+				}
 			}
-			return outputTable(cmd, alliances, []string{"Alliance", "Picks"}, rows)
+			return outputTable(cmd, alliances, headers, rows)
 		},
 	}
+}
+
+// pickAt renders the nth alliance pick, or an empty cell when an alliance is
+// short a team (a three-team alliance in a two-team season, a bad feed).
+func pickAt(picks []string, n int) string {
+	if n >= len(picks) {
+		return ""
+	}
+	return output.TeamNumberFromKey(picks[n])
+}
+
+// formatBackup describes a backup swap in one cell.
+func formatBackup(b *api.AllianceBackup) string {
+	if b == nil || b.In == "" {
+		return ""
+	}
+	in := output.TeamNumberFromKey(b.In)
+	if b.Out == "" {
+		return in
+	}
+	return fmt.Sprintf("%s in for %s", in, output.TeamNumberFromKey(b.Out))
+}
+
+// joinTeamNumbers renders a list of team keys as bare numbers.
+func joinTeamNumbers(keys []string) string {
+	numbers := make([]string, len(keys))
+	for i, k := range keys {
+		numbers[i] = output.TeamNumberFromKey(k)
+	}
+	return strings.Join(numbers, ", ")
 }
 
 func newEventAwardsCmd() *cobra.Command {
@@ -317,9 +416,79 @@ func newEventOPRsCmd() *cobra.Command {
 }
 
 func newEventDistrictPointsCmd() *cobra.Command {
-	return newRawEventCmd("district-points", "Show event district points", "district_points",
-		`  tba event district-points 2024cthar
-  tba event district-points 2024cthar --jq '.points.frc177.total'`)
+	c := &cobra.Command{
+		Use:   "district-points <key>",
+		Short: "Show event district points",
+		Long: `Show the district points an event awarded, highest total first.
+
+--tiebreakers adds the values that break a tie on total points: the team's
+highest qualification scores, best first, and its number of qualification wins.
+
+JSON output keeps the shape the API returns, an object keyed by team, so
+--sort only reorders the tabular formats.`,
+		Example: `  tba event district-points 2024cthar
+  tba event district-points 2024cthar --tiebreakers
+  tba event district-points 2024cthar --jq '.points.frc177.total'`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
+			client, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			var points api.EventDistrictPoints
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/district_points", args[0]), &points); err != nil {
+				return err
+			}
+
+			teams := make([]string, 0, len(points.Points))
+			for key := range points.Points {
+				teams = append(teams, key)
+			}
+			// Map order is random, so sort by team number first and then by
+			// total: the result is total descending with ties broken by team
+			// number, and it is the same every run.
+			sortTeamKeys(teams)
+			sort.SliceStable(teams, func(i, j int) bool {
+				return points.Points[teams[i]].Total > points.Points[teams[j]].Total
+			})
+
+			withTiebreakers, _ := cmd.Flags().GetBool("tiebreakers")
+			headers := []string{"Team", "Qual", "Alliance", "Award", "Elim", "Total"}
+			if withTiebreakers {
+				headers = append(headers, "Highest Qual Scores", "Qual Wins")
+			}
+
+			rows := make([][]string, len(teams))
+			for i, key := range teams {
+				p := points.Points[key]
+				row := []string{
+					output.TeamNumberFromKey(key),
+					strconv.Itoa(p.QualPoints),
+					strconv.Itoa(p.AlliancePoints),
+					strconv.Itoa(p.AwardPoints),
+					strconv.Itoa(p.ElimPoints),
+					strconv.Itoa(p.Total),
+				}
+				if withTiebreakers {
+					tb := points.Tiebreakers[key]
+					scores := make([]string, len(tb.HighestQualScores))
+					for n, v := range tb.HighestQualScores {
+						scores[n] = strconv.Itoa(v)
+					}
+					row = append(row, strings.Join(scores, ", "), strconv.Itoa(tb.QualWins))
+				}
+				rows[i] = row
+			}
+			// The parsed struct, not the raw body: PermuteSlice would happily
+			// treat a json.RawMessage as a slice of bytes to reorder.
+			return outputTable(cmd, points, headers, rows)
+		},
+	}
+	c.Flags().Bool("tiebreakers", false, "Add the highest qual scores and qual wins columns")
+	return c
 }
 
 func newEventPredictionsCmd() *cobra.Command {
