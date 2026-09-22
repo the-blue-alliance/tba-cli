@@ -49,7 +49,7 @@ func outputTableWith(cmd *cobra.Command, data interface{}, table output.Table) e
 			return err
 		}
 	}
-	return output.Render(w, table, output.RenderOptions{
+	return renderRows(w, table, output.RenderOptions{
 		Format:    format,
 		NoHeaders: settings(cmd).Bool("no-headers"),
 		Color:     color,

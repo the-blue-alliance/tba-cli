@@ -326,8 +326,10 @@ func TestEventInsightsOfAnEventWithNone(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/insights": "{}"})
 	out, _, err := runCmd(t, srv, "event", "insights", "2024cthar", "--format", "table")
 	requireNoError(t, err, "")
-	if got := lines(out); len(got) != 2 || !strings.HasPrefix(got[0], "Section") {
-		t.Errorf("output = %q", out)
+	// Nothing to report prints nothing: a "Section" header with no section
+	// under it is a table pretending to have found something.
+	if out != "" {
+		t.Errorf("output = %q, want nothing", out)
 	}
 }
 

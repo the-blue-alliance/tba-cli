@@ -680,6 +680,25 @@ func TestEventExportForceOverwrites(t *testing.T) {
 	requireContains(t, body, "2024cthar_qm1")
 }
 
+// A listing with no rows prints nothing at all, headers included. A file is
+// not a listing: its header is the schema whatever the event turned out to
+// have, so an empty dataset is still written as a header and no rows.
+func TestEventExportWritesAHeaderForAnEmptyDataset(t *testing.T) {
+	routes := exportRoutes()
+	routes["/event/2024cthar/awards"] = "[]"
+	srv := newFakeTBA(t, routes)
+	dir := t.TempDir()
+
+	_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "csv", "--dir", dir, "--only", "awards")
+	requireNoError(t, err, stderr)
+
+	body := readExported(t, dir, "awards", "csv")
+	if got := lines(body); len(got) != 1 || !strings.Contains(got[0], "Award") {
+		t.Errorf("awards file = %q, want its header and nothing else", body)
+	}
+}
+
 func TestEventExportSkipsADatasetTheEventDoesNotHave(t *testing.T) {
 	routes := exportRoutes()
 	delete(routes, "/event/2024cthar/district_points")

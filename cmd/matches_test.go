@@ -245,14 +245,17 @@ func TestEventMatchesFilterByTeam(t *testing.T) {
 	}
 }
 
-// A team that played no matches is an empty listing, not an error.
+// A team that played no matches is an empty listing, not an error -- and an
+// empty listing is empty: no rows, and so no header row either, since a lone
+// row of column names in the file a pipeline collects is not data.
 func TestEventMatchesFilterByTeamWithNoMatches(t *testing.T) {
 	srv := eventMatchesServer(t)
 	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "9999", "--format", "csv")
 	requireNoError(t, err, errOut)
-	if got := csvColumn(t, out, 1); len(got) != 0 {
-		t.Errorf("matches = %v, want none", got)
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
 	}
+	requireContains(t, errOut, "note: no matches for team 9999 at 2024cthar")
 }
 
 func TestEventMatchesFilterByLevel(t *testing.T) {
@@ -444,8 +447,9 @@ func TestEventMatchesTimeSourceIsADroppableColumn(t *testing.T) {
 }
 
 // A 2021 remote event ran no matches. The listing is empty, and that is not an
-// error — but a bare header row is not an answer either, so the reason goes to
-// stderr, where it cannot land in a file the table was piped into.
+// error — but a bare header row is not an answer either, so stdout stays empty
+// and the reason goes to stderr, where it cannot land in a file the table was
+// piped into.
 func TestEventMatchesWithNoMatches(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2021ctwat":         event2021ctwatJSON,
@@ -454,14 +458,62 @@ func TestEventMatchesWithNoMatches(t *testing.T) {
 	out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", "table")
 	requireNoError(t, err, errOut)
 
-	if got := lines(out); got[0] != strings.Join([]string{}, "") && !strings.HasPrefix(got[0], "Match") {
-		t.Errorf("want just a header, got:\n%s", out)
-	}
-	if len(lines(out)) != 2 {
-		t.Errorf("want a header and its separator only, got:\n%s", out)
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
 	}
 	if want := "note: no matches posted yet for 2021ctwat\n"; errOut != want {
 		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// An empty listing prints nothing on stdout, which is what the README has
+// always said it does: a lone row of column names is a table pretending to
+// have found something, and in a file a pipeline collects it is a header with
+// no data under it. JSON is the exception it has always been.
+func TestEmptyListingPrintsNothingOnStdout(t *testing.T) {
+	for _, format := range []string{"table", "csv", "tsv", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+			out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", format)
+			requireNoError(t, err, errOut)
+			if out != "" {
+				t.Errorf("stdout = %q, want nothing", out)
+			}
+		})
+	}
+	t.Run("json", func(t *testing.T) {
+		srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+		out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", "json")
+		requireNoError(t, err, errOut)
+		if strings.TrimSpace(out) != "[]" {
+			t.Errorf("stdout = %q, want []", out)
+		}
+	})
+}
+
+// The rule is in the shared table plumbing, so it holds for a listing that is
+// nothing like a match table -- including the one kind that carries a cut line
+// and goes through its own entry point.
+func TestEmptyListingsPrintNothingAcrossCommands(t *testing.T) {
+	cases := []struct {
+		name  string
+		serve map[string]any
+		args  []string
+	}{
+		{"event list", map[string]any{"/events/2024": "[]"}, []string{"event", "list", "--year", "2024"}},
+		{"district rankings", map[string]any{"/district/2024ne/rankings": "[]"}, []string{"district", "rankings", "2024ne"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			for _, format := range []string{"table", "csv"} {
+				srv := newFakeTBA(t, c.serve)
+				out, errOut, err := runCmd(t, srv, append(c.args, "--format", format)...)
+				requireNoError(t, err, errOut)
+				if out != "" {
+					t.Errorf("%s stdout = %q, want nothing", format, out)
+				}
+			}
+		})
 	}
 }
 
@@ -834,10 +886,15 @@ func parseCSV(t *testing.T, s string) [][]string {
 	return records
 }
 
-// csvColumn returns one column of a csv body, without its header.
+// csvColumn returns one column of a csv body, without its header. An empty
+// listing prints nothing at all, headers included, so there is no column in it
+// to return.
 func csvColumn(t *testing.T, s string, col int) []string {
 	t.Helper()
 	records := parseCSV(t, s)
+	if len(records) == 0 {
+		return nil
+	}
 	out := make([]string, 0, len(records))
 	for _, row := range records[1:] {
 		if col < len(row) {
