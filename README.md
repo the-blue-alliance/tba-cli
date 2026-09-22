@@ -789,7 +789,7 @@ exports/2024cthar-matches.json
 exports/2024cthar-rankings.json
 ```
 
-For `csv` and `tsv` most files carry exactly the columns the matching `tba event <dataset>` command prints — the same row builders render both — with a header row and no color. The `event` dataset is a single object rather than a list, so in `csv` and `tsv` it becomes a two-column `Field,Value` listing of the same fields `tba event view` shows. For `json` each file holds the API's own payload, pretty-printed and newline-terminated; it is re-indented rather than re-encoded, so nothing in it is re-escaped or reordered.
+For `csv` and `tsv` most files carry exactly the columns the matching `tba event <dataset>` command prints — the same row builders render both — with a header row and no color. The one addition is `district-points`, whose file always includes the tiebreaker columns the table shows only with `--tiebreakers`: a file is for analysis, and the tiebreakers are part of the data. The `event` dataset is a single object rather than a list, so in `csv` and `tsv` it becomes a two-column `Field,Value` listing of the same fields `tba event view` shows. For `json` each file holds the API's own payload, pretty-printed and newline-terminated; it is re-indented rather than re-encoded, so nothing in it is re-escaped or reordered.
 
 **The two match files are shaped for analysis, not for reading.** The `tba event matches` table puts three teams in one cell, writes `36-21` as a single score, shows `Sat 11:25` in your timezone and marks a disqualification as `175!`. All of that is right on a terminal and wrong in a file something else is going to compute from, so `matches` gets one value per column instead:
 

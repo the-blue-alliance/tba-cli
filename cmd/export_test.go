@@ -156,14 +156,18 @@ func TestEventExportWritesOneFilePerDatasetInEveryFormat(t *testing.T) {
 func TestEventExportFilesMatchTheEventCommandTables(t *testing.T) {
 	// matches is not here: its file is shaped for analysis rather than for
 	// reading, and has a test of its own.
-	cases := []struct{ dataset, command string }{
-		{"teams", "teams"},
-		{"rankings", "rankings"},
-		{"alliances", "alliances"},
-		{"awards", "awards"},
-		{"oprs", "oprs"},
-		{"district-points", "district-points"},
-		{"team-statuses", "team-statuses"},
+	cases := []struct {
+		dataset, command string
+		extra            []string
+	}{
+		{"teams", "teams", nil},
+		{"rankings", "rankings", nil},
+		{"alliances", "alliances", nil},
+		{"awards", "awards", nil},
+		{"oprs", "oprs", nil},
+		// The file carries the tiebreakers the table shows only on request.
+		{"district-points", "district-points", []string{"--tiebreakers"}},
+		{"team-statuses", "team-statuses", nil},
 	}
 	for _, format := range []string{"csv", "tsv"} {
 		for _, tc := range cases {
@@ -173,7 +177,8 @@ func TestEventExportFilesMatchTheEventCommandTables(t *testing.T) {
 				_, stderr, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", format, "--dir", dir)
 				requireNoError(t, err, stderr)
 
-				want, stderr, err := runCmd(t, srv, "event", tc.command, "2024cthar", "--format", format)
+				args := append([]string{"event", tc.command, "2024cthar", "--format", format}, tc.extra...)
+				want, stderr, err := runCmd(t, srv, args...)
 				requireNoError(t, err, stderr)
 
 				if got := readExported(t, dir, tc.dataset, format); got != want {

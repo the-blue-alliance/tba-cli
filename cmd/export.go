@@ -710,7 +710,9 @@ func exportDistrictPointsTable(_ *exporter, raw json.RawMessage) (output.Table, 
 	if err := json.Unmarshal(raw, &points); err != nil {
 		return output.Table{}, err
 	}
-	return eventDistrictPointsTable(points, false), nil
+	// A file is for analysis, so it carries the tiebreaker columns the table
+	// shows only on request.
+	return eventDistrictPointsTable(points, true), nil
 }
 
 func exportTeamStatusesTable(_ *exporter, raw json.RawMessage) (output.Table, error) {
