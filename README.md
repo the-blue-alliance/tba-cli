@@ -642,6 +642,63 @@ Status:         Team 177 was Rank 1 with a record of 10-2-0 and won the event.
 
 The rows between `Record` and `Alliance` are the season's own ranking tiebreakers, named and rounded the way the event reports them. Each part of the answer only exists once that part of the event has happened, so before it starts you get `not ranked yet`, `not selected` and `not started` rather than blanks. A team that is not attending the event has no standing there, which is exit 5.
 
+### Insights and predictions
+
+The four insights commands all answer with documents TBA computes rather than
+records it stores, so their tables are built from names the API spells in
+`snake_case`. Each one prints those names as words — `most_matches_played`
+becomes `Most Matches Played` — and every one of them keeps the exact document
+the API sent under `--format json`.
+
+`insight leaderboards` is `Leaderboard | Rank | Key | Value`, one board after
+another. Teams tied on a value share a rank and are listed in a single cell, and
+a board about teams shows bare team numbers while a board about events keeps its
+event keys. `--limit` caps how many rows each board contributes, at 10 by
+default, so a whole season stays readable; `--limit 0` shows all of them.
+`insight notables` is `Notable | Team | Context`, where Context is whatever the
+board says earned the entry.
+
+`--board` narrows either command to one board, by the human name or the raw one,
+in any case. It narrows the JSON too, so a filtered run and a piped one agree. A
+name that matches nothing is a usage error listing the boards the season has,
+since they change from year to year.
+
+```
+tba insight leaderboards --year 2024 --board "Blue Banners"
+tba insight leaderboards --year 2024 --limit 0 --format csv
+tba insight notables --year 2024 --board "Hall Of Fame"
+```
+
+`event predictions` is `Match | Red Score | Blue Score | Predicted Winner |
+Confidence`, in play order — the qualification rounds and then the bracket,
+never the alphabetical order the match keys are in. Confidence is the model's
+own probability for the winner it picked. `--rankings` switches to the predicted
+qualification finish, `Team | Predicted Rank | Range`, and `--stats` shows the
+model's own numbers: the Brier scores and the mean and variance of each
+statistic it fits.
+
+Not every event is modelled. One TBA has no predictions for prints `no
+predictions available for <key>` on stderr, no rows on stdout, and exits 0.
+
+```
+tba event predictions 2024cthar
+tba event predictions 2024cthar --rankings
+tba event predictions 2024cthar --stats
+```
+
+`event insights` is `Section | Stat | Value`, with the qualification round first
+and the playoff round after it. Which statistics exist is decided by the season's
+game, so the rows change from year to year, and a nested statistic is flattened
+into a dotted name such as `Score By Alliance.Red`. The counting statistics the
+endpoint is full of arrive as `[count, total, percent]` and read as
+`12/60 (20%)`; other numbers are trimmed to two decimals and lists are joined
+with commas. `--level qual` or `--level playoff` shows one round.
+
+```
+tba event insights 2024cthar --level playoff
+tba event insights 2024cthar --columns stat,value --format markdown
+```
+
 ## Scripting
 
 `tba` is meant to be piped into other tools.
@@ -770,15 +827,15 @@ identical archives.
 | `tba event awards <key>` | Show event awards |
 | `tba event oprs <key>` | Show OPR/DPR/CCWM |
 | `tba event district-points <key>` | Show district points (`--tiebreakers`) |
-| `tba event predictions <key>` | Show predictions |
-| `tba event insights <key>` | Show event insights |
+| `tba event predictions <key>` | Show match predictions (`--rankings`, `--stats`) |
+| `tba event insights <key>` | Show event insights (`--level qual\|playoff`) |
 | `tba match view <key>` | View match details |
 | `tba district list` | List districts (defaults to the current season) |
 | `tba district events <key>` | List district events |
 | `tba district teams <key>` | List district teams |
 | `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--detail`) |
-| `tba insight leaderboards` | Show leaderboards |
-| `tba insight notables` | Show notable insights |
+| `tba insight leaderboards` | Show leaderboards (`--board`, `--limit N`) |
+| `tba insight notables` | Show notable insights (`--board`) |
 | `tba open <target>` | Open a team, event or match on thebluealliance.com |
 | `tba config list` | Show every setting with its value and source |
 | `tba config get <key>` | Print one setting's effective value |
