@@ -575,6 +575,104 @@ func TestEventExportJSONSummaryShape(t *testing.T) {
 	}
 }
 
+// TBA_FORMAT is the environment's spelling of --format, so it selects the
+// JSON summary exactly as the flag does. Reading the flag alone meant an
+// exported TBA_FORMAT=json quietly did nothing here and everything elsewhere.
+func TestEventExportFormatComesFromTheEnvironment(t *testing.T) {
+	srv := newExportServer(t)
+	t.Setenv("TBA_FORMAT", "json")
+
+	stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "csv", "--dir", t.TempDir(), "--only", "oprs")
+	requireNoError(t, err, stderr)
+
+	obj := decodeJSON(t, stdout).(map[string]any)
+	if _, ok := obj["written"].([]any); !ok {
+		t.Errorf("stdout = %q, want the JSON summary", stdout)
+	}
+}
+
+func TestEventExportFormatComesFromTheConfigFile(t *testing.T) {
+	srv := newExportServer(t)
+	writeConfig(t, "format: json\n")
+
+	stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
+		"--to", "csv", "--dir", t.TempDir(), "--only", "oprs")
+	requireNoError(t, err, stderr)
+
+	obj := decodeJSON(t, stdout).(map[string]any)
+	if _, ok := obj["written"].([]any); !ok {
+		t.Errorf("stdout = %q, want the JSON summary", stdout)
+	}
+}
+
+// A format that cannot select the export format is refused wherever it was
+// set, and the message says where that was.
+func TestEventExportRejectsANonJSONFormatFromTheEnvironment(t *testing.T) {
+	srv := newExportServer(t)
+	t.Setenv("TBA_FORMAT", "csv")
+
+	_, _, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "json", "--dir", t.TempDir())
+	requireErrorContains(t, err, "does not choose the export format")
+	requireErrorContains(t, err, "TBA_FORMAT")
+	if code := clierr.ExitCode(err); code != clierr.ExitUsage {
+		t.Errorf("exit code = %d, want %d", code, clierr.ExitUsage)
+	}
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a usage error should not reach the API, got %v", got)
+	}
+}
+
+func TestEventExportRejectsANonJSONFormatFromTheConfigFile(t *testing.T) {
+	srv := newExportServer(t)
+	path := writeConfig(t, "format: table\n")
+
+	_, _, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "json", "--dir", t.TempDir())
+	requireErrorContains(t, err, "does not choose the export format")
+	requireErrorContains(t, err, path)
+}
+
+// `auto` is the default and means "decide from the terminal" everywhere else.
+// Here there is nothing to decide: a piped export is a list of paths to feed
+// to something, and turning it into JSON would break the pipeline it was
+// written for.
+func TestEventExportAutoStaysAListOfPathsWhenPiped(t *testing.T) {
+	for _, setup := range []struct {
+		name string
+		env  string
+	}{
+		{"flag", ""},
+		{"env", "auto"},
+	} {
+		t.Run(setup.name, func(t *testing.T) {
+			srv := newExportServer(t)
+			dir := t.TempDir()
+			args := []string{"event", "export", "2024cthar", "--to", "csv", "--dir", dir, "--only", "oprs"}
+			if setup.env != "" {
+				t.Setenv("TBA_FORMAT", setup.env)
+			} else {
+				args = append(args, "--format", "auto")
+			}
+			stdout, stderr, err := runCmd(t, srv, args...)
+			requireNoError(t, err, stderr)
+			if stdout != exportedPath(dir, "oprs", "csv")+"\n" {
+				t.Errorf("stdout = %q, want the bare path", stdout)
+			}
+		})
+	}
+}
+
+func TestEventExportRejectsAFormatThatIsNotAFormat(t *testing.T) {
+	srv := newExportServer(t)
+	t.Setenv("TBA_FORMAT", "xlsx")
+
+	_, _, err := runCmd(t, srv, "event", "export", "2024cthar", "--to", "csv", "--dir", t.TempDir())
+	requireErrorContains(t, err, `invalid TBA_FORMAT "xlsx"`)
+	if code := clierr.ExitCode(err); code != clierr.ExitUsage {
+		t.Errorf("exit code = %d, want %d", code, clierr.ExitUsage)
+	}
+}
+
 func TestEventExportJSONSummaryTakesAJqExpression(t *testing.T) {
 	srv := newExportServer(t)
 	stdout, stderr, err := runCmd(t, srv, "event", "export", "2024cthar",
