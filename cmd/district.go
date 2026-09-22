@@ -35,7 +35,7 @@ func newDistrictListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}

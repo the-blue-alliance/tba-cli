@@ -144,7 +144,7 @@ func resolveTeamEvent(cmd *cobra.Command, client *api.Client, team, eventKey str
 		return teamEventChoice{event: event, found: true}, nil
 	}
 
-	year, err := resolveYear(cmd)
+	year, err := resolveYear(cmd, client)
 	if err != nil {
 		return teamEventChoice{}, err
 	}

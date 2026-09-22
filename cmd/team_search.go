@@ -322,10 +322,6 @@ because it would repeat that walk for every season.`,
 			if allYears, _ := cmd.Flags().GetBool("all-years"); allYears {
 				return clierr.Usage("--all-years is not supported: every season is its own ~20-page team list, so searching all of them would mean hundreds of requests; search one season at a time with --year")
 			}
-			year, err := resolveYear(cmd)
-			if err != nil {
-				return err
-			}
 			fieldSpec, _ := cmd.Flags().GetString("fields")
 			fields, err := parseSearchFields(fieldSpec)
 			if err != nil {
@@ -340,7 +336,14 @@ because it would repeat that walk for every season.`,
 				return err
 			}
 
+			// The client comes before the season, so that the season lookup
+			// can borrow it rather than build a second one with a rate
+			// limiter of its own.
 			client, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}

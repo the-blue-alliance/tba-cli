@@ -77,7 +77,7 @@ func newTeamListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -123,7 +123,7 @@ func newTeamEventsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -222,7 +222,7 @@ match table.`,
 				return renderMatches(cmd, matches, constantPlayoffType(eventPlayoffType(cmd, client, eventKey)), eventKey)
 			}
 
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -412,7 +412,7 @@ func newTeamMediaCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
