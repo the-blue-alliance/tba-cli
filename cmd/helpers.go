@@ -340,3 +340,61 @@ func validateMatchKey(arg string) error {
 	}
 	return nil
 }
+
+// groupArgs rejects a stray argument under a command whose only job is to
+// group others.
+//
+// Cobra applies that check to the root alone: `tba teem` is an error with a
+// suggestion, while `tba team blah` printed the group's help on stdout and
+// exited 0, so a typo in a script looked like a successful run. This is the
+// root's rule, spelled out once and applied at every level.
+func groupArgs() cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
+		// Cobra's own wording for the same mistake on the root, so a typo
+		// reads the same however deep in the tree it was made. The distance
+		// is the default cobra fills in on the path this stands in for;
+		// SuggestionsFor on its own would compare against zero and never
+		// suggest anything.
+		if cmd.SuggestionsMinimumDistance <= 0 {
+			cmd.SuggestionsMinimumDistance = 2
+		}
+		if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
+			msg += "\n\nDid you mean this?\n"
+			for _, s := range suggestions {
+				msg += "\t" + s + "\n"
+			}
+		}
+		return clierr.Usage("%s", msg)
+	}
+}
+
+// asGroup makes one command reject an unknown subcommand.
+//
+// The argument check has to be paired with something to run, because cobra
+// asks "is this command runnable?" before it validates arguments and answers
+// a command with neither Run nor RunE by printing help. With no arguments the
+// behaviour is unchanged: the group prints its own help.
+func asGroup(cmd *cobra.Command) {
+	if cmd.Args == nil {
+		cmd.Args = groupArgs()
+	}
+	if !cmd.Runnable() {
+		cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
+	}
+}
+
+// applyGroupArgs applies asGroup to every command in the tree that groups
+// others, so a new group cannot be added without the check.
+func applyGroupArgs(root *cobra.Command) {
+	for _, c := range root.Commands() {
+		if !c.HasSubCommands() {
+			continue
+		}
+		asGroup(c)
+		applyGroupArgs(c)
+	}
+}
