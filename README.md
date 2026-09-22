@@ -395,6 +395,89 @@ tba district rankings 2024ne --detail --format csv > ne-2024.csv
 team rather than an array, so `--sort` reorders their tables while `--format
 json` keeps the shape the API sent — use `--jq` to reshape that. `district
 rankings` is an array, so `--sort` reorders its JSON too.
+## Configuration
+
+Settings live in `$XDG_CONFIG_HOME/tba/config.yaml` (`~/.config/tba/config.yaml`
+when `XDG_CONFIG_HOME` is unset). `TBA_CONFIG_DIR` overrides the directory
+outright, for both `config.yaml` and the stored API keys in `auth.yaml`.
+`tba config path` prints the path, and nothing else, so `$EDITOR "$(tba config path)"`
+opens it.
+
+Keys are named exactly like the flags they set:
+
+| Key | Type | Environment variable | Default |
+|-----|------|----------------------|---------|
+| `base-url` | URL | `TBA_BASE_URL` | `https://www.thebluealliance.com/api/v3` |
+| `color` | `auto`, `always`, `never` | `TBA_COLOR` | `auto` |
+| `format` | `auto`, `table`, `json`, `csv`, `tsv`, `markdown` | `TBA_FORMAT` | `auto` |
+| `no-cache` | boolean | `TBA_NO_CACHE` | `false` |
+| `no-color` | boolean | `TBA_NO_COLOR` | `false` |
+| `retries` | integer | `TBA_RETRIES` | `3` |
+| `timeout` | duration | `TBA_TIMEOUT` | `10s` |
+| `year` | season | `TBA_YEAR` | the current season |
+
+```yaml
+# ~/.config/tba/config.yaml
+format: table
+timeout: 30s
+retries: 5
+```
+
+**Precedence.** A flag beats an environment variable, which beats the config
+file, which beats the built-in default. Any persistent flag can be set from the
+environment under its own name, upper-snaked with a `TBA_` prefix. The older
+`TBA_AUTH_KEY`, `TBA_CACHE_DIR` and `TBA_CONFIG_DIR` keep working unchanged.
+
+**`format` from the file is for terminals only.** A `format` in the config file
+applies only when stdout is a terminal, so `format: table` never changes what a
+script reads from a pipe — piped output stays JSON. A `--format` flag or
+`TBA_FORMAT` is deliberate enough to apply either way.
+
+**Unknown keys** are a warning on stderr, not a failure, and `config set` leaves
+them alone — a file written by a newer `tba` still works here. A file that
+cannot be parsed at all stops the command before it makes any request.
+
+```
+$ tba config set format table
+$ tba config list
+Key       Value                                   Source
+--------  --------------------------------------  -------
+base-url  https://www.thebluealliance.com/api/v3  default
+color     auto                                    default
+format    table                                   config
+no-cache  false                                   default
+no-color  false                                   default
+retries   3                                       default
+timeout   10s                                     default
+year      current season                          default
+
+$ tba config get timeout
+10s
+$ tba config set retries abc
+Error: retries wants a whole number, not "abc"
+$ tba config set fromat table
+Error: unknown config key "fromat"; did you mean "format"?
+```
+
+`config list` reports the value that is in effect for *this* invocation, which
+is why `format` reads `config` on a terminal and `default` through a pipe.
+
+### Seasons and `--year`
+
+Commands scoped to a season take `--year`, and its default is the season The
+Blue Alliance reports as current — not the calendar year, which is wrong
+between kickoff and New Year. The season is resolved in this order:
+
+1. `--year`
+2. `TBA_YEAR`
+3. `year` in the config file
+4. `current_season` from the API's `/status`
+5. the calendar year, when the API cannot be reached
+
+The answer from `/status` is remembered for 24 hours in `season.json` in the
+cache directory, so the lookup costs at most one extra request a day;
+`--no-cache` asks again. `tba team awards` is the exception: its `--year`
+defaults to every year a team has won anything.
 
 ## Scripting
 
@@ -502,7 +585,7 @@ identical archives.
 | `tba status` | Show API status |
 | `tba version` | Show the version and build metadata |
 | `tba team view <number>` | View team info |
-| `tba team list` | List all teams (defaults to the current year) |
+| `tba team list` | List all teams (defaults to the current season) |
 | `tba team events <number>` | List team events |
 | `tba team years <number>` | List the seasons a team competed in |
 | `tba team matches <number>` | List team matches |
@@ -511,7 +594,7 @@ identical archives.
 | `tba team robots <number>` | List team robots |
 | `tba team districts <number>` | List team districts |
 | `tba event view <key>` | View event details |
-| `tba event list` | List events (defaults to the current year), with `--week`, `--type`, `--district`, `--state`, `--country` and `--team` filters |
+| `tba event list` | List events (defaults to the current season), with `--week`, `--type`, `--district`, `--state`, `--country` and `--team` filters |
 | `tba event teams <key>` | List teams at event |
 | `tba event matches <key>` | List event matches |
 | `tba event rankings <key>` | Show event rankings |
@@ -523,13 +606,18 @@ identical archives.
 | `tba event predictions <key>` | Show predictions |
 | `tba event insights <key>` | Show event insights |
 | `tba match view <key>` | View match details |
-| `tba district list` | List districts (defaults to the current year) |
+| `tba district list` | List districts (defaults to the current season) |
 | `tba district events <key>` | List district events |
 | `tba district teams <key>` | List district teams |
 | `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--detail`) |
 | `tba insight leaderboards` | Show leaderboards |
 | `tba insight notables` | Show notable insights |
 | `tba open <target>` | Open a team, event or match on thebluealliance.com |
+| `tba config list` | Show every setting with its value and source |
+| `tba config get <key>` | Print one setting's effective value |
+| `tba config set <key> <value>` | Write a setting to the config file |
+| `tba config unset <key>` | Remove a setting from the config file |
+| `tba config path` | Print the path of the config file |
 
 The group commands also answer to their plurals: `teams`, `events`, `matches`,
 `districts`, `insights`. Every command carries examples, so `tba event matches
