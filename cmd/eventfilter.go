@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 // eventTypeAlias maps a friendly --type value onto the TBA event_type codes it
@@ -179,15 +179,9 @@ func (f eventFilter) apply(events []api.Event) []api.Event {
 
 // sortEvents orders events the way a season calendar reads: earliest start
 // first, with the event key breaking ties so the order is stable and
-// reproducible across runs.
-func sortEvents(events []api.Event) {
-	sort.SliceStable(events, func(i, j int) bool {
-		if events[i].StartDate != events[j].StartDate {
-			return events[i].StartDate < events[j].StartDate
-		}
-		return events[i].Key < events[j].Key
-	})
-}
+// reproducible across runs. It is frc.SortEvents, so every listing of events
+// in the CLI agrees on what "in order" means.
+func sortEvents(events []api.Event) { frc.SortEvents(events) }
 
 // humanWeek renders TBA's 0-based week as the 1-based number people use.
 // Events with no week (championships, offseasons) get an empty cell.
