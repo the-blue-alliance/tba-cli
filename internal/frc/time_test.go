@@ -165,47 +165,63 @@ func TestFormatTimeWithTheDate(t *testing.T) {
 	}
 }
 
-// One competition day needs no date on every row.
-func TestSpansDaysWithinOneDay(t *testing.T) {
+// A listing of matches happening today needs no date on every row: the reader
+// knows what day it is.
+func TestNeedsDateForTodaysMatches(t *testing.T) {
 	matches := []api.Match{
 		{ActualTime: epoch(1711130400)}, // 2024-03-22 18:00 UTC
 		{ActualTime: epoch(1711141200)}, // 2024-03-22 21:00 UTC
 	}
-	if frc.SpansDays(matches, time.UTC) {
-		t.Error("SpansDays = true, want false for two times on 2024-03-22 UTC")
+	now := time.Date(2024, 3, 22, 22, 0, 0, 0, time.UTC)
+	if frc.NeedsDate(matches, time.UTC, now) {
+		t.Error("NeedsDate = true, want false for two times on today, 2024-03-22 UTC")
 	}
 }
 
-func TestSpansDaysAcrossDays(t *testing.T) {
+// One day, but not this one: "Sat 13:57" against an April match names one of
+// four Saturdays and gives no way to tell which.
+func TestNeedsDateForAPastSingleDayListing(t *testing.T) {
+	matches := []api.Match{
+		{ActualTime: epoch(1711130400)}, // 2024-03-22 UTC
+		{ActualTime: epoch(1711141200)}, // 2024-03-22 UTC
+	}
+	now := time.Date(2024, 4, 30, 9, 0, 0, 0, time.UTC)
+	if !frc.NeedsDate(matches, time.UTC, now) {
+		t.Error("NeedsDate = false, want true for a listing of a day that is not today")
+	}
+}
+
+func TestNeedsDateAcrossDays(t *testing.T) {
 	matches := []api.Match{
 		{ActualTime: epoch(1711130400)}, // 2024-03-22 UTC
 		{ActualTime: epoch(1711299600)}, // 2024-03-24 UTC
 	}
-	if !frc.SpansDays(matches, time.UTC) {
-		t.Error("SpansDays = false, want true for times two days apart")
+	now := time.Date(2024, 3, 22, 22, 0, 0, 0, time.UTC)
+	if !frc.NeedsDate(matches, time.UTC, now) {
+		t.Error("NeedsDate = false, want true when one of the matches is not today")
 	}
 }
 
-// A schedule that has not been published says nothing about how many days the
-// listing covers, so timeless matches are ignored rather than counted as a
-// second day.
-func TestSpansDaysIgnoresMatchesWithoutATime(t *testing.T) {
+// A schedule that has not been published has no time to date, so a timeless
+// match is not a reason to widen the column.
+func TestNeedsDateIgnoresMatchesWithoutATime(t *testing.T) {
+	now := time.Date(2024, 3, 22, 22, 0, 0, 0, time.UTC)
 	matches := []api.Match{
-		{ActualTime: epoch(1711130400)},
+		{ActualTime: epoch(1711130400)}, // today
 		{},
 		{PredictedTime: epoch(0)},
 	}
-	if frc.SpansDays(matches, time.UTC) {
-		t.Error("SpansDays = true, want false when only one match has a time")
+	if frc.NeedsDate(matches, time.UTC, now) {
+		t.Error("NeedsDate = true, want false when the only timed match is today")
 	}
-	if frc.SpansDays(nil, time.UTC) {
-		t.Error("SpansDays(nil) = true, want false")
+	if frc.NeedsDate(nil, time.UTC, now) {
+		t.Error("NeedsDate(nil) = true, want false")
 	}
 }
 
-// The days are counted where the reader is, not in UTC: two matches either
-// side of midnight UTC are one evening in Hartford.
-func TestSpansDaysUsesTheGivenLocation(t *testing.T) {
+// Today is where the reader is, not in UTC: two matches either side of
+// midnight UTC are one evening in Hartford.
+func TestNeedsDateUsesTheGivenLocation(t *testing.T) {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Skipf("no tzdata available: %v", err)
@@ -214,10 +230,11 @@ func TestSpansDaysUsesTheGivenLocation(t *testing.T) {
 		{ActualTime: epoch(1711148400)}, // 2024-03-22 19:00 EDT
 		{ActualTime: epoch(1711155600)}, // 2024-03-22 21:00 EDT
 	}
-	if frc.SpansDays(matches, loc) {
-		t.Error("SpansDays = true, want false for one evening in New York")
+	now := time.Unix(1711155600, 0)
+	if frc.NeedsDate(matches, loc, now) {
+		t.Error("NeedsDate = true, want false for one evening in New York")
 	}
-	if !frc.SpansDays(matches, time.UTC) {
-		t.Error("SpansDays = false in UTC, where those times straddle midnight")
+	if !frc.NeedsDate(matches, time.UTC, now) {
+		t.Error("NeedsDate = false in UTC, where those times straddle midnight")
 	}
 }

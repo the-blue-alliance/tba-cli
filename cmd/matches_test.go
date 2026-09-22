@@ -565,12 +565,13 @@ func TestEventMatchesFor2015(t *testing.T) {
 	requireNoError(t, err, "")
 
 	// The one match is played, so When counts down to nothing and the column
-	// is left out of the listing altogether.
+	// is left out of the listing altogether. 2015 is not today, so the time
+	// carries its date.
 	want := []string{
 		"Qual 7", "2015ctwat_qm7",
 		"177, 1071, 2168", "230, 195, 558",
 		"44-44", "tie",
-		localTime(1427464800), "scheduled", "Played",
+		localDateTime(1427464800), "scheduled", "Played",
 	}
 	if got := findRow(t, parseCSV(t, out), "2015ctwat_qm7"); !equalStrings(got, want) {
 		t.Errorf("row =\n%v\nwant\n%v", got, want)
@@ -882,9 +883,10 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// One competition day needs no date on every row: the weekday and the clock
-// are what a team in the pits reads.
-func TestEventMatchesOmitsTheDateWithinOneDay(t *testing.T) {
+// Today's competition needs no date on every row: the weekday and the clock
+// are what a team in the pits reads, and they know what day it is.
+func TestEventMatchesOmitsTheDateForTodaysMatches(t *testing.T) {
+	withNow(t, time.Unix(1711120920, 0))
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
 	})
@@ -893,6 +895,21 @@ func TestEventMatchesOmitsTheDateWithinOneDay(t *testing.T) {
 
 	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localTime(1711120920) {
 		t.Errorf("time = %q, want %q", got, localTime(1711120920))
+	}
+}
+
+// The same listing read later is a listing of history, and "Fri 11:22" names
+// one of the season's Fridays without saying which.
+func TestEventMatchesAddsTheDateOnceTheDayIsPast(t *testing.T) {
+	withNow(t, time.Unix(1711120920+30*24*3600, 0))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localDateTime(1711120920) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1711120920))
 	}
 }
 
