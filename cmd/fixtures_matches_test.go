@@ -268,6 +268,88 @@ const event2021ctwatJSON = `{
   "playoff_type": null
 }`
 
+// One match with everything a detail view can show: a surrogate, a score
+// breakdown on both alliances, and a video.
+const matchViewQM12JSON = `{
+  "key": "2024cthar_qm12",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 12,
+  "event_key": "2024cthar",
+  "time": 1711130400,
+  "predicted_time": 1711130700,
+  "actual_time": 1711130820,
+  "post_result_time": 1711130900,
+  "winning_alliance": "red",
+  "alliances": {
+    "red": {"score": 88, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
+  },
+  "score_breakdown": {
+    "red": {"autoPoints": 20, "totalPoints": 88, "melody": true},
+    "blue": {"autoPoints": 10, "totalPoints": 61, "melody": false}
+  },
+  "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}]
+}`
+
+// A semifinal, whose name depends on the event's bracket.
+const matchViewSF13JSON = `{
+  "key": "2024cthar_sf13m1",
+  "comp_level": "sf",
+  "set_number": 13,
+  "match_number": 1,
+  "event_key": "2024cthar",
+  "time": 1711299600,
+  "predicted_time": 1711299600,
+  "actual_time": 1711299780,
+  "winning_alliance": "blue",
+  "alliances": {
+    "red": {"score": 102, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 118, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": null,
+  "videos": []
+}`
+
+// A match that has not been played: both scores -1, no winner, no breakdown.
+const matchViewUnplayedJSON = `{
+  "key": "2024cthar_qm40",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 40,
+  "event_key": "2024cthar",
+  "time": 1711220400,
+  "predicted_time": 1711221000,
+  "actual_time": null,
+  "winning_alliance": "",
+  "alliances": {
+    "red": {"score": -1, "team_keys": ["frc558", "frc3467", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": -1, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": null,
+  "videos": []
+}`
+
+// A match whose video is hosted somewhere TBA knows but this CLI does not have
+// a URL shape for.
+const matchViewTBAVideoJSON = `{
+  "key": "2024cthar_qm41",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 41,
+  "event_key": "2024cthar",
+  "time": 1711224000,
+  "predicted_time": 1711224000,
+  "actual_time": 1711224180,
+  "winning_alliance": "blue",
+  "alliances": {
+    "red": {"score": 40, "team_keys": ["frc558", "frc3467", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 66, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": null,
+  "videos": [{"type": "tba", "key": "abc123"}]
+}`
+
 // A 2015 qualification match. That season scored both alliances the same in a
 // coopertition match and reported no winner, and it predates predicted times.
 const match2015ctwatQM7JSON = `{
