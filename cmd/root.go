@@ -90,6 +90,10 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newOpenCmd())
 	rootCmd.AddCommand(newConfigCmd())
 
+	// A command that only groups others must still refuse an unknown one;
+	// applied to the finished tree so a new group cannot forget it.
+	applyGroupArgs(rootCmd)
+
 	// Argument completion is wired onto the finished tree; see completion.go.
 	attachCompletions(rootCmd)
 
