@@ -130,6 +130,25 @@ func TestEventListTypeFilter(t *testing.T) {
 	}
 }
 
+// A district championship that is large enough runs as divisions (event_type
+// 5) feeding a finals event (event_type 2). Both are the DCMP, so --type dcmp
+// has to show both; --type dcmp-division narrows to the divisions.
+func TestEventListDcmpIncludesDivisions(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/events/2024": `[
+		{"key":"2024micmp","name":"FIM Championship","event_type":2,"event_type_string":"District Championship",
+		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6},
+		{"key":"2024micmp1","name":"FIM Championship - APTIV Division","event_type":5,
+		 "event_type_string":"District Championship Division",
+		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6},
+		{"key":"2024cthar","name":"NE District Hartford Event","event_type":1,"event_type_string":"District",
+		 "start_date":"2024-03-28","end_date":"2024-03-30","city":"Hartford","state_prov":"CT","country":"USA","week":3}
+	]`})
+
+	requireKeys(t, listedKeys(t, srv, "--type", "dcmp"), "2024micmp", "2024micmp1")
+	requireKeys(t, listedKeys(t, srv, "--type", "dcmp-division"), "2024micmp1")
+	requireKeys(t, listedKeys(t, srv, "--type", "district"), "2024cthar")
+}
+
 func TestEventListTypeAcceptsMultipleValues(t *testing.T) {
 	srv := eventListServer(t)
 	requireKeys(t, listedKeys(t, srv, "--type", "dcmp,cmp-division"), "2024necmp", "2024mil")

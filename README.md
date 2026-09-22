@@ -85,8 +85,8 @@ tba event list --year 2024 --team 177
 
 | Filter | Matches |
 |--------|---------|
-| `--week N` | The **1-based** week number, as thebluealliance.com shows it. The API's own `week` field counts from 0; `--week 1` is week 1. Events with no week (championships, offseasons) never match. |
-| `--type` | One or more event types, comma-separated: `regional`, `district`, `dcmp`, `dcmp-division`, `cmp-division`, `cmp-finals`, `foc`, `offseason`, `preseason`, `remote`, `unlabeled`, `all`. An unknown value is a usage error listing the valid ones. `all` cancels the filter. |
+| `--week N` | The **1-based** week number, as thebluealliance.com shows it. The API's own `week` field counts from 0; `--week 1` is week 1. `--week 0` is a usage error. Events with no week (championships, offseasons) never match. |
+| `--type` | One or more event types, comma-separated: `regional`, `district`, `dcmp`, `dcmp-division`, `cmp-division`, `cmp-finals`, `foc`, `offseason`, `preseason`, `remote`, `unlabeled`, `all`. `dcmp` covers a district championship and its divisions; `dcmp-division` is the divisions alone. An unknown value is a usage error listing the valid ones. `all` cancels the filter. |
 | `--district` | The district abbreviation (`ne`, `fim`, `isr`), case-insensitive. |
 | `--state` | `state_prov` exactly as the API spells it, case-insensitive (`CT`, `Ontario`). |
 | `--country` | `country`, case-insensitive (`USA`, `Israel`). |

@@ -21,7 +21,10 @@ type eventTypeAlias struct {
 var eventTypeAliases = []eventTypeAlias{
 	{"regional", []int{0}},
 	{"district", []int{1}},
-	{"dcmp", []int{2}},
+	// A district championship that is large enough gets split into divisions
+	// (event_type 5) that feed a finals event (event_type 2). Both are the
+	// DCMP, so "dcmp" covers them; "dcmp-division" narrows to the divisions.
+	{"dcmp", []int{2, 5}},
 	{"dcmp-division", []int{5}},
 	{"cmp-division", []int{3}},
 	{"cmp-finals", []int{4}},
