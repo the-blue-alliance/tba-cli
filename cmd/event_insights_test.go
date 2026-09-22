@@ -29,16 +29,16 @@ func TestEventPredictionsTable(t *testing.T) {
 	requireNoError(t, err, "")
 	want := []string{
 		"Match,Key,Red,Blue,Red Score,Blue Score,Predicted Winner,Confidence",
-		`Qual 1,2024cthar_qm1,"177, 1073, 5507","230, 1071, 4055",84.2,63.1,Red,78.53%`,
-		`Qual 2,2024cthar_qm2,"558, 3467, 2168","195, 1124, 6153",55.5,77.25,Blue,62.31%`,
-		`Qual 10,2024cthar_qm10,"177, 195, 6153","1073, 558, 4055",70,71.05,Blue,51.04%`,
+		`Qual 1,2024cthar_qm1,"177, 1073, 5507","230, 1071, 4055",84.20,63.10,red,78.53%`,
+		`Qual 2,2024cthar_qm2,"558, 3467, 2168","195, 1124, 6153",55.50,77.25,blue,62.31%`,
+		`Qual 10,2024cthar_qm10,"177, 195, 6153","1073, 558, 4055",70.00,71.05,blue,51.04%`,
 		// A 0-0 prediction is no prediction: no winner, no confidence.
-		`Qual 11,2024cthar_qm11,"5507, 1071, 1124","230, 2168, 3467",0,0,,`,
-		`SF 1,2024cthar_sf1m1,"177, 1073, 5507","3467, 6153, 2168",101.5,99.9,Red,50.88%`,
-		`SF 3,2024cthar_sf3m1,"230, 195, 1071","558, 1124, 4055",95,110.2,Blue,66.00%`,
+		`Qual 11,2024cthar_qm11,"5507, 1071, 1124","230, 2168, 3467",0.00,0.00,,`,
+		`SF 1,2024cthar_sf1m1,"177, 1073, 5507","3467, 6153, 2168",101.50,99.90,red,50.88%`,
+		`SF 3,2024cthar_sf3m1,"230, 195, 1071","558, 1124, 4055",95.00,110.20,blue,66.00%`,
 		// The match list does not carry the final, so it is labelled from its
 		// key and has no teams to show.
-		"Final 1,2024cthar_f1m1,,,121,118.4,Red,52.00%",
+		"Final 1,2024cthar_f1m1,,,121.00,118.40,red,52.00%",
 	}
 	got := lines(out)
 	if len(got) != len(want) {
@@ -69,6 +69,43 @@ func TestEventPredictionsConfidenceKeepsTwoDecimals(t *testing.T) {
 	requireContains(t, out, "66.00%")
 }
 
+// Every other Winner column in the tool prints the API's own lowercase "red"
+// and "blue"; this one title-cased them, so the same column read two ways
+// depending on which command wrote it, and a script that matched one missed
+// the other.
+func TestEventPredictionsWinnerIsLowercase(t *testing.T) {
+	out, errOut, err := runCmd(t, predictionsServer(t), "event", "predictions", "2024cthar",
+		"--format", "csv", "--no-headers", "--columns", "predicted winner")
+	requireNoError(t, err, errOut)
+
+	for _, got := range lines(out) {
+		if got != "" && got != "red" && got != "blue" {
+			t.Errorf("winner = %q, want red, blue or nothing", got)
+		}
+	}
+	requireContains(t, out, "red")
+	requireContains(t, out, "blue")
+}
+
+// A predicted score is a number the model computed, and a column of them is
+// read by comparing them, so they all carry two decimals -- "0", "28.5" and
+// "36.42" one under the other put the decimal point in three places.
+func TestEventPredictionsScoresKeepTwoDecimals(t *testing.T) {
+	out, errOut, err := runCmd(t, predictionsServer(t), "event", "predictions", "2024cthar",
+		"--format", "csv", "--no-headers", "--columns", "red score,blue score")
+	requireNoError(t, err, errOut)
+
+	for _, line := range lines(out) {
+		for _, got := range strings.Split(line, ",") {
+			if len(got) < 4 || got[len(got)-3] != '.' {
+				t.Errorf("predicted score = %q, want two decimals", got)
+			}
+		}
+	}
+	requireContains(t, out, "0.00")
+	requireContains(t, out, "84.20")
+}
+
 // A model that cannot separate the two alliances has not predicted a winner.
 // "Red / 50%" reads as a prediction; it is the model declining to make one,
 // whether it says so with an exact half or with two equal scores.
@@ -85,7 +122,7 @@ func TestEventPredictionsNameNoWinnerOnATie(t *testing.T) {
 		"Key,Predicted Winner,Confidence",
 		"2024cthar_qm20,,",
 		"2024cthar_qm21,,",
-		"2024cthar_qm22,Red,78.53%",
+		"2024cthar_qm22,red,78.53%",
 	}
 	got := lines(out)
 	if len(got) != len(want) {
