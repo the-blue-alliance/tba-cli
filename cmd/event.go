@@ -288,6 +288,11 @@ as Total Ranking Points. The columns therefore differ from season to season.`,
 // columns after DQ are whatever the season declared, so they change from year
 // to year; nicknames fills the Name column and may be nil or incomplete.
 //
+// A column no team has anything in is dropped. Which columns a ranking table
+// has already depends on the season, and 2015 -- which had no win/loss record
+// at all -- otherwise prints a Record column that is blank for every team at
+// the event.
+//
 // The rankings are sorted in place: the caller hands JSON output the same
 // struct, and the two should agree on the order.
 func eventRankingsTable(rankings *api.EventRankings, nicknames map[string]string) output.Table {
@@ -317,7 +322,7 @@ func eventRankingsTable(rankings *api.EventRankings, nicknames map[string]string
 		row = append(row, formatStats(r.ExtraStats, rankings.ExtraStatsInfo)...)
 		rows[i] = row
 	}
-	return output.Table{Headers: headers, Rows: rows}
+	return output.Table{Headers: headers, Rows: rows}.DropEmptyColumns()
 }
 
 func newEventAlliancesCmd() *cobra.Command {

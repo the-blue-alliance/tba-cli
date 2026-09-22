@@ -215,6 +215,12 @@ const teamsSimple2024ctharJSON = `[
   {"key": "frc5507", "team_number": 5507, "nickname": "Robotic Eagles", "name": "Ellington High School", "city": "Ellington", "state_prov": "Connecticut", "country": "USA"}
 ]`
 
+// The same list with only one of the teams in it, for the case where a column
+// is filled for some rows and empty for others.
+const teamsSimple2024partialJSON = `[
+  {"key": "frc177", "team_number": 177, "nickname": "Bobcat Robotics", "name": "Gordon & Llura Gund Foundation/RTX & South Windsor High School", "city": "South Windsor", "state_prov": "Connecticut", "country": "USA"}
+]`
+
 // A double-elimination bracket (2023 onwards): the status carries a
 // double_elim_round, and alliance 1 called in a backup team.
 const alliances2024ctharJSON = `[

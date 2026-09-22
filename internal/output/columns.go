@@ -81,6 +81,49 @@ func (t Table) SelectColumns(spec string) (Table, error) {
 	return out, nil
 }
 
+// DropEmptyColumns returns a Table without the columns that carry nothing at
+// all -- 2015's Record, say, a season that had no win/loss to report. A column
+// that is empty for some rows and not others stays, since a blank there is
+// data: the team has no record yet.
+//
+// A table with no rows is returned untouched. Every column is empty then, and
+// answering with no columns at all would turn "no results" into a broken
+// header.
+//
+// This is a per-command decision, not a global one: a column a command always
+// prints is part of its contract, and dropping it everywhere would make a
+// table's shape depend on its contents.
+func (t Table) DropEmptyColumns() Table {
+	if len(t.Rows) == 0 {
+		return t
+	}
+	keep := make([]int, 0, len(t.Headers))
+	for i := range t.Headers {
+		for _, row := range t.Rows {
+			if strings.TrimSpace(cellAt(row, i)) != "" {
+				keep = append(keep, i)
+				break
+			}
+		}
+	}
+	if len(keep) == len(t.Headers) {
+		return t
+	}
+
+	out := Table{Headers: make([]string, len(keep)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers}
+	for n, i := range keep {
+		out.Headers[n] = t.Headers[i]
+	}
+	for r, row := range t.Rows {
+		cells := make([]string, len(keep))
+		for n, i := range keep {
+			cells[n] = cellAt(row, i)
+		}
+		out.Rows[r] = cells
+	}
+	return out
+}
+
 // SortOrder returns the permutation of row indices that sorts the table by
 // spec, a column reference optionally prefixed with "-" to descend. The sort is
 // stable, so rows that compare equal keep the order the API returned them in,
