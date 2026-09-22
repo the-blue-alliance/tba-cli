@@ -21,6 +21,8 @@ func newCacheInfoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "info",
 		Short: "Show cache directory and size",
+		Example: `  tba cache info
+  tba cache info --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			c, err := cache.New()
@@ -43,6 +45,8 @@ func newCacheClearCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "clear",
 		Short: "Remove all cached responses",
+		Example: `  tba cache clear
+  tba cache clear --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := cache.New()
 			if err != nil {

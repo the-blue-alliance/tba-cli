@@ -24,6 +24,9 @@ func newAuthLoginCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "login",
 		Short: "Authenticate with TBA API",
+		Example: `  tba auth login
+  tba auth login --key abcd1234
+  tba auth login --base-url http://localhost:8080/api/v3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			baseURL := getBaseURL(cmd)
@@ -55,6 +58,8 @@ func newAuthStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show authentication status",
+		Example: `  tba auth status
+  tba auth status --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			baseURL := getBaseURL(cmd)
@@ -91,6 +96,8 @@ func newAuthLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
 		Short: "Remove stored API key",
+		Example: `  tba auth logout
+  tba auth logout --base-url http://localhost:8080/api/v3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			baseURL := getBaseURL(cmd)

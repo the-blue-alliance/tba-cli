@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -122,6 +124,40 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 		output.PrintTable(w, headers, rows)
 		return nil
 	}
+}
+
+// teamKey normalises a team argument, so that both "177" and "frc177" (in any
+// case) address the same team.
+func teamKey(arg string) string {
+	trimmed := strings.TrimSpace(arg)
+	if len(trimmed) >= 3 && strings.EqualFold(trimmed[:3], "frc") {
+		trimmed = trimmed[3:]
+	}
+	return "frc" + trimmed
+}
+
+var (
+	eventKeyPattern = regexp.MustCompile(`^[0-9]{4}[a-z0-9]+$`)
+	// Qualification keys have no set number ("2024cthar_qm12"); playoff keys
+	// do ("2024cthar_sf3m1").
+	matchKeyPattern = regexp.MustCompile(`^[0-9]{4}[a-z0-9]+_(qm|ef|qf|sf|f)[0-9]+(m[0-9]+)?$`)
+)
+
+// validateEventKey rejects a malformed event key before any HTTP call, so a
+// typo comes back as a usage error instead of a 404.
+func validateEventKey(arg string) error {
+	if !eventKeyPattern.MatchString(arg) {
+		return fmt.Errorf("%q is not a valid event key (expected something like 2024cthar)", arg)
+	}
+	return nil
+}
+
+// validateMatchKey rejects a malformed match key before any HTTP call.
+func validateMatchKey(arg string) error {
+	if !matchKeyPattern.MatchString(arg) {
+		return fmt.Errorf("%q is not a valid match key (expected something like 2024cthar_qm12)", arg)
+	}
+	return nil
 }
 
 func currentYear() int {

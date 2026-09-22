@@ -11,8 +11,9 @@ import (
 
 func newDistrictCmd() *cobra.Command {
 	districtCmd := &cobra.Command{
-		Use:   "district",
-		Short: "Work with districts",
+		Use:     "district",
+		Aliases: []string{"districts"},
+		Short:   "Work with districts",
 	}
 	districtCmd.AddCommand(newDistrictListCmd())
 	districtCmd.AddCommand(newDistrictEventsCmd())
@@ -25,6 +26,8 @@ func newDistrictListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
 		Short: "List districts for a year",
+		Example: `  tba district list --year 2024
+  tba districts list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -50,7 +53,9 @@ func newDistrictEventsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "events <key>",
 		Short: "List district events",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba district events 2024ne
+  tba district events 2024ne --format csv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -73,7 +78,9 @@ func newDistrictTeamsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "teams <key>",
 		Short: "List district teams",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba district teams 2024ne
+  tba district teams 2024ne --format tsv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -96,7 +103,9 @@ func newDistrictRankingsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rankings <key>",
 		Short: "Show district rankings",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba district rankings 2024ne
+  tba district rankings 2024ne --format markdown`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
