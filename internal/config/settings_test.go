@@ -242,7 +242,7 @@ func TestSuggestKeyFindsTypos(t *testing.T) {
 		"baseurl":  "base-url",
 		"nocolor":  "no-color",
 		"no_cache": "no-cache",
-		"yaer":     "year",
+		"yearz":    "year",
 	}
 	for typo, want := range cases {
 		got, ok := SuggestKey(typo)
