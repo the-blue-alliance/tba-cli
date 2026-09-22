@@ -28,23 +28,41 @@ func newClient(cmd *cobra.Command) (*api.Client, error) {
 	return c, nil
 }
 
+// validFormats lists every accepted --format value, in help-text order.
+const validFormats = "auto, table, json, csv, tsv, markdown"
+
 // resolveFormat returns one of: table, json, csv, tsv, markdown.
-// Precedence: explicit --format > --json / --jq > TTY default.
+//
+// "auto" (the default when --format is not given) means table on a TTY and
+// json otherwise. --json and --jq select JSON, but combining either with an
+// explicit non-JSON --format is an error rather than a silent override.
 func resolveFormat(cmd *cobra.Command) (string, error) {
-	format, _ := cmd.Flags().GetString("format")
+	raw, _ := cmd.Flags().GetString("format")
 	jsonFlag, _ := cmd.Flags().GetBool("json")
 	jqFlag, _ := cmd.Flags().GetString("jq")
 
-	if format != "" {
-		switch format {
-		case "table", "json", "csv", "tsv", "markdown", "md":
-			if format == "md" {
-				format = "markdown"
-			}
-			return format, nil
-		default:
-			return "", fmt.Errorf("invalid --format %q (want: table, json, csv, tsv, markdown)", format)
+	explicit := ""
+	switch raw {
+	case "", "auto":
+		// Resolved below from the TTY / --json / --jq state.
+	case "table", "json", "csv", "tsv", "markdown":
+		explicit = raw
+	case "md":
+		explicit = "markdown"
+	default:
+		return "", fmt.Errorf("invalid --format %q (want: %s)", raw, validFormats)
+	}
+
+	if explicit != "" && explicit != "json" {
+		if jqFlag != "" {
+			return "", fmt.Errorf("--jq requires JSON output; drop --format %s or use --format json", raw)
 		}
+		if jsonFlag {
+			return "", fmt.Errorf("--json requires JSON output; drop --format %s or use --format json", raw)
+		}
+	}
+	if explicit != "" {
+		return explicit, nil
 	}
 	if jsonFlag || jqFlag != "" {
 		return "json", nil

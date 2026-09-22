@@ -20,7 +20,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().String("jq", "", "Apply jq expression to JSON output")
 	rootCmd.PersistentFlags().String("base-url", "", "Override API base URL (e.g. http://localhost:8080/api/v3)")
 	rootCmd.PersistentFlags().Bool("no-cache", false, "Disable HTTP response cache for this invocation")
-	rootCmd.PersistentFlags().String("format", "", "Output format: table, json, csv, tsv, markdown (default: table on TTY, json otherwise)")
+	rootCmd.PersistentFlags().String("format", "", "Output format: auto, table, json, csv, tsv, markdown (auto: table on TTY, json otherwise)")
 
 	rootCmd.AddCommand(newAuthCmd())
 	rootCmd.AddCommand(newStatusCmd())
