@@ -116,6 +116,21 @@ func LooksLikeUsage(msg string) bool {
 	return false
 }
 
+// Silent reports whether a failure should be left unsaid.
+//
+// Two of them should. A reader that hung up is gone and cannot read the
+// complaint anyway. Ctrl-C is not news either: the person who pressed it knows
+// what happened, and "Error: context canceled" reads like a bug in the tool
+// rather than an answer to what they just asked for. Both still carry their
+// exit code, so a script can tell what happened.
+func Silent(err error) bool {
+	if err == nil {
+		return false
+	}
+	code := ExitCode(err)
+	return code == ExitBrokenPipe || code == ExitInterrupt
+}
+
 // ExitCode maps an error returned by the command tree to a process exit code.
 func ExitCode(err error) int {
 	if err == nil {
