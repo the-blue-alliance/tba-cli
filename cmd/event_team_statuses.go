@@ -21,7 +21,8 @@ playoffs.
 
 Teams are listed by rank, with teams that have no rank yet last. Round is the
 bracket round a double-elimination playoff ended in, and is blank for the
-seasons and events that have none.
+seasons and events that have none; a column no team at the event has anything
+in -- 2015's Record, say -- is left out rather than printed empty.
 
 TBA also writes a sentence about each team -- "Team 177 was Rank 1 with a
 record of 10-2-0 in quals, competed in the playoffs as the Captain of Alliance
@@ -49,7 +50,11 @@ an Overall column.`,
 			}
 
 			withOverall, _ := cmd.Flags().GetBool("overall")
-			table := eventTeamStatusesTableWith(statuses, withOverall)
+			// 2015 had no win/loss and no bracket rounds, so Record and Round
+			// are blank for every team at such an event. A column nobody has
+			// anything in is not a column. `event export` keeps them, since a
+			// file's header is a schema rather than a view.
+			table := eventTeamStatusesTableWith(statuses, withOverall).DropEmptyColumns()
 			// The parsed map, so --jq still sees the shape the API returns.
 			// It is not a slice, so --sort reorders the table only.
 			return outputTable(cmd, statuses, table.Headers, table.Rows)

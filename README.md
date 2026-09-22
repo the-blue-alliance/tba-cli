@@ -231,6 +231,12 @@ played, whose score is the answer. `Time Source` says where the time came from:
 estimate, `scheduled` for the published schedule. Drop any of them with
 `--columns`.
 
+A column no row in the listing has anything in is left out rather than printed
+empty: a listing of an event that finished years ago has nothing to count down
+to, so it has no `When` column at all. `event watch` is the exception and keeps
+every column, since its widths are fixed by the first poll and a column dropped
+then could not come back when a later poll filled it in.
+
 **Filters.**
 
 | Flag | Description |
@@ -337,7 +343,9 @@ own word.
 `Team | Rank | Record | Alliance | Pick | Playoff Level | Round | Playoff
 Status`. Teams are listed by rank with the unranked last, Pick names the slot
 (`Captain`, `1`, `2`, `Backup`), and Round is the double-elimination bracket
-round the team went out in, blank for the seasons that have none.
+round the team went out in. A column no team at the event has anything in is
+left out, so a 2015 event — a season with no win-loss record and no bracket
+rounds — has neither a `Record` nor a `Round` column.
 
 TBA also writes a summary sentence about each team, which is around 250
 characters of prose. It is always in the JSON, as `overall_status_str`;

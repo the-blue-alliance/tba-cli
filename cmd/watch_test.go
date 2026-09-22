@@ -201,6 +201,13 @@ func jsonLines(t *testing.T, out string) []map[string]any {
 
 // The first poll prints the listing a user already knows, column for column,
 // so that `event watch` and `event matches` never drift apart.
+//
+// The two agree on the cells and part company on one thing only: `event
+// matches` leaves out a column no row has anything in, and `event watch` never
+// does, because its widths are fixed by the first poll and a column dropped
+// then could not come back when a later poll filled it in. That difference
+// cannot show here — this event has matches still to come, so every column
+// carries something — and the test below pins the case where it does.
 func TestEventWatchFirstPollPrintsTheSameTableAsEventMatches(t *testing.T) {
 	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	srv := watchServer(t)
@@ -216,6 +223,32 @@ func TestEventWatchFirstPollPrintsTheSameTableAsEventMatches(t *testing.T) {
 	}
 	if pollCount(t, srv) != 2 { // one for the watch, one for the listing
 		t.Errorf("polls = %d, want 2", pollCount(t, srv))
+	}
+}
+
+// A watch is a table that grows for hours, so its columns are the ones the
+// whole event could fill, not the ones this minute happens to. `event matches`
+// is a listing that is finished the moment it is printed, and drops the column
+// nothing filled.
+func TestEventWatchKeepsAColumnTheListingDrops(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 18, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	// Every match played: nothing counts down, so When is empty throughout.
+	watchSetBody(t, srv, watchMatchesPath, []api.Match{
+		watchQual(1, watchRed, watchBlue, 88, 61, "red", 1711130400),
+		watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000),
+	})
+
+	watched, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	requireNoError(t, err, errOut)
+	listed, _, err := runCmd(t, srv, "event", "matches", watchEventKey, "--format", "table")
+	requireNoError(t, err, "")
+
+	if !strings.Contains(lines(watched)[0], "When") {
+		t.Errorf("the watch header lost a column it may need later:\n%s", watched)
+	}
+	if strings.Contains(lines(listed)[0], "When") {
+		t.Errorf("the listing kept a column nothing filled:\n%s", listed)
 	}
 }
 
