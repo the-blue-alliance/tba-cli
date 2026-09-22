@@ -214,7 +214,7 @@ func TestEventListWithoutWeekListsEverything(t *testing.T) {
 func TestEventListRejectsAYearBeforeTheFirstSeason(t *testing.T) {
 	srv := eventListServer(t)
 	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "1800")
-	requireErrorContains(t, err, "--year 1800 is before the first FRC season (1992)")
+	requireErrorContains(t, err, "--year 1800 is not an FRC season (1992-")
 	if got := requestPaths(t, srv); len(got) != 0 {
 		t.Errorf("a usage error must not reach the API, got %v", got)
 	}
