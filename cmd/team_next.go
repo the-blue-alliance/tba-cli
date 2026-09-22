@@ -42,7 +42,7 @@ func newTeamNextCmd() *cobra.Command {
 			if !choice.found {
 				// Out of season a team is simply not going anywhere. That is
 				// an answer, not a failure.
-				return printNoMatch(cmd, noEventNote(team, choice.year, now))
+				return printNoResult(cmd, noEventNote(team, choice.year, now))
 			}
 			event := choice.event
 
@@ -63,7 +63,7 @@ func newTeamNextCmd() *cobra.Command {
 				return printMatchTable(cmd, upcoming, playoffTypeFor, listing)
 			}
 			if len(upcoming) == 0 {
-				return printNoMatch(cmd, noMatchNote(cmd, client, team, event, now))
+				return printNoResult(cmd, noMatchNote(cmd, client, team, event, now))
 			}
 
 			next := upcoming[0]
@@ -188,10 +188,10 @@ func roundName(level string) string {
 	return strings.ToUpper(strings.TrimSpace(level))
 }
 
-// printNoMatch reports that there is nothing to show. It is not a failure —
+// printNoResult reports that there is nothing to show. It is not a failure —
 // exit 0, nothing on stdout in table mode, and null for a JSON reader, which
-// asked for a match and needs to be told there is none.
-func printNoMatch(cmd *cobra.Command, note string) error {
+// asked a question and needs to be told the answer is nothing.
+func printNoResult(cmd *cobra.Command, note string) error {
 	fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
 	return outputData(cmd, nil, func() {})
 }

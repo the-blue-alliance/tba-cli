@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
@@ -118,18 +119,107 @@ func TestTeamStandingForATeamNotAtTheEvent(t *testing.T) {
 	}
 }
 
-func TestTeamStandingRequiresAnEvent(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{})
-	_, _, err := runCmd(t, srv, "team", "standing", "177")
-	if err == nil {
-		t.Fatal("want an error without --event")
+// The event is an argument like everywhere else in the team commands, and
+// --event still works for anyone who has typed it that way for a season.
+func TestTeamStandingTakesTheEventAsAnArgument(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/event/2024cthar/status": teamStatus177At2024ctharJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+	requireContains(t, out, "Event:          2024cthar")
+
+	want := []string{"/team/frc177/event/2024cthar/status"}
+	if got := requestPaths(t, srv); !equalStrings(got, want) {
+		t.Errorf("requests = %v, want %v", got, want)
 	}
+}
+
+// Named twice and differently, there is no way to tell which was meant.
+func TestTeamStandingRejectsTheEventGivenTwice(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{})
+	_, _, err := runCmd(t, srv, "team", "standing", "177", "2024cthar", "--event", "2024necmp")
+	requireErrorContains(t, err, "event given twice")
 	if got := clierr.ExitCode(err); got != clierr.ExitUsage {
 		t.Errorf("exit code = %d, want %d (usage)", got, clierr.ExitUsage)
 	}
 	if got := requestPaths(t, srv); len(got) != 0 {
-		t.Errorf("a missing flag should not reach the API, got %v", got)
+		t.Errorf("a usage error should not reach the API, got %v", got)
 	}
+}
+
+// The same value twice is not a contradiction, so it is not an error.
+func TestTeamStandingAcceptsTheSameEventTwice(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/event/2024cthar/status": teamStatus177At2024ctharJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "team", "standing", "177", "2024cthar", "--event", "2024cthar")
+	requireNoError(t, err, errOut)
+}
+
+// With no event at all, the question is about wherever the team is now — the
+// same answer `team next` works out.
+func TestTeamStandingAutoDetectsTheCurrentEvent(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 23, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024":            teamEvents177In2024JSON,
+		"/team/frc177/event/2024cthar/status": teamStatus177At2024ctharJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+	requireContains(t, out, "Event:          2024cthar")
+}
+
+// Out of season there is no event to stand at, which is an answer rather than
+// a failure, exactly as it is for `team next`.
+func TestTeamStandingWithNoCurrentEvent(t *testing.T) {
+	withNow(t, time.Date(2024, 7, 1, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": teamEvents177In2024JSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no current or upcoming event for team 177 in 2024\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
+	}
+}
+
+// The API pads sort_orders past the names the season defines. An unnamed
+// number is not a statistic, and "Sort Order 6: 0.00" invented one.
+func TestTeamStandingOnlyPrintsNamedSortOrders(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/event/2024cthar/status": teamStatusExtraSortOrderJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	for _, want := range []string{
+		"Ranking Score:  2.50",
+		"Avg Coop:       0.50",
+		"Avg Match:      88",
+		"Avg Auto:       31.0",
+		"Avg Stage:      12.0",
+	} {
+		requireContains(t, out, want)
+	}
+	if strings.Contains(out, "Sort Order") {
+		t.Errorf("an unnamed sort order was printed:\n%s", out)
+	}
+}
+
+// Fewer numbers than names is the other way round, and must not run off the
+// end of the list.
+func TestTeamStandingSurvivesFewerSortOrdersThanNames(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/event/2024cthar/status": teamStatusQualsOnlyJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+	requireContains(t, out, "Ranking Score:  1.83")
+	requireContains(t, out, "Avg Match:      62")
 }
 
 func TestTeamStandingRejectsAMalformedEventKey(t *testing.T) {

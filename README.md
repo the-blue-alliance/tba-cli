@@ -668,10 +668,10 @@ A match whose time has already passed reads `Overdue by` instead, and `--all` pr
 
 Having nothing to report is an answer, not a failure: a team with no event left this season, or no match left at the event it is at, exits 0 with the reason on stderr and nothing on stdout (`--json` prints `null`). When the event is over, the note says so and, if the API will tell it, how the event ended — `note: 2024cthar ended 2024-03-24; no matches left for 177; 177 won the event`. Asked after August, when the season being searched is done, it points at the next one: `try --year 2025`.
 
-`tba team standing <team> --event KEY` is how one team stands at one event:
+`tba team standing <team> [event]` is how one team stands at one event. The event can also be given as `--event KEY`; with neither, the team's event for today is used, or the next one it is going to, the same way `team next` works it out:
 
 ```
-$ tba team standing 177 --event 2024cthar
+$ tba team standing 177 2024cthar
 Team:           177
 Event:          2024cthar
 Rank:           1 of 40
@@ -684,7 +684,7 @@ Playoff:        Finals — won (6-1-0)
 Status:         Team 177 was Rank 1 with a record of 10-2-0 and won the event.
 ```
 
-The rows between `Record` and `Alliance` are the season's own ranking tiebreakers, named and rounded the way the event reports them. Each part of the answer only exists once that part of the event has happened, so before it starts you get `not ranked yet`, `not selected` and `not started` rather than blanks. A team that is not attending the event has no standing there, which is exit 5.
+The rows between `Record` and `Alliance` are the season's own ranking tiebreakers, named and rounded the way the event reports them. The API sometimes carries more numbers than the season has names for; the unnamed ones are dropped rather than printed as an invented "Sort Order 6", which is what `event rankings` shows too. Each part of the answer only exists once that part of the event has happened, so before it starts you get `not ranked yet`, `not selected` and `not started` rather than blanks. A team that is not attending the event has no standing there, which is exit 5.
 
 ### Insights and predictions
 
@@ -1028,7 +1028,7 @@ identical archives.
 | `tba team years <number>` | List the seasons a team competed in |
 | `tba team matches <number>` | List team matches |
 | `tba team next <number> [event]` | Show a team's next match |
-| `tba team standing <number> --event <key>` | Show a team's standing at an event |
+| `tba team standing <number> [event]` | Show a team's standing at an event |
 | `tba team awards <number>` | List team awards |
 | `tba team media <number>` | List team media |
 | `tba team robots <number>` | List team robots |
