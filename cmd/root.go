@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
@@ -40,6 +41,8 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().String("base-url", "", "Override API base URL (e.g. http://localhost:8080/api/v3)")
 	rootCmd.PersistentFlags().Bool("no-cache", false, "Disable HTTP response cache for this invocation")
 	rootCmd.PersistentFlags().String("format", "", "Output format: auto, table, json, csv, tsv, markdown (auto: table on TTY, json otherwise)")
+	rootCmd.PersistentFlags().Duration("timeout", api.DefaultTimeout, "Per-request timeout (e.g. 10s, 1m)")
+	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")
 
 	rootCmd.AddCommand(newAuthCmd())
 	rootCmd.AddCommand(newStatusCmd())

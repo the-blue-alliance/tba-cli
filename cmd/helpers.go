@@ -20,7 +20,14 @@ func getBaseURL(cmd *cobra.Command) string {
 }
 
 func newClient(cmd *cobra.Command) (*api.Client, error) {
-	c, err := api.NewClient(getBaseURL(cmd))
+	var opts []api.Option
+	if d, err := cmd.Flags().GetDuration("timeout"); err == nil {
+		opts = append(opts, api.WithTimeout(d))
+	}
+	if n, err := cmd.Flags().GetInt("retries"); err == nil {
+		opts = append(opts, api.WithRetries(n))
+	}
+	c, err := api.NewClient(getBaseURL(cmd), opts...)
 	if err != nil {
 		return nil, err
 	}
