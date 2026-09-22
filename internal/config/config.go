@@ -10,23 +10,31 @@ import (
 
 const DefaultBaseURL = "https://www.thebluealliance.com/api/v3"
 
-func configDir() string {
+func configDir() (string, error) {
 	if d := os.Getenv("TBA_CONFIG_DIR"); d != "" {
-		return d
+		return d, nil
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "tba")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine your home directory (%w); set TBA_CONFIG_DIR to choose where tba keeps its config", err)
+	}
+	return filepath.Join(home, ".config", "tba"), nil
 }
 
-func AuthFile() string {
-	return filepath.Join(configDir(), "auth.yaml")
+// AuthFile returns the path of the file that stores API keys.
+func AuthFile() (string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "auth.yaml"), nil
 }
 
 // secureAuthFile sets the auth file mode to 0600 if it exists and is broader.
 // Best-effort: errors from Stat/Chmod are returned to the caller but the file
 // may not exist yet (first login), which is not an error.
-func secureAuthFile() error {
-	info, err := os.Stat(AuthFile())
+func secureAuthFile(path string) error {
+	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -34,7 +42,7 @@ func secureAuthFile() error {
 		return err
 	}
 	if info.Mode().Perm() != 0600 {
-		return os.Chmod(AuthFile(), 0600)
+		return os.Chmod(path, 0600)
 	}
 	return nil
 }
@@ -48,12 +56,17 @@ func GetAPIKey(baseURL string) (string, error) {
 		baseURL = DefaultBaseURL
 	}
 
+	authFile, err := AuthFile()
+	if err != nil {
+		return "", err
+	}
+
 	v := viper.New()
-	v.SetConfigFile(AuthFile())
+	v.SetConfigFile(authFile)
 	if err := v.ReadInConfig(); err != nil {
 		return "", fmt.Errorf("not authenticated for %s. Run 'tba auth login' first", baseURL)
 	}
-	_ = secureAuthFile() // remediate legacy files written with wider perms; ignore errors
+	_ = secureAuthFile(authFile) // remediate legacy files written with wider perms; ignore errors
 
 	// Try new per-URL format first
 	keys := v.GetStringMapString("keys")
@@ -95,13 +108,17 @@ func SaveAPIKey(key string, baseURL string) error {
 		baseURL = DefaultBaseURL
 	}
 
-	dir := configDir()
+	dir, err := configDir()
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
+	authFile := filepath.Join(dir, "auth.yaml")
 
 	v := viper.New()
-	v.SetConfigFile(AuthFile())
+	v.SetConfigFile(authFile)
 	_ = v.ReadInConfig() // load existing keys, ignore error if file doesn't exist
 
 	migrateLegacyKey(v)
@@ -113,10 +130,10 @@ func SaveAPIKey(key string, baseURL string) error {
 	keys[baseURL] = key
 	v.Set("keys", keys)
 
-	if err := v.WriteConfigAs(AuthFile()); err != nil {
+	if err := v.WriteConfigAs(authFile); err != nil {
 		return err
 	}
-	return os.Chmod(AuthFile(), 0600)
+	return os.Chmod(authFile, 0600)
 }
 
 func RemoveAPIKey(baseURL string) error {
@@ -124,8 +141,13 @@ func RemoveAPIKey(baseURL string) error {
 		baseURL = DefaultBaseURL
 	}
 
+	authFile, err := AuthFile()
+	if err != nil {
+		return err
+	}
+
 	v := viper.New()
-	v.SetConfigFile(AuthFile())
+	v.SetConfigFile(authFile)
 	if err := v.ReadInConfig(); err != nil {
 		return fmt.Errorf("not authenticated")
 	}
@@ -139,8 +161,8 @@ func RemoveAPIKey(baseURL string) error {
 	delete(keys, baseURL)
 	v.Set("keys", keys)
 
-	if err := v.WriteConfigAs(AuthFile()); err != nil {
+	if err := v.WriteConfigAs(authFile); err != nil {
 		return err
 	}
-	return os.Chmod(AuthFile(), 0600)
+	return os.Chmod(authFile, 0600)
 }

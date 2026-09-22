@@ -63,9 +63,13 @@ func newAuthStatusCmd() *cobra.Command {
 				fmt.Fprintf(out, "Not authenticated for %s.\n", baseURL)
 				return nil
 			}
+			authFile, err := config.AuthFile()
+			if err != nil {
+				return err
+			}
 			fmt.Fprintf(out, "Authenticated with key: %s\n", maskKey(key))
 			fmt.Fprintf(out, "Base URL: %s\n", baseURL)
-			fmt.Fprintf(out, "Config file: %s\n", config.AuthFile())
+			fmt.Fprintf(out, "Config file: %s\n", authFile)
 			return nil
 		},
 	}

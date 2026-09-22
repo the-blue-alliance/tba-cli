@@ -465,3 +465,24 @@ func TestTouchOnAMissingEntryIsANoOp(t *testing.T) {
 		t.Errorf("Touch should not create an entry, got %+v", got)
 	}
 }
+
+func TestNewFailsWithoutAHomeDirectory(t *testing.T) {
+	t.Setenv("TBA_CACHE_DIR", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("home", "")
+
+	c, err := New()
+	if err == nil {
+		t.Fatalf("New() = %q, want an error rather than a cache in the working directory", c.Dir())
+	}
+	if !strings.Contains(err.Error(), "TBA_CACHE_DIR") {
+		t.Errorf("the error should name the way out: %v", err)
+	}
+	if _, statErr := os.Stat(".cache"); statErr == nil {
+		t.Error("New created .cache in the working directory")
+	}
+}

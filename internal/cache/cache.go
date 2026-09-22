@@ -32,19 +32,25 @@ type Entry struct {
 	Body         json.RawMessage `json:"body"`
 }
 
-func defaultDir() string {
+func defaultDir() (string, error) {
 	if d := os.Getenv("TBA_CACHE_DIR"); d != "" {
-		return d
+		return d, nil
 	}
 	if d := os.Getenv("XDG_CACHE_HOME"); d != "" {
-		return filepath.Join(d, "tba")
+		return filepath.Join(d, "tba"), nil
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "tba")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine your home directory (%w); set TBA_CACHE_DIR to choose where tba keeps its cache", err)
+	}
+	return filepath.Join(home, ".cache", "tba"), nil
 }
 
 func New() (*Cache, error) {
-	dir := defaultDir()
+	dir, err := defaultDir()
+	if err != nil {
+		return nil, err
+	}
 	entriesDir := filepath.Join(dir, entriesSubdir)
 	if err := os.MkdirAll(entriesDir, 0700); err != nil {
 		return nil, err
