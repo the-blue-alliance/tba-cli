@@ -206,12 +206,14 @@ func emptyMatchNote(cmd *cobra.Command, listing matchListing) string {
 // surrogate or DQ mark, which is what decides if the legend is worth printing.
 //
 // Whether the times carry a date is decided here, once, from the matches it is
-// given: a listing that covers a single day does not need one on every row.
+// given: only a listing of matches that are all happening today can leave it
+// off, since that is the one case where the reader already knows the day.
 //
 // color is passed in rather than resolved here so that the callers that write
 // to a file — `event export` — can ask for the same cells without escapes.
 func matchTableRows(matches []api.Match, playoffTypeFor func(api.Match) *int, color bool) (rows [][]string, marked bool) {
-	return matchRows(matches, playoffTypeFor, color, frc.SpansDays(matches, time.Local), nowFunc())
+	now := nowFunc()
+	return matchRows(matches, playoffTypeFor, color, frc.NeedsDate(matches, time.Local, now), now)
 }
 
 // matchRows is matchTableRows for a caller that has already settled the date

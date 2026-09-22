@@ -59,7 +59,7 @@ func BestTime(m api.Match) (*int64, string) {
 // the event wants to read.
 //
 // withDate adds the calendar date. A caller decides it once for a whole table
-// (see SpansDays) rather than per row, so that every time in a listing is
+// (see NeedsDate) rather than per row, so that every time in a listing is
 // written the same way and the column stays one width.
 func FormatTime(epoch *int64, loc *time.Location, withDate bool) string {
 	if epoch == nil || *epoch == 0 {
@@ -75,26 +75,30 @@ func FormatTime(epoch *int64, loc *time.Location, withDate bool) string {
 	return time.Unix(*epoch, 0).In(loc).Format(layout)
 }
 
-// SpansDays reports whether the matches fall on more than one calendar day in
-// loc, which is what decides whether their times need a date on them. Matches
-// with no time at all are ignored: an unpublished schedule says nothing about
-// how many days a listing covers.
-func SpansDays(matches []api.Match, loc *time.Location) bool {
+// NeedsDate reports whether the times in a listing have to carry the calendar
+// date as well as the weekday, which they do unless every match in it is
+// happening today in loc.
+//
+// "Sat 13:57" is what someone standing at the event wants, and only there: it
+// is unambiguous because the reader knows what day it is. Read a month later,
+// a listing of an April match that says "Sat 13:57" has named one of four
+// Saturdays and given no way to tell which. The old rule asked whether the
+// listing spanned more than one day, which let a single-day listing of a
+// long-finished event answer with a weekday alone.
+//
+// Matches with no time at all are ignored: an unpublished schedule is not a
+// second day, and a listing with no times at all has no date to print anyway.
+func NeedsDate(matches []api.Match, loc *time.Location, now time.Time) bool {
 	if loc == nil {
 		loc = time.Local
 	}
-	first := ""
+	today := now.In(loc).Format(DateLayout)
 	for _, m := range matches {
 		epoch, _ := BestTime(m)
 		if epoch == nil || *epoch == 0 {
 			continue
 		}
-		day := time.Unix(*epoch, 0).In(loc).Format(DateLayout)
-		if first == "" {
-			first = day
-			continue
-		}
-		if day != first {
+		if time.Unix(*epoch, 0).In(loc).Format(DateLayout) != today {
 			return true
 		}
 	}

@@ -222,9 +222,10 @@ is printed to stderr, so it explains the table on screen without landing in a
 file you piped it into.
 
 **Times.** `Time` is shown in your local time zone. It is a weekday and a
-clock — `Sat 11:22` — when every match in the listing falls on the same day, and
-carries the date — `Mar 23 11:22` — when the listing spans more than one, which
-a season listing always does. `When` counts down to a match still to come
+clock — `Sat 11:22` — only when every match in the listing is happening today,
+which is the one case where you already know which Saturday it is. Otherwise it
+carries the date — `Mar 23 11:22` — so a listing of a past event, or of a season,
+says which day each match was. `When` counts down to a match still to come
 (`in 18m`, `2h ago` for one that is running late) and is empty for one already
 played, whose score is the answer. `Time Source` says where the time came from:
 `actual` for a match that has been played, `predicted` for the queue's live

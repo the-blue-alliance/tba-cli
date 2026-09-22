@@ -646,7 +646,7 @@ type watchTableSink struct {
 func (s *watchTableSink) snapshot(_ int, _ time.Time, matches []api.Match, rankings *api.EventRankings) error {
 	// The first poll settles how the times are written, so that the rows
 	// printed under this table hours later still line up with it.
-	s.withDate = frc.SpansDays(matches, time.Local)
+	s.withDate = frc.NeedsDate(matches, time.Local, nowFunc())
 	rows, marked := matchTableRows(matches, constantPlayoffType(s.playoffType), s.color)
 	s.matchWidths = watchWidths(matchHeaders, rows)
 	if err := output.Render(s.out, output.Table{Headers: matchHeaders, Rows: rows},
