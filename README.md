@@ -658,7 +658,10 @@ points, so a line through them is no longer the cut that decided who went; it
 then reads `--- top N by current total (includes DCMP points) ---`. `--pre-dcmp`
 ranks on the points each team had before the championship, adds them as a
 `Pre-DCMP` column and draws the line there, which is the standing the cut was
-actually made on. It reorders the JSON too.
+actually made on. Teams level on those points share a rank, and the next team
+down takes the position it stands in — `1, 2, 2, 4` — the way TBA ranks a tie,
+since four teams on the same points did not finish in four different places.
+The published rank is kept as `Season Rank`. It reorders the JSON too.
 
 ```
 tba district rankings 2024ne --cutoff 80

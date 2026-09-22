@@ -196,6 +196,7 @@ is. The JSON is the API's own answer either way.`,
 				headers = append(headers, "Pre-DCMP")
 			}
 
+			preRanks := preDCMPRanks(rankings)
 			rows := make([][]string, len(rankings))
 			for i, r := range rankings {
 				events := qualifyingEvents(r)
@@ -205,7 +206,7 @@ is. The JSON is the API's own answer either way.`,
 				// ordered by something else.
 				rank := r.Rank
 				if preDCMP {
-					rank = i + 1
+					rank = preRanks[i]
 				}
 				row := []string{strconv.Itoa(rank)}
 				if preDCMP {
@@ -280,6 +281,26 @@ func districtCMPPoints(r api.DistrictRanking) string {
 		return ""
 	}
 	return strconv.Itoa(total)
+}
+
+// preDCMPRanks numbers rows already ordered by pre-DCMP total the way a
+// ranking is numbered: teams on the same points share a rank, and the next
+// team down takes the position it actually stands in -- 1, 2, 2, 4.
+//
+// Counting the rows off instead handed four teams on 95 points the ranks 20,
+// 21, 22 and 23, which says one of them finished ahead of the others when the
+// standings say no such thing, and put a cut line between teams nothing
+// separates. TBA ranks a tie the same way.
+func preDCMPRanks(rankings []api.DistrictRanking) []int {
+	ranks := make([]int, len(rankings))
+	for i := range rankings {
+		if i > 0 && preDCMPTotal(rankings[i]) == preDCMPTotal(rankings[i-1]) {
+			ranks[i] = ranks[i-1]
+			continue
+		}
+		ranks[i] = i + 1
+	}
+	return ranks
 }
 
 // preDCMPTotal is a team's season points without its district championship,

@@ -164,6 +164,31 @@ func TestDistrictRankingsPreDCMPRenumbersRank(t *testing.T) {
 	}
 }
 
+// Teams level on pre-DCMP points share a rank, and the next team down takes
+// the position it actually stands in: 1, 2, 2, 4. Counting the rows off gave
+// four teams on the same points four different ranks, which says one of them
+// finished ahead of the others when the standings say no such thing.
+func TestDistrictRankingsPreDCMPSharesARankForATie(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsPreDCMPTies2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--pre-dcmp", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	// 177 has 100 points before the DCMP, 1073 and 5507 have 95 each, 230 has
+	// 80.
+	if got := csvColumn(t, out, 0); !equalStrings(got, []string{"1", "2", "2", "4"}) {
+		t.Errorf("Rank = %v, want the tie to share a rank", got)
+	}
+	if got := csvColumn(t, out, len(parseCSV(t, out)[0])-1); !equalStrings(got, []string{"100", "95", "95", "80"}) {
+		t.Errorf("Pre-DCMP = %v, want the totals the ranks were made on", got)
+	}
+	// The published ranks are untouched: they are a different standing.
+	if got := csvColumn(t, out, 1); !equalStrings(got, []string{"1", "2", "3", "4"}) {
+		t.Errorf("Season Rank = %v, want the API's own ranks", got)
+	}
+}
+
 // Season Rank is a --pre-dcmp column: without it the one Rank is the API's.
 func TestDistrictRankingsSeasonRankIsOptIn(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
