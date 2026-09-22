@@ -82,6 +82,16 @@ func resolveFormat(cmd *cobra.Command) (string, error) {
 	return "table", nil
 }
 
+// colorMode reads the user's color preference. --no-color is a spelling of
+// --color=never and wins, so scripts can set it unconditionally.
+func colorMode(cmd *cobra.Command) (output.ColorMode, error) {
+	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
+		return output.ColorNever, nil
+	}
+	mode, _ := cmd.Flags().GetString("color")
+	return output.ParseColorMode(mode)
+}
+
 func jqExpr(cmd *cobra.Command) string {
 	jqFlag, _ := cmd.Flags().GetString("jq")
 	return jqFlag
@@ -101,6 +111,9 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 	if err != nil {
 		return err
 	}
+	if _, err := colorMode(cmd); err != nil {
+		return err
+	}
 	switch format {
 	case "table":
 		humanFn()
@@ -118,13 +131,19 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	if err != nil {
 		return err
 	}
+	// The presentation flags are validated even when the chosen format ignores
+	// them, so a typo is reported rather than silently doing nothing.
+	color, err := colorMode(cmd)
+	if err != nil {
+		return err
+	}
 	w := cmd.OutOrStdout()
 	table := output.Table{Headers: headers, Rows: rows}
 
 	if format == "json" {
 		return output.PrintJSONWithFilter(w, data, jqExpr(cmd), rawOutput(cmd))
 	}
-	return output.Render(w, table, output.RenderOptions{Format: format})
+	return output.Render(w, table, output.RenderOptions{Format: format, Color: color})
 }
 
 // teamKey normalises a team argument, so that both "177" and "frc177" (in any
