@@ -169,10 +169,36 @@ func TestEventListRejectsUnknownTypeAmongGoodOnes(t *testing.T) {
 	_ = requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--type", "district,nope")
 }
 
-func TestEventListRejectsNegativeWeek(t *testing.T) {
+func TestEventListRejectsAWeekBelowOne(t *testing.T) {
+	// Week 0 is the flag's "no filter" default, so asking for it explicitly
+	// used to list the whole season although the help says weeks start at 1.
+	for _, week := range []string{"-1", "0"} {
+		t.Run("week "+week, func(t *testing.T) {
+			srv := eventListServer(t)
+			err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--week", week)
+			requireErrorContains(t, err, "numbered from 1")
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a usage error must not reach the API, got %v", got)
+			}
+		})
+	}
+}
+
+// Without --week the whole season is listed, which is what week 0 used to do.
+func TestEventListWithoutWeekListsEverything(t *testing.T) {
 	srv := eventListServer(t)
-	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--week", "-1")
-	requireErrorContains(t, err, "numbered from 1")
+	if got := listedKeys(t, srv); len(got) < 2 {
+		t.Errorf("want the whole season, got %v", got)
+	}
+}
+
+func TestEventListRejectsAYearBeforeTheFirstSeason(t *testing.T) {
+	srv := eventListServer(t)
+	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "1800")
+	requireErrorContains(t, err, "--year 1800 is before the first FRC season (1992)")
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a usage error must not reach the API, got %v", got)
+	}
 }
 
 func TestEventListDistrictFilterIgnoresCase(t *testing.T) {
