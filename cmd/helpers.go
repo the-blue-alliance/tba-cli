@@ -209,11 +209,29 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 	w := cmd.OutOrStdout()
 	table := output.Table{Headers: headers, Rows: rows}
 
+	sortSpec := settings(cmd).String("sort")
+
+	// --sort is about the order of the result, not its shape, so it also
+	// reorders the JSON array the table was built from. When the payload is
+	// not that array — an object keyed by team, a document with the rows
+	// nested inside — there is no order to apply, and saying so beats printing
+	// an unsorted answer to a command that asked for a sorted one.
+	//
+	// Whether the payload can be reordered at all does not depend on which
+	// column was named, so it is settled first. Validating the column name
+	// first meant `event rankings --json --sort=name` answered `unknown column
+	// "name"` — with a list of the valid ones — for a payload that would have
+	// been refused whichever column was picked, and the same --sort worked in
+	// table form.
+	if format == "json" && sortSpec != "" && !output.CanPermute(data, identityOrder(len(rows))) {
+		return clierr.Usage("--sort cannot reorder this JSON payload (it is not a list of rows); " +
+			"use --jq to sort it, or drop --format json")
+	}
+
 	// Sorting runs before column selection so that a table can be ordered by a
 	// column the user chose not to display.
 	// A bad --sort or --columns is a mistake in the invocation, not a failure
 	// of the work, so it exits 2 like any other flag error.
-	sortSpec := settings(cmd).String("sort")
 	var order []int
 	if sortSpec != "" {
 		if order, err = table.SortOrder(sortSpec); err != nil {
@@ -226,15 +244,6 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 	if format == "json" {
 		if columns != "" {
 			return clierr.Usage("--columns applies to tabular formats; use --jq to shape JSON")
-		}
-		// --sort is about the order of the result, not its shape, so it also
-		// reorders the JSON array the table was built from. When the payload is
-		// not that array — an object keyed by team, a document with the rows
-		// nested inside — there is no order to apply, and saying so beats
-		// printing an unsorted answer to a command that asked for a sorted one.
-		if sortSpec != "" && !output.CanPermute(data, order) {
-			return clierr.Usage("--sort cannot reorder this JSON payload (it is not a list of rows); " +
-				"use --jq to sort it, or drop --format json")
 		}
 		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
 	}
@@ -256,6 +265,17 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
 	}
 	return nil
+}
+
+// identityOrder is the permutation of n rows that changes nothing. It stands
+// for "some order of this many rows", which is all CanPermute needs to answer
+// whether a payload can be reordered at all.
+func identityOrder(n int) []int {
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
+	}
+	return order
 }
 
 // exactArgs is cobra.ExactArgs with an error a person can act on.

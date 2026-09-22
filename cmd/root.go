@@ -73,7 +73,11 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")
 	rootCmd.PersistentFlags().Bool("no-headers", false, "Omit the header row from table, csv, tsv and markdown output")
 	rootCmd.PersistentFlags().String("columns", "", "Select and order columns by header name or 1-based index (e.g. --columns key,name)")
-	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (e.g. --sort=-opr)")
+	// The example is a column every listing has and every format can order
+	// by. It used to be --sort=-opr, which fails the moment the output is
+	// piped: the OPR payload is an object keyed by team, and an object has no
+	// row order to rearrange.
+	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (e.g. --sort=name)")
 	rootCmd.PersistentFlags().String("color", "auto", "When to colorize output: auto, always, never")
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (alias for --color=never; wins over --color)")
 
