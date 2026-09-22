@@ -39,7 +39,7 @@ func newTeamViewCmd() *cobra.Command {
 		Example: `  tba team view 177
   tba team view frc177 --format json
   tba team view 1073 --jq .nickname -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team view 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -110,7 +110,7 @@ func newTeamEventsCmd() *cobra.Command {
 		Short: "List team events",
 		Example: `  tba team events 177 --year 2024
   tba team events frc177 --year 2024 --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team events 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -146,7 +146,7 @@ to drive a loop over a team's whole history.`,
 		Example: `  tba team years 177
   tba team years frc177 --json
   tba team years 177 --jq '.[0]' -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team years 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -176,7 +176,7 @@ func newTeamMatchesCmd() *cobra.Command {
   tba team matches frc177 --year 2024 --format tsv
   tba team matches 177 --event 2024cthar
   tba team matches 177 --event 2024cthar --upcoming`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team matches 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -232,7 +232,7 @@ Dean's List or Woodie Flowers that go to a person rather than to the team.`,
 		Example: `  tba team awards 177
   tba team awards frc177 --year 2024 --format markdown
   tba team awards 177 --type 0`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team awards 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -336,7 +336,7 @@ func newTeamMediaCmd() *cobra.Command {
 		Short: "List team media",
 		Example: `  tba team media 177 --year 2024
   tba team media frc177 --year 2024 --jq '.[].view_url' -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team media 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -367,7 +367,7 @@ func newTeamRobotsCmd() *cobra.Command {
 		Short: "List team robots",
 		Example: `  tba team robots 177
   tba team robots frc177 --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team robots 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -392,7 +392,7 @@ func newTeamDistrictsCmd() *cobra.Command {
 		Short: "List team districts",
 		Example: `  tba team districts 177
   tba team districts frc177 --format json`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team districts 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {

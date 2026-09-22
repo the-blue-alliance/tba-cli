@@ -208,6 +208,26 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	})
 }
 
+// exactArgs is cobra.ExactArgs with an error a person can act on.
+//
+// Cobra's own text is "accepts 1 arg(s), received 0", which says nothing about
+// what the missing argument is. what names it and shows one, e.g.
+// exactArgs(1, "a team number (e.g. tba team view 177)").
+func exactArgs(n int, what string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == n {
+			return nil
+		}
+		// The root's name is already on every example, so the complaint reads
+		// as "team view needs ...", not "tba team view needs ...".
+		name := strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")
+		if len(args) < n {
+			return clierr.Usage("%s needs %s", name, what)
+		}
+		return clierr.Usage("%s takes %s, but got %d arguments", name, what, len(args))
+	}
+}
+
 // teamKey normalises a team argument, so that both "177" and "frc177" (in any
 // case) address the same team.
 func teamKey(arg string) string {

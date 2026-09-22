@@ -40,7 +40,7 @@ func newEventViewCmd() *cobra.Command {
 		Short: "View event info",
 		Example: `  tba event view 2024cthar
   tba event view 2024necmp --format json`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event view 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -165,7 +165,7 @@ func newEventTeamsCmd() *cobra.Command {
 		Short: "List teams at event",
 		Example: `  tba event teams 2024cthar
   tba event teams 2024cthar --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event teams 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -202,7 +202,7 @@ func newEventMatchesCmd() *cobra.Command {
   tba event matches 2024cthar --level playoff
   tba event matches 2024cthar --format csv
   tba event matches 2024cthar --jq '.[].key' -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event matches 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -239,7 +239,7 @@ as Total Ranking Points. The columns therefore differ from season to season.`,
   tba event rankings 2024cthar --format markdown
   tba event rankings 2024cthar --columns rank,team,name,"ranking score"
   tba event rankings 2024cthar --sort=-played`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event rankings 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -329,7 +329,7 @@ is its playoff win-loss-tie.`,
 		Example: `  tba event alliances 2024cthar
   tba event alliances 2024cthar --format json
   tba event alliances 2024cthar --columns alliance,captain,status`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event alliances 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -416,7 +416,7 @@ func newEventAwardsCmd() *cobra.Command {
 		Short: "Show event awards",
 		Example: `  tba event awards 2024cthar
   tba event awards 2024cthar --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event awards 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -463,7 +463,7 @@ func newEventOPRsCmd() *cobra.Command {
 		Short: "Show event OPRs",
 		Example: `  tba event oprs 2024cthar
   tba event oprs 2024cthar --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event oprs 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -524,7 +524,7 @@ JSON output keeps the shape the API returns, an object keyed by team, so
 		Example: `  tba event district-points 2024cthar
   tba event district-points 2024cthar --tiebreakers
   tba event district-points 2024cthar --jq '.points.frc177.total'`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event district-points 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err

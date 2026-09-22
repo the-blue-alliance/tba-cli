@@ -36,7 +36,7 @@ func newMatchViewCmd() *cobra.Command {
 		Short: "View match info",
 		Example: `  tba match view 2024cthar_qm12
   tba match view 2024cthar_sf3m1 --format json`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a match key (e.g. tba match view 2024cthar_qm12)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateMatchKey(args[0]); err != nil {
 				return err

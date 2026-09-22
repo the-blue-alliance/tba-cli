@@ -60,7 +60,7 @@ func newDistrictEventsCmd() *cobra.Command {
 		Short: "List district events",
 		Example: `  tba district events 2024ne
   tba district events 2024ne --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a district key (e.g. tba district events 2024ne)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -85,7 +85,7 @@ func newDistrictTeamsCmd() *cobra.Command {
 		Short: "List district teams",
 		Example: `  tba district teams 2024ne
   tba district teams 2024ne --format tsv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a district key (e.g. tba district teams 2024ne)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -121,7 +121,7 @@ falls, in table and markdown output.`,
   tba district rankings 2024ne --format markdown
   tba district rankings 2024ne --cutoff 80
   tba district rankings 2024ne --detail --columns team,"e1 qual","e2 qual"`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a district key (e.g. tba district rankings 2024ne)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cutoff, _ := cmd.Flags().GetInt("cutoff")
 			if cutoff < 0 {

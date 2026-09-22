@@ -87,7 +87,7 @@ which is what you want in a script or over ssh.`,
   tba open 177 --year 2024
   tba open 2024cthar
   tba open 2024cthar_qm12 --print`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number, an event key or a match key (e.g. tba open 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			year, _ := cmd.Flags().GetInt("year")
 			path, err := webPathFor(args[0], year)
