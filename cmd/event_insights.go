@@ -18,7 +18,7 @@ import (
 func newEventPredictionsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "predictions <key>",
-		Short: "Show event predictions",
+		Short: "Show TBA's match predictions",
 		Long: `Show what TBA's model expects at an event.
 
 By default the table is Match | Key | Red | Blue | Red Score | Blue Score |
@@ -314,7 +314,7 @@ func predictionStatsTable(p api.EventPredictions) ([]string, [][]string) {
 func newEventInsightsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "insights <key>",
-		Short: "Show event insights",
+		Short: "Show the statistics TBA computed for an event",
 		Long: `Show the statistics TBA computed for an event.
 
 The table is Section | Stat | Value, with the qualification round first and the

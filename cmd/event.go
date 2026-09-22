@@ -37,9 +37,9 @@ func newEventCmd() *cobra.Command {
 func newEventViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <key>",
-		Short: "View event info",
+		Short: "Show an event's details",
 		Example: `  tba event view 2024cthar
-  tba event view 2024necmp --format json`,
+  tba event view 2024cthar --format json`,
 		Args: exactArgs(1, "an event key (e.g. tba event view 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
@@ -97,7 +97,7 @@ func eventDetailPairs(event api.Event) []string {
 func newEventListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
-		Short: "List events for a year",
+		Short: "List a season's events",
 		Long: `List the events of a season.
 
 Every filter is applied to the season's event list after it is fetched, so any
@@ -166,7 +166,7 @@ returns.`,
 func newEventTeamsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "teams <key>",
-		Short: "List teams at event",
+		Short: "List the teams at an event",
 		Example: `  tba event teams 2024cthar
   tba event teams 2024cthar --format csv`,
 		Args: exactArgs(1, "an event key (e.g. tba event teams 2024cthar)"),
@@ -201,7 +201,7 @@ func eventTeamsTable(teams []api.Team) output.Table {
 func newEventMatchesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "matches <key>",
-		Short: "List matches at event",
+		Short: "List an event's matches",
 		Example: `  tba event matches 2024cthar
   tba event matches 2024cthar --team 177 --upcoming
   tba event matches 2024cthar --level playoff
@@ -233,7 +233,7 @@ func newEventMatchesCmd() *cobra.Command {
 func newEventRankingsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rankings <key>",
-		Short: "Show event rankings",
+		Short: "Show qualification rankings",
 		Long: `Show the qualification rankings for an event.
 
 After Rank, Team, Name, Record, Played and DQ the table carries one column per
@@ -328,7 +328,7 @@ func eventRankingsTable(rankings *api.EventRankings, nicknames map[string]string
 func newEventAlliancesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "alliances <key>",
-		Short: "Show event alliances",
+		Short: "Show playoff alliances",
 		Long: `Show the playoff alliances at an event, how they were built and how far
 they got.
 
@@ -424,7 +424,7 @@ func joinTeamNumbers(keys []string) string {
 func newEventAwardsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "awards <key>",
-		Short: "Show event awards",
+		Short: "Show an event's awards",
 		Example: `  tba event awards 2024cthar
   tba event awards 2024cthar --format csv`,
 		Args: exactArgs(1, "an event key (e.g. tba event awards 2024cthar)"),
@@ -471,7 +471,7 @@ func eventAwardsTable(awards []api.Award) output.Table {
 func newEventOPRsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "oprs <key>",
-		Short: "Show event OPRs",
+		Short: "Show OPR, DPR and CCWM for each team",
 		Long: `Show the contributions TBA calculates for each team at an event.
 
 OPR is offensive power rating, DPR defensive power rating and CCWM calculated
@@ -532,7 +532,7 @@ func eventOPRsTable(oprs api.EventOPRs) output.Table {
 func newEventDistrictPointsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "district-points <key>",
-		Short: "Show event district points",
+		Short: "Show the district points an event awarded",
 		Long: `Show the district points an event awarded, highest total first.
 
 --tiebreakers adds the values that break a tie on total points: the team's

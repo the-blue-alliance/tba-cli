@@ -33,7 +33,7 @@ func newMatchCmd() *cobra.Command {
 func newMatchViewCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "view <key>",
-		Short: "View match info",
+		Short: "Show one match in full",
 		Long: `Show one match in full: what it is called, when it is, both alliances by
 driver station, the game's own score breakdown and any video.
 

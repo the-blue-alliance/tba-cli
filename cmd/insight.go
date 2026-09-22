@@ -32,7 +32,7 @@ func newInsightCmd() *cobra.Command {
 func newInsightLeaderboardsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "leaderboards",
-		Short: "Show insight leaderboards for a year",
+		Short: "Show a season's leaderboards",
 		Long: `Show every leaderboard TBA publishes for a season.
 
 The table is Leaderboard | Rank | Key | Value, one board after another in the
@@ -118,7 +118,7 @@ JSON output stays the array the API sent, narrowed to the board --board named.`,
 func newInsightNotablesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "notables",
-		Short: "Show notable insights for a year",
+		Short: "Show a season's notable teams",
 		Long: `Show the notable teams TBA lists for a season.
 
 The table is Notable | Team | Context, where Context is whatever the board says

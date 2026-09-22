@@ -294,7 +294,7 @@ func searchTeams(teams []api.Team, query string, fields map[string]bool) []api.T
 func newTeamSearchCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "search <query>...",
-		Short: "Search a season's teams by name, location or number",
+		Short: "Search a season's teams by nickname, name, location or number",
 		Long: `Search a season's teams by nickname, name, location or team number.
 
 Matching is case-insensitive. Text fields match on a substring and the team
