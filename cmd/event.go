@@ -22,6 +22,7 @@ func newEventCmd() *cobra.Command {
 	eventCmd.AddCommand(newEventTeamsCmd())
 	eventCmd.AddCommand(newEventMatchesCmd())
 	eventCmd.AddCommand(newEventRankingsCmd())
+	eventCmd.AddCommand(newEventWatchCmd())
 	eventCmd.AddCommand(newEventAlliancesCmd())
 	eventCmd.AddCommand(newEventTeamStatusesCmd())
 	eventCmd.AddCommand(newEventAwardsCmd())
