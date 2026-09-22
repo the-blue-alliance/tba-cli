@@ -135,6 +135,51 @@ tba event rankings 2024necmp --format markdown
 
 For single-object commands (e.g. `team view`), tabular formats like `csv`/`tsv`/`markdown` fall back to `json`. Use `--jq` to filter with jq expressions.
 
+Columns are measured in terminal cells, so a CJK or emoji nickname still lines up in `table` output.
+
+#### Quoting rules
+
+`csv` follows RFC 4180: a field containing a comma, a double quote or a newline is wrapped in double quotes and embedded quotes are doubled.
+
+`tsv` never quotes anything, so every line has exactly one tab per column boundary. Tabs, carriage returns and newlines inside a cell are replaced with a single space instead (a CRLF collapses to one space).
+
+`markdown` escapes `|` as `\|` and flattens newlines to spaces so a cell cannot break out of its row.
+
+### Shaping tabular output
+
+| Flag | Description |
+|------|-------------|
+| `--columns a,b,c` | Select and reorder columns |
+| `--sort col` / `--sort=-col` | Sort rows by a column; `-` descends |
+| `--no-headers` | Omit the header row |
+
+A column is named by its header, matched case-insensitively and ignoring spaces, underscores and dashes (`start_date` matches `Start Date`), or by its 1-based position. An unknown column is an error that lists the columns that command has.
+
+```
+tba district events 2024ne --format csv --columns key,start_date
+tba event rankings 2024necmp --columns 1,2 --no-headers
+tba team list --year 2024 --sort number
+tba event oprs 2024cthar --sort=-opr
+```
+
+`--sort` is stable, so rows that compare equal keep the order the API returned them in, and it is numeric-aware: two cells that both parse as numbers compare as numbers, so team `177` sorts before `1073`. Sorting happens before `--columns`, so you can sort by a column you do not display.
+
+`--sort` also reorders the array in `--format json`, keeping the JSON and the table in the same order. `--columns` does not apply to JSON — use `--jq` to shape it.
+
+`--no-headers` drops the header row from `table`, `csv` and `tsv`, and both the header and its separator from `markdown`. In `table` output the dashed separator goes too, and columns are sized from the data alone.
+
+### Color
+
+| Flag | Description |
+|------|-------------|
+| `--color auto` | Color only an interactive terminal (default) |
+| `--color always` | Color even when piped, e.g. into `less -R` |
+| `--color never`, `--no-color` | Never color |
+
+In `auto` mode color is off unless stdout is a terminal. It is also off when [`NO_COLOR`](https://no-color.org) is set to any non-empty value, or when `TERM=dumb`. Setting `CLICOLOR_FORCE` to anything but `0` turns color back on for a pipe. `--color always` overrides the environment; `--color never` and `--no-color` override everything.
+
+Only presentation is colored (currently the `table` header row). `csv`, `tsv`, `markdown` and `json` never carry escape sequences, whatever `--color` says, so piping stays safe.
+
 `--jq` and `--json` need JSON output, so combining either with `--format table|csv|tsv|markdown` is an error rather than a silent override:
 
 ```
