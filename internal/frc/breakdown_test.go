@@ -262,3 +262,227 @@ func TestStripHTML(t *testing.T) {
 		})
 	}
 }
+
+// A 2024 Crescendo match with both alliances' breakdowns, shortened from a
+// real one but keeping its shape: a total, ranking points, a dozen point
+// columns, the fouls, the counts, and a row of flags neither alliance earned.
+const compare2024JSON = `{
+  "key": "2024cthar_qm12",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 12,
+  "event_key": "2024cthar",
+  "winning_alliance": "red",
+  "alliances": {
+    "red": {"score": 88, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": {
+    "red": {
+      "adjustPoints": 0,
+      "autoAmpNoteCount": 1,
+      "autoAmpNotePoints": 2,
+      "autoLeavePoints": 6,
+      "autoLineRobot1": "Yes",
+      "autoPoints": 23,
+      "autoSpeakerNoteCount": 3,
+      "autoSpeakerNotePoints": 15,
+      "coopertitionBonusAchieved": false,
+      "endGameNoteInTrapPoints": 0,
+      "endGameOnStagePoints": 6,
+      "endGameRobot1": "StageLeft",
+      "foulCount": 1,
+      "foulPoints": 2,
+      "g424Penalty": false,
+      "melodyBonusAchieved": true,
+      "rp": 5,
+      "techFoulCount": 0,
+      "teleopPoints": 57,
+      "totalPoints": 88,
+      "trapCenterStage": false
+    },
+    "blue": {
+      "adjustPoints": 0,
+      "autoAmpNoteCount": 0,
+      "autoAmpNotePoints": 0,
+      "autoLeavePoints": 4,
+      "autoLineRobot1": "Yes",
+      "autoPoints": 14,
+      "autoSpeakerNoteCount": 2,
+      "autoSpeakerNotePoints": 10,
+      "coopertitionBonusAchieved": false,
+      "endGameNoteInTrapPoints": 0,
+      "endGameOnStagePoints": 3,
+      "endGameRobot1": "Parked",
+      "foulCount": 0,
+      "foulPoints": 0,
+      "g424Penalty": false,
+      "melodyBonusAchieved": false,
+      "rp": 1,
+      "techFoulCount": 0,
+      "teleopPoints": 44,
+      "totalPoints": 61,
+      "trapCenterStage": false
+    }
+  },
+  "videos": []
+}`
+
+// labelsOf is the order a breakdown comes out in.
+func labelsOf(rows []frc.BreakdownRow) []string {
+	out := make([]string, len(rows))
+	for i, row := range rows {
+		out[i] = row.Label
+	}
+	return out
+}
+
+func rowFor(rows []frc.BreakdownRow, key string) (frc.BreakdownRow, bool) {
+	for _, row := range rows {
+		if row.Key == key {
+			return row, true
+		}
+	}
+	return frc.BreakdownRow{}, false
+}
+
+// The order is the one a breakdown is read in: what they scored, whether it
+// earned them anything, where the points came from, what it cost them in
+// penalties, and then the detail.
+func TestCompareBreakdownsOrdersTheImportantFieldsFirst(t *testing.T) {
+	rows := frc.CompareBreakdowns(mustMatch(t, compare2024JSON), false)
+	got := labelsOf(rows)
+
+	want := []string{
+		"Total Points", "RP",
+		"Auto Amp Note Points", "Auto Leave Points", "Auto Points",
+		"Auto Speaker Note Points", "End Game On Stage Points", "Foul Points",
+		"Teleop Points",
+		"Foul Count",
+		"Auto Amp Note Count", "Auto Line Robot 1", "Auto Speaker Note Count",
+		"End Game Robot 1", "Melody Bonus Achieved",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CompareBreakdowns order =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// Both alliances' values are on one row, which is the whole point: a breakdown
+// is read across, not down two lists forty rows apart.
+func TestCompareBreakdownsPairsTheAlliances(t *testing.T) {
+	rows := frc.CompareBreakdowns(mustMatch(t, compare2024JSON), false)
+	row, ok := rowFor(rows, "totalPoints")
+	if !ok {
+		t.Fatalf("no totalPoints row in %v", labelsOf(rows))
+	}
+	if row.Red != "88" || row.Blue != "61" {
+		t.Errorf("totalPoints = (%q, %q), want (88, 61)", row.Red, row.Blue)
+	}
+	if row, _ := rowFor(rows, "melodyBonusAchieved"); row.Red != "yes" || row.Blue != "no" {
+		t.Errorf("melodyBonusAchieved = (%q, %q), want (yes, no)", row.Red, row.Blue)
+	}
+}
+
+// Most of a 2024 breakdown is zero for both alliances. Those rows are noise,
+// and drowning the dozen that moved in them is what made the old dump
+// unreadable.
+func TestCompareBreakdownsDropsRowsNeitherAllianceScored(t *testing.T) {
+	rows := frc.CompareBreakdowns(mustMatch(t, compare2024JSON), false)
+	for _, key := range []string{
+		"adjustPoints", "techFoulCount", "endGameNoteInTrapPoints",
+		"coopertitionBonusAchieved", "g424Penalty", "trapCenterStage",
+	} {
+		if _, ok := rowFor(rows, key); ok {
+			t.Errorf("%s is zero on both sides and should have been dropped", key)
+		}
+	}
+	// A value that is equal but not nothing stays: both alliances leaving the
+	// line is a fact about the match.
+	if _, ok := rowFor(rows, "autoLineRobot1"); !ok {
+		t.Error("autoLineRobot1 is Yes on both sides and should have been kept")
+	}
+	// So does one that is zero on one side only.
+	if row, ok := rowFor(rows, "foulCount"); !ok || row.Red != "1" || row.Blue != "0" {
+		t.Errorf("foulCount = %v, want it kept as (1, 0)", row)
+	}
+}
+
+// --full is for the moment you want the row that says nothing happened.
+func TestCompareBreakdownsFullKeepsEverything(t *testing.T) {
+	rows := frc.CompareBreakdowns(mustMatch(t, compare2024JSON), true)
+	if len(rows) != 21 {
+		t.Errorf("got %d rows, want all 21: %v", len(rows), labelsOf(rows))
+	}
+	for _, key := range []string{"adjustPoints", "trapCenterStage", "techFoulCount"} {
+		if _, ok := rowFor(rows, key); !ok {
+			t.Errorf("--full should have kept %s", key)
+		}
+	}
+	// The penalties still follow every scoring column and lead the detail,
+	// rather than sorting into the middle of either.
+	got := labelsOf(rows)
+	penalties := indexOf(got, "Foul Count")
+	if got[penalties+1] != "Tech Foul Count" || got[penalties+2] != "Adjust Points" {
+		t.Errorf("the penalties are not together in %v", got)
+	}
+	if last := indexOf(got, "Teleop Points"); last > penalties {
+		t.Errorf("a scoring column sorted after the penalties in %v", got)
+	}
+	if first := indexOf(got, "Auto Amp Note Count"); first != penalties+3 {
+		t.Errorf("the detail does not follow the penalties in %v", got)
+	}
+}
+
+func indexOf(labels []string, want string) int {
+	for i, label := range labels {
+		if label == want {
+			return i
+		}
+	}
+	return -1
+}
+
+// A match with no breakdown at all — anything before 2015, or anything not yet
+// played — has no table rather than an empty one.
+func TestCompareBreakdownsWithoutABreakdown(t *testing.T) {
+	if got := frc.CompareBreakdowns(mustMatch(t, unplayed2024JSON), false); got != nil {
+		t.Errorf("CompareBreakdowns = %v, want nothing", got)
+	}
+}
+
+// One alliance's breakdown missing is still worth a table: the other one's is
+// the answer, and inventing zeroes for the missing side would be a lie.
+func TestCompareBreakdownsWithOneSideOnly(t *testing.T) {
+	m := api.Match{
+		Key: "2024cthar_qm12",
+		ScoreBreakdown: map[string]interface{}{
+			"red": map[string]interface{}{"totalPoints": 88.0},
+		},
+	}
+	rows := frc.CompareBreakdowns(m, false)
+	row, ok := rowFor(rows, "totalPoints")
+	if !ok {
+		t.Fatalf("no totalPoints row in %v", labelsOf(rows))
+	}
+	if row.Red != "88" || row.Blue != "" {
+		t.Errorf("totalPoints = (%q, %q), want (88, empty)", row.Red, row.Blue)
+	}
+}
+
+func TestHumanizeKey(t *testing.T) {
+	cases := map[string]string{
+		"autoAmpNoteCount":                 "Auto Amp Note Count",
+		"totalPoints":                      "Total Points",
+		"rp":                               "RP",
+		"endGameRobot1":                    "End Game Robot 1",
+		"g424Penalty":                      "G424 Penalty",
+		"teleopSpeakerNoteAmplifiedPoints": "Teleop Speaker Note Amplified Points",
+		"autoCommunity.B.1":                "Auto Community B 1",
+		"":                                 "",
+	}
+	for key, want := range cases {
+		if got := frc.HumanizeKey(key); got != want {
+			t.Errorf("HumanizeKey(%q) = %q, want %q", key, got, want)
+		}
+	}
+}

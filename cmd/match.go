@@ -31,10 +31,19 @@ func newMatchCmd() *cobra.Command {
 }
 
 func newMatchViewCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "view <key>",
 		Short: "View match info",
+		Long: `Show one match in full: what it is called, when it is, both alliances by
+driver station, the game's own score breakdown and any video.
+
+The breakdown is printed as one table with a column per alliance, since what
+a breakdown is for is comparing the two. Its fields change every season and are
+documented nowhere, so they are ordered rather than interpreted: the total,
+the ranking points, everything else that scores, the penalties, then the rest.
+A field both alliances left at zero is dropped; --full keeps every one.`,
 		Example: `  tba match view 2024cthar_qm12
+  tba match view 2024cthar_qm12 --full
   tba match view 2024cthar_sf3m1 --format json`,
 		Args: exactArgs(1, "a match key (e.g. tba match view 2024cthar_qm12)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -61,16 +70,38 @@ func newMatchViewCmd() *cobra.Command {
 			return outputData(cmd, match, func() {
 				format, _ := resolveFormat(cmd)
 				color, _ := tableColorEnabled(cmd, format)
-				printMatch(cmd.OutOrStdout(), match, playoffType, color, nowFunc())
+				mode, _ := colorMode(cmd)
+				full, _ := cmd.Flags().GetBool("full")
+				printMatch(cmd.OutOrStdout(), match, matchView{
+					playoffType: playoffType,
+					color:       color,
+					mode:        mode,
+					full:        full,
+					now:         nowFunc(),
+				})
 			})
 		},
 	}
+	c.Flags().Bool("full", false, "Keep every score breakdown field, including the ones both alliances left at zero")
+	return c
+}
+
+// matchView is how one match is to be drawn: the bracket its label depends on,
+// whether escapes are allowed and how, whether the breakdown is shown whole,
+// and the clock its countdown is measured against.
+type matchView struct {
+	playoffType *int
+	color       bool
+	mode        output.ColorMode
+	full        bool
+	now         time.Time
 }
 
 // printMatch writes the human view of a match: what it is, when it is, who
 // played and what the game thought of it.
-func printMatch(w io.Writer, m api.Match, playoffType *int, color bool, now time.Time) {
+func printMatch(w io.Writer, m api.Match, view matchView) {
 	red, blue := m.Alliances[frc.AllianceRed], m.Alliances[frc.AllianceBlue]
+	playoffType, color, now := view.playoffType, view.color, view.now
 
 	pairs := []string{
 		"Match", frc.MatchLabel(m, playoffType),
@@ -89,7 +120,7 @@ func printMatch(w io.Writer, m api.Match, playoffType *int, color bool, now time
 	if marks := markLegendFor(red, blue); marks != "" {
 		fmt.Fprintf(w, "\n%s\n", marks)
 	}
-	printBreakdowns(w, m, color)
+	printBreakdown(w, m, view)
 	printVideos(w, m)
 }
 
@@ -134,22 +165,28 @@ func markLegendFor(alliances ...api.Alliance) string {
 	return ""
 }
 
-// printBreakdowns writes each alliance's score breakdown. The fields change
-// every season, so they are listed as they come rather than interpreted.
-func printBreakdowns(w io.Writer, m api.Match, color bool) {
-	for _, alliance := range []string{frc.AllianceRed, frc.AllianceBlue} {
-		rows := frc.AllianceBreakdown(m, alliance)
-		if len(rows) == 0 {
-			continue
-		}
-		label := strings.ToUpper(alliance[:1]) + alliance[1:]
-		fmt.Fprintf(w, "\nScore breakdown — %s\n", colorizeAlliance(label, color))
-		pairs := make([]string, 0, len(rows)*2)
-		for _, kv := range rows {
-			pairs = append(pairs, "  "+kv.Key, kv.Value)
-		}
-		output.PrintKeyValue(w, pairs...)
+// printBreakdown writes the score breakdown as one table, an alliance to a
+// column. Read down the two columns and the match explains itself; read as two
+// separate lists, forty rows apart, it does not.
+func printBreakdown(w io.Writer, m api.Match, view matchView) {
+	rows := frc.CompareBreakdowns(m, view.full)
+	if len(rows) == 0 {
+		return
 	}
+	cells := make([][]string, len(rows))
+	for i, row := range rows {
+		cells[i] = []string{row.Label, row.Red, row.Blue}
+	}
+	fmt.Fprintln(w, "\nScore breakdown")
+	headers := []string{
+		"Stat",
+		colorizeAlliance("Red", view.color),
+		colorizeAlliance("Blue", view.color),
+	}
+	// A failure here is a failure to write to stdout, which the recording
+	// writer around it reports for the whole command.
+	_ = output.Render(w, output.Table{Headers: headers, Rows: cells},
+		output.RenderOptions{Format: "table", Color: view.mode})
 }
 
 // printVideos lists the match's videos as links that can be clicked or curled.

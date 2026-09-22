@@ -4,8 +4,10 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 )
@@ -232,3 +234,205 @@ var entities = strings.NewReplacer(
 )
 
 func decodeEntities(s string) string { return entities.Replace(s) }
+
+// BreakdownRow is one statistic of a match's score breakdown, as each alliance
+// scored it.
+type BreakdownRow struct {
+	// Key is the API's own field name, for a caller that wants to match on it.
+	Key string
+	// Label is Key written as words.
+	Label string
+	Red   string
+	Blue  string
+}
+
+// The breakdown fields worth reading first. The rest of a breakdown is the
+// game's bookkeeping; these are the numbers an alliance is judged on.
+const (
+	breakdownTotalPoints = "totalPoints"
+	breakdownRP          = "rp"
+)
+
+// penaltyKeys are the fields that explain a score without being part of the
+// game, so they sit after the scoring detail rather than among it.
+var penaltyKeys = []string{"foulCount", "techFoulCount", "adjustPoints"}
+
+// CompareBreakdowns pairs the two alliances' score breakdowns into one table.
+//
+// The fields change every season and are documented nowhere, so they cannot be
+// interpreted — but they can be ordered usefully and read side by side, which
+// is how a breakdown is actually used: what did they score that we did not.
+// The order is the total, then the ranking points, then everything else that
+// scores points, then the penalties, then the rest alphabetically.
+//
+// Unless full is set, a row both alliances left at zero is dropped: a 2024
+// breakdown carries some forty fields per alliance, most of them zero, and the
+// ones that moved are the story.
+func CompareBreakdowns(m api.Match, full bool) []BreakdownRow {
+	red := breakdownIndex(AllianceBreakdown(m, AllianceRed))
+	blue := breakdownIndex(AllianceBreakdown(m, AllianceBlue))
+	if len(red) == 0 && len(blue) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(red)+len(blue))
+	seen := make(map[string]bool, len(red)+len(blue))
+	for _, side := range []map[string]string{red, blue} {
+		for key := range side {
+			if !seen[key] {
+				seen[key] = true
+				keys = append(keys, key)
+			}
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool { return lessBreakdownKey(keys[i], keys[j]) })
+
+	rows := make([]BreakdownRow, 0, len(keys))
+	for _, key := range keys {
+		row := BreakdownRow{Key: key, Label: HumanizeKey(key), Red: red[key], Blue: blue[key]}
+		if !full && row.Red == row.Blue && isNothing(row.Red) {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func breakdownIndex(kvs []KV) map[string]string {
+	out := make(map[string]string, len(kvs))
+	for _, kv := range kvs {
+		out[kv.Key] = kv.Value
+	}
+	return out
+}
+
+// isNothing reports whether a rendered value is the game's "did not happen":
+// zero, false or absent. Such a row is only worth printing under --full.
+func isNothing(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "", "0", "no":
+		return true
+	default:
+		return false
+	}
+}
+
+func lessBreakdownKey(a, b string) bool {
+	ra, rb := breakdownRank(a), breakdownRank(b)
+	if ra != rb {
+		return ra < rb
+	}
+	if ra == rankPenalty {
+		return penaltyIndex(a) < penaltyIndex(b)
+	}
+	return a < b
+}
+
+// The bands a breakdown key falls into, in printing order.
+const (
+	rankTotal = iota
+	rankRP
+	rankPoints
+	rankPenalty
+	rankOther
+)
+
+func breakdownRank(key string) int {
+	switch key {
+	case breakdownTotalPoints:
+		return rankTotal
+	case breakdownRP:
+		return rankRP
+	}
+	if penaltyIndex(key) >= 0 {
+		return rankPenalty
+	}
+	if strings.Contains(key, "Points") {
+		return rankPoints
+	}
+	return rankOther
+}
+
+func penaltyIndex(key string) int {
+	for i, k := range penaltyKeys {
+		if k == key {
+			return i
+		}
+	}
+	return -1
+}
+
+// acronyms are the field names that are initialisms rather than words, and
+// would read as "Rp" if they were capitalised like one.
+var acronyms = map[string]string{"rp": "RP", "dq": "DQ", "id": "ID"}
+
+// HumanizeKey writes an API field name as words: "autoAmpNoteCount" becomes
+// "Auto Amp Note Count". Dotted paths, which is how a nested breakdown field
+// arrives, keep their segments in order.
+func HumanizeKey(key string) string {
+	segments := strings.Split(key, ".")
+	words := make([]string, 0, len(segments)*3)
+	for _, segment := range segments {
+		words = append(words, splitWords(segment)...)
+	}
+	for i, w := range words {
+		words[i] = capitalize(w)
+	}
+	return strings.Join(words, " ")
+}
+
+// splitWords breaks a camelCase (or camelCase123) name into its words. A
+// single letter in front of a number stays with it, so a rule number such as
+// "g424Penalty" reads as "G424 Penalty" rather than "G 424 Penalty".
+func splitWords(s string) []string {
+	var words []string
+	var current []rune
+	flush := func() {
+		if len(current) > 0 {
+			words = append(words, string(current))
+			current = nil
+		}
+	}
+	runes := []rune(s)
+	for i, r := range runes {
+		switch {
+		case i == 0:
+		case unicode.IsUpper(r) && !unicode.IsUpper(runes[i-1]),
+			unicode.IsUpper(r) && i+1 < len(runes) && unicode.IsLower(runes[i+1]),
+			unicode.IsDigit(r) != unicode.IsDigit(runes[i-1]):
+			flush()
+		}
+		current = append(current, r)
+	}
+	flush()
+
+	// Re-join a lone letter with the number that follows it.
+	for i := 0; i+1 < len(words); i++ {
+		if len([]rune(words[i])) == 1 && isDigits(words[i+1]) {
+			words[i] += words[i+1]
+			words = append(words[:i+1], words[i+2:]...)
+		}
+	}
+	return words
+}
+
+func isDigits(s string) bool {
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return s != ""
+}
+
+func capitalize(word string) string {
+	if word == "" {
+		return word
+	}
+	if full, ok := acronyms[strings.ToLower(word)]; ok {
+		return full
+	}
+	runes := []rune(word)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
