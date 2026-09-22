@@ -63,14 +63,24 @@ func newAuthStatusCmd() *cobra.Command {
 				fmt.Fprintf(out, "Not authenticated for %s.\n", baseURL)
 				return nil
 			}
-			// Mask key
-			masked := key[:4] + strings.Repeat("*", len(key)-4)
-			fmt.Fprintf(out, "Authenticated with key: %s\n", masked)
+			fmt.Fprintf(out, "Authenticated with key: %s\n", maskKey(key))
 			fmt.Fprintf(out, "Base URL: %s\n", baseURL)
 			fmt.Fprintf(out, "Config file: %s\n", config.AuthFile())
 			return nil
 		},
 	}
+}
+
+// maskKey hides everything but the last four characters of an API key, the
+// way a payment card is shown. Keys of four characters or fewer are hidden
+// completely rather than leaked whole.
+func maskKey(key string) string {
+	const visible = 4
+	runes := []rune(key)
+	if len(runes) <= visible {
+		return strings.Repeat("*", len(runes))
+	}
+	return strings.Repeat("*", len(runes)-visible) + string(runes[len(runes)-visible:])
 }
 
 func newAuthLogoutCmd() *cobra.Command {

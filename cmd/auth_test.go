@@ -96,7 +96,7 @@ func TestAuthStatusMasksTheKey(t *testing.T) {
 	out, _, err := runCmd(t, nil, "auth", "status")
 	requireNoError(t, err, "")
 
-	requireContains(t, out, "Authenticated with key: abcd**********")
+	requireContains(t, out, "Authenticated with key: **********cret")
 	requireContains(t, out, "Base URL: https://www.thebluealliance.com/api/v3")
 	requireContains(t, out, "Config file: "+filepath.Join(dir, "auth.yaml"))
 	if strings.Contains(out, "abcd1234secret") {
@@ -109,7 +109,7 @@ func TestAuthStatusUsesEnvOverride(t *testing.T) {
 	t.Setenv("TBA_AUTH_KEY", "envkey-value")
 	out, _, err := runCmd(t, nil, "auth", "status")
 	requireNoError(t, err, "")
-	requireContains(t, out, "Authenticated with key: envk********")
+	requireContains(t, out, "Authenticated with key: ********alue")
 }
 
 func TestAuthLogout(t *testing.T) {
@@ -140,5 +140,39 @@ func TestAuthSubcommandsAreRegistered(t *testing.T) {
 		if !contains(got, want) {
 			t.Errorf("auth %s is not registered (have %v)", want, got)
 		}
+	}
+}
+
+func TestMaskKey(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{"a", "*"},
+		{"ab", "**"},
+		{"abc", "***"},
+		{"abcd", "****"},
+		{"abcde", "*bcde"},
+		{"abcd1234", "****1234"},
+		{"abcd1234secret", "**********cret"},
+	}
+	for _, c := range cases {
+		if got := maskKey(c.in); got != c.want {
+			t.Errorf("maskKey(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Regression test: masking used to slice the first four bytes off the key and
+// panicked on anything shorter.
+func TestAuthStatusWithAShortKeyDoesNotPanic(t *testing.T) {
+	authEnv(t)
+	t.Setenv("TBA_AUTH_KEY", "abc")
+	out, _, err := runCmd(t, nil, "auth", "status")
+	requireNoError(t, err, "")
+	requireContains(t, out, "Authenticated with key: ***")
+	if strings.Contains(out, "abc\n") {
+		t.Error("a short key must not be printed in full")
 	}
 }
