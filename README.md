@@ -157,8 +157,10 @@ Responses are cached locally and revalidated with `If-None-Match` / `If-Modified
 `~/.cache/tba`), so `tba cache clear` can only remove files `tba` wrote.
 
 ```
-tba cache info    # show directory, entry count, total size
+tba cache info    # directory, entry count, size, oldest/newest entry, stale count
 tba cache info --format json
+tba cache list    # one row per cached response: path, ages, size, ETag
+tba cache prune   # drop entries untouched for 30 days
 tba cache clear   # remove all cached responses
 tba --no-cache <command>   # skip cache and conditional headers for this invocation
 ```
@@ -166,6 +168,38 @@ tba --no-cache <command>   # skip cache and conditional headers for this invocat
 `TBA_CACHE_DIR` overrides the cache location.
 
 If the server answers `304 Not Modified` but the cached body has gone — pruned between the request and the response, or a proxy answering a request that carried no validators — the request is retried once without the conditional headers rather than failing.
+
+**Entry ages.** `cache info` reports the oldest and newest fetch as ages (`3d ago`) and counts how many entries are older than 30 days; in JSON those are `oldest_fetched_at`, `newest_fetched_at` and `stale_count`. `cache list` shows the same ages per entry, and takes `--columns` and `--sort` like any other table:
+
+```
+tba cache list --sort=-size
+tba cache list --columns path,fetched
+```
+
+**Pruning.** `cache prune` removes every entry that has not been fetched *or* revalidated within `--older-than` (default `30d`) — an entry that keeps coming back `304` is still in use, so its body being old does not matter. Durations accept `d` and `w` alongside Go's own units (`12h`, `30d`, `2w`). Temporary files left behind by an interrupted write are swept up too. In table mode the summary goes to stderr, so stdout stays free:
+
+```
+tba cache prune --older-than 7d
+tba cache prune --dry-run              # list what would go, delete nothing
+tba cache prune --format json          # {"removed":12,"bytes":48210,"dry_run":false,"paths":[...]}
+```
+
+**Stale-cache fallback.** When a request fails after all its retries because of a timeout, a dead connection, a `429` or a `5xx`, and a cached copy exists, that copy is served and a note goes to stderr:
+
+```
+note: /event/2024cthar/matches unavailable (HTTP 503); using cached copy from 12m ago
+```
+
+stdout is unchanged, so a script that pipes JSON keeps working through a TBA outage. A `401` or a `404` is an answer rather than a failure to get one, so those are never masked by a cached body — nor is a `Ctrl-C`, and nor is anything under `--no-cache`.
+
+**Offline mode.** `--offline` never touches the network. Requests are answered from the cache, revalidation is skipped, and a path that has never been fetched fails rather than being fetched:
+
+```
+$ tba --offline team view 1073
+Error: not cached: /team/frc1073 (run without --offline to fetch)
+```
+
+It exits 1. Because offline mode has nothing but the cache to serve from, `--offline --no-cache` is a usage error.
 
 ### Network behavior
 
