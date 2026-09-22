@@ -67,6 +67,51 @@ func TestInvalidColorIsAnError(t *testing.T) {
 	}
 }
 
+func TestNoHeadersTable(t *testing.T) {
+	out := districtsCmd(t, "--format", "table", "--no-headers")
+	got := lines(out)
+	if len(got) != 2 {
+		t.Fatalf("want 2 rows with no header and no separator, got %d:\n%s", len(got), out)
+	}
+	// Widths come from the data alone once the header is gone.
+	if got[0] != "2024ne   New England        ne " {
+		t.Errorf("row 1 = %q", got[0])
+	}
+	if got[1] != "2024fim  FIRST In Michigan  fim" {
+		t.Errorf("row 2 = %q", got[1])
+	}
+}
+
+func TestNoHeadersCSV(t *testing.T) {
+	out := districtsCmd(t, "--format", "csv", "--no-headers")
+	if out != "2024ne,New England,ne\n2024fim,FIRST In Michigan,fim\n" {
+		t.Errorf("csv = %q", out)
+	}
+}
+
+func TestNoHeadersTSV(t *testing.T) {
+	out := districtsCmd(t, "--format", "tsv", "--no-headers")
+	if out != "2024ne\tNew England\tne\n2024fim\tFIRST In Michigan\tfim\n" {
+		t.Errorf("tsv = %q", out)
+	}
+}
+
+func TestNoHeadersMarkdown(t *testing.T) {
+	out := districtsCmd(t, "--format", "markdown", "--no-headers")
+	want := "| 2024ne | New England | ne |\n| 2024fim | FIRST In Michigan | fim |\n"
+	if out != want {
+		t.Errorf("markdown = %q", out)
+	}
+}
+
+func TestNoHeadersLeavesJSONAlone(t *testing.T) {
+	out := districtsCmd(t, "--json", "--no-headers")
+	arr := decodeJSON(t, out).([]any)
+	if len(arr) != 2 {
+		t.Fatalf("want 2 districts, got %d", len(arr))
+	}
+}
+
 func TestColorAlwaysDoesNotTouchDataFormats(t *testing.T) {
 	for _, format := range []string{"csv", "tsv", "markdown", "json"} {
 		out := districtsCmd(t, "--format", format, "--color", "always")

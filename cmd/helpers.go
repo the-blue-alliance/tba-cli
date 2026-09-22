@@ -143,7 +143,12 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	if format == "json" {
 		return output.PrintJSONWithFilter(w, data, jqExpr(cmd), rawOutput(cmd))
 	}
-	return output.Render(w, table, output.RenderOptions{Format: format, Color: color})
+	noHeaders, _ := cmd.Flags().GetBool("no-headers")
+	return output.Render(w, table, output.RenderOptions{
+		Format:    format,
+		NoHeaders: noHeaders,
+		Color:     color,
+	})
 }
 
 // teamKey normalises a team argument, so that both "177" and "frc177" (in any
