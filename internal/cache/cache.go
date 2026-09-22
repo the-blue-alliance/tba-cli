@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/the-blue-alliance/tba-cli/internal/fsutil"
 )
 
 // entriesSubdir namespaces the cache files. Keeping them one level down
@@ -113,27 +115,18 @@ func (c *Cache) Touch(url string) error {
 	return c.write(url, e)
 }
 
+// entryFileMode is the mode of a cache file. The cache sits under the user's
+// home directory and holds whatever they have been looking at, which is
+// nobody else's business.
+const entryFileMode = 0600
+
 // write atomically replaces the cache file for url.
 func (c *Cache) write(url string, e *Entry) error {
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
 		return err
 	}
-	final := c.path(url)
-	tmp, err := os.CreateTemp(c.entriesDir, "tba-cache-*.tmp")
-	if err != nil {
-		return err
-	}
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	return os.Rename(tmp.Name(), final)
+	return fsutil.WriteFileAtomic(c.path(url), b, entryFileMode)
 }
 
 // Clear removes all cache entries. The directory itself is kept, and nothing
