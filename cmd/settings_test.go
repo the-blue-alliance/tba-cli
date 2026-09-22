@@ -262,3 +262,63 @@ func TestFormatFlagBeatsTheConfigFile(t *testing.T) {
 	requireNoError(t, err, "")
 	requireContains(t, out, "Team:")
 }
+
+// `tba config set retries -1` was refused while --retries -1 and TBA_RETRIES=-1
+// went through without a word, so the same nonsense was an error in one place
+// and quietly something else in another.
+func TestRetriesAndTimeoutAreValidatedInEveryLayer(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		env  [2]string
+		file string
+		want string
+	}{
+		{name: "retries flag", args: []string{"--retries", "-1"}, want: "retries cannot be negative"},
+		{name: "retries env", env: [2]string{"TBA_RETRIES", "-1"}, want: "retries cannot be negative"},
+		{name: "retries config", file: "retries: -1\n", want: "retries cannot be negative"},
+		{name: "timeout flag", args: []string{"--timeout", "0s"}, want: "timeout must be positive"},
+		{name: "timeout negative flag", args: []string{"--timeout", "-5s"}, want: "timeout must be positive"},
+		{name: "timeout env", env: [2]string{"TBA_TIMEOUT", "0s"}, want: "timeout must be positive"},
+		{name: "timeout config", file: "timeout: 0s\n", want: "timeout must be positive"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.file != "" {
+				writeConfig(t, c.file)
+			}
+			if c.env[0] != "" {
+				t.Setenv(c.env[0], c.env[1])
+			}
+			srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+			_, _, err := runCmd(t, srv, append([]string{"team", "view", "177"}, c.args...)...)
+			requireErrorContains(t, err, c.want)
+			if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+				t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+			}
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a bad setting should be caught before any request, got %v", got)
+			}
+		})
+	}
+}
+
+// A value from somewhere other than the command line says where it came from,
+// since "--retries" is not a flag the user passed.
+func TestABadSettingNamesItsLayer(t *testing.T) {
+	t.Setenv("TBA_RETRIES", "-1")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, _, err := runCmd(t, srv, "team", "view", "177")
+	requireErrorContains(t, err, "retries cannot be negative (from TBA_RETRIES)")
+}
+
+func TestValidRetriesAndTimeoutAreLeftAlone(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	// 0 retries is the right setting for a cron job; only a negative count is
+	// nonsense.
+	_, stderr, err := runCmd(t, srv, "team", "view", "177", "--retries", "0", "--timeout", "1s")
+	requireNoError(t, err, stderr)
+}
