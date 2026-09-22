@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
@@ -51,6 +52,14 @@ func newTeamNextCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), path, &matches); err != nil {
 				return err
 			}
+			// No matches at all at a named event is two different answers:
+			// the schedule is not out yet, or the team was never going. The
+			// event's roster settles it, and is only asked for in the one
+			// case where the answer changes what is printed.
+			if len(matches) == 0 && named != "" && !teamAtEvent(cmd, client, team, event.Key) {
+				return clierr.NotFound("team %s was not at %s",
+					output.TeamNumberFromKey(team), event.Key)
+			}
 			upcoming := frc.Unplayed(matches)
 			playoffTypeFor := constantPlayoffType(event.PlayoffType)
 
@@ -77,6 +86,27 @@ func newTeamNextCmd() *cobra.Command {
 	addYearFlag(c)
 	c.Flags().Bool("all", false, "List every upcoming match as a table, not just the next one")
 	return c
+}
+
+// teamAtEvent reports whether a team is on an event's roster.
+//
+// It costs one request, so it is only asked when a team has no matches at an
+// event at all, which is the one time the answer changes what is printed.
+//
+// A request that fails answers yes: an event whose roster cannot be fetched is
+// no evidence that the team was absent, and the ordinary "no matches" note is
+// a better answer than an error about a list nobody asked for.
+func teamAtEvent(cmd *cobra.Command, client *api.Client, team, eventKey string) bool {
+	var keys []string
+	if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/teams/keys", eventKey), &keys); err != nil {
+		return true
+	}
+	for _, key := range keys {
+		if strings.EqualFold(key, team) {
+			return true
+		}
+	}
+	return false
 }
 
 // teamEventChoice is which event a team question turned out to be about.

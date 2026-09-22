@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -50,10 +52,22 @@ func newTeamStandingCmd() *cobra.Command {
 				eventKey = choice.event.Key
 			}
 
-			var status api.TeamEventStatus
+			// The body is read raw because its most important answer is a
+			// bare null, which decodes into a struct full of nils that is
+			// indistinguishable from a team standing at the start line.
 			path := fmt.Sprintf("/team/%s/event/%s/status", team, eventKey)
-			if err := client.Get(cmd.Context(), path, &status); err != nil {
+			raw, err := client.GetRaw(cmd.Context(), path)
+			if err != nil {
 				return err
+			}
+			if isNullStatus(raw) {
+				return clierr.NotFound("team %s was not at %s",
+					output.TeamNumberFromKey(team), eventKey)
+			}
+			var status api.TeamEventStatus
+			if err := json.Unmarshal(raw, &status); err != nil {
+				return fmt.Errorf("reading the status of team %s at %s: %w",
+					output.TeamNumberFromKey(team), eventKey, err)
 			}
 			return outputData(cmd, status, func() {
 				output.PrintKeyValue(cmd.OutOrStdout(), standingPairs(status, team, eventKey)...)
@@ -90,6 +104,17 @@ func standingEventKey(cmd *cobra.Command, args []string) (string, error) {
 		return "", err
 	}
 	return key, nil
+}
+
+// isNullStatus reports whether the API answered "this team has no status at
+// this event", which it does with a literal null rather than a 404.
+//
+// A team that simply has not played yet gets an object whose sections are all
+// null, and that is a different answer: it is at the event, with nothing to
+// report yet. Only the null document means the team was never there.
+func isNullStatus(raw []byte) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null"))
 }
 
 // mustString reads a string flag the command is known to have.

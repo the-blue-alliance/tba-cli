@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // during2024ctharServer serves team 177's season and its matches at the event
@@ -229,6 +231,70 @@ func TestTeamNextAfterTheEventEndedWithoutAStatus(t *testing.T) {
 	want := "note: 2024ctwat ended 2024-03-10; no matches left for 177\n"
 	if errOut != want {
 		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// A team that never went to the event has no matches there, which used to read
+// as "the schedule is not out yet". The event's roster says otherwise.
+func TestTeamNextForATeamNotAtTheEvent(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 23, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":                     event2024ctharJSON,
+		"/team/frc254/event/2024cthar/matches": "[]",
+		"/event/2024cthar/teams/keys":          `["frc177", "frc1073", "frc5507"]`,
+	})
+	out, _, err := runCmd(t, srv, "team", "next", "254", "2024cthar", "--format", "table")
+	requireErrorContains(t, err, "team 254 was not at 2024cthar")
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d (not found)", got, clierr.ExitNotFound)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
+	}
+}
+
+// A team that is on the roster but has no schedule yet is a different answer,
+// and still a successful one.
+func TestTeamNextForATeamAtTheEventWithNoScheduleYet(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 23, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":                     event2024ctharJSON,
+		"/team/frc177/event/2024cthar/matches": "[]",
+		"/event/2024cthar/teams/keys":          `["frc177", "frc1073", "frc5507"]`,
+	})
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no upcoming match for team 177 at 2024cthar\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// The roster costs a request, so it is only fetched when the match list came
+// back empty.
+func TestTeamNextSkipsTheRosterWhenThereAreMatches(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 23, 9, 0, 0, 0, time.Local))
+	srv := during2024ctharServer(t)
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+	for _, p := range requestPaths(t, srv) {
+		if strings.HasSuffix(p, "/teams/keys") {
+			t.Errorf("a team with matches should not need the roster, but requested %s", p)
+		}
+	}
+}
+
+// --all takes the same answer: an empty table for a team that was never there
+// would be a listing of nothing rather than a correction.
+func TestTeamNextAllForATeamNotAtTheEvent(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 23, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":                     event2024ctharJSON,
+		"/team/frc254/event/2024cthar/matches": "[]",
+		"/event/2024cthar/teams/keys":          `["frc177"]`,
+	})
+	_, _, err := runCmd(t, srv, "team", "next", "254", "2024cthar", "--all", "--format", "csv")
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d (not found)", got, clierr.ExitNotFound)
 	}
 }
 
