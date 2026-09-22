@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -154,6 +155,48 @@ func (c *Cache) Clear() (removed int, err error) {
 		}
 	}
 	return removed, nil
+}
+
+// ForEach calls fn once for every entry in the cache.
+//
+// A file that cannot be read or parsed is skipped rather than reported: a
+// damaged entry is a cache miss, exactly as it is in Get. Only a directory
+// that cannot be listed at all is an error, and a cache that has never been
+// written is not one.
+func (c *Cache) ForEach(fn func(Entry)) error {
+	entries, err := os.ReadDir(c.entriesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, de := range entries {
+		if de.IsDir() || filepath.Ext(de.Name()) != ".json" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(c.entriesDir, de.Name()))
+		if err != nil {
+			continue
+		}
+		var e Entry
+		if err := json.Unmarshal(b, &e); err != nil {
+			continue
+		}
+		fn(e)
+	}
+	return nil
+}
+
+// List returns every cache entry, ordered by URL so that callers reading the
+// cache get the same answer every time.
+func (c *Cache) List() ([]Entry, error) {
+	var out []Entry
+	if err := c.ForEach(func(e Entry) { out = append(out, e) }); err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].URL < out[j].URL })
+	return out, nil
 }
 
 // Stats reports the number of cached entries and total bytes on disk.
