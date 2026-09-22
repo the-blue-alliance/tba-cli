@@ -86,7 +86,9 @@ refused. --columns and --sort do not apply either, and are ignored.
 
 Because it polls, the defaults are conservative: a poll a minute for two hours.
 --for 0 watches until Ctrl-C. Unchanged polls cost a conditional request the
-API answers with a 304, so a long watch is cheaper than it looks.`,
+API answers with a 304, so a long watch is cheaper than it looks. A watch of an
+event that is already over stops at the first poll, and one whose output is
+piped into a reader that has gone away stops at the next.`,
 		Example: `  tba event watch 2024cthar
   tba event watch 2024cthar --interval 30s --for 6h
   tba event watch 2024cthar --team 177 --rankings
@@ -165,7 +167,11 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sink, err := newWatchSink(cmd, opts, client)
+	// The event is fetched once, before the loop and best-effort: its bracket
+	// format is what names the playoff matches, and its end date is what says
+	// there is nothing left to watch.
+	event, _ := fetchEvent(cmd, client, opts.eventKey)
+	sink, err := newWatchSink(cmd, opts, event.PlayoffType)
 	if err != nil {
 		return err
 	}
@@ -185,8 +191,16 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 		return nil
 	}
 
+	// A watch can sit quiet for an hour between polls, so a reader that has
+	// hung up is never noticed by a failed write. Ask the descriptor instead,
+	// before each poll and before each wait.
+	out := cmd.OutOrStdout()
+
 	failures := 0
 	for poll := 1; ; poll++ {
+		if stdoutHungUp(out) {
+			return errStdoutClosed()
+		}
 		matches, rankings, err := watchPoll(ctx, client, opts)
 		switch {
 		case err != nil && ctx.Err() != nil:
@@ -208,6 +222,13 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			if err := state.emit(sink, poll, nowFunc(), matches, rankings); err != nil {
 				return err
 			}
+			// An event that is over is not going to change again. Polling it
+			// for the rest of --for costs a shared API a request a minute to
+			// be told the same thing every time.
+			if watchIsOver(event, matches, nowFunc()) {
+				fmt.Fprintf(errw, "note: %s ended %s; nothing left to watch\n", opts.eventKey, event.EndDate)
+				return nil
+			}
 		}
 
 		switch {
@@ -224,6 +245,10 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			return stopFor()
 		}
 
+		if stdoutHungUp(out) {
+			return errStdoutClosed()
+		}
+
 		wait := opts.interval
 		if !deadline.IsZero() {
 			if remaining := deadline.Sub(nowFunc()); remaining < wait {
@@ -237,6 +262,18 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			return stopFor()
 		}
 	}
+}
+
+// watchIsOver reports whether there is anything left to see: an event whose
+// last day is past and whose matches have all been played.
+//
+// Both halves are needed. A day with every match played so far is the ordinary
+// lunch break, and an event whose dates have passed can still be waiting on a
+// scoring correction, which is exactly what someone watching is watching for.
+// An event that could not be fetched has no end date, so a watch of it runs
+// its full course rather than stopping on a guess.
+func watchIsOver(event api.Event, matches []api.Match, now time.Time) bool {
+	return frc.Ended(event, now) && len(frc.Unplayed(matches)) == 0
 }
 
 // watchPoll fetches one round. Both requests have to succeed for the round to
@@ -422,7 +459,10 @@ func sameRecord(a, b *api.WLTRecord) bool {
 	return *a == *b
 }
 
-func newWatchSink(cmd *cobra.Command, opts watchOptions, client *api.Client) (watchSink, error) {
+// newWatchSink builds the renderer for one watch. playoffType comes from the
+// event the caller already fetched; nil leaves the playoff labels to guess
+// from the season.
+func newWatchSink(cmd *cobra.Command, opts watchOptions, playoffType *int) (watchSink, error) {
 	if opts.format == "json" {
 		return newWatchJSONSink(cmd)
 	}
@@ -435,13 +475,11 @@ func newWatchSink(cmd *cobra.Command, opts watchOptions, client *api.Client) (wa
 		return nil, err
 	}
 	return &watchTableSink{
-		out:   cmd.OutOrStdout(),
-		errw:  cmd.ErrOrStderr(),
-		color: color,
-		mode:  mode,
-		// The event is fetched once, only for the bracket format its playoff
-		// match labels depend on; a failure leaves the labels to guess.
-		playoffType: eventPlayoffType(cmd, client, opts.eventKey),
+		out:         cmd.OutOrStdout(),
+		errw:        cmd.ErrOrStderr(),
+		color:       color,
+		mode:        mode,
+		playoffType: playoffType,
 	}, nil
 }
 
@@ -600,15 +638,22 @@ type watchTableSink struct {
 	rankHeaders []string
 	rankWidths  []int
 	legendShown bool
+	// withDate is settled by the first poll, so that the rows printed later
+	// write their times the same way as the table above them.
+	withDate bool
 }
 
-func (s *watchTableSink) snapshot(_ int, _ time.Time, matches []api.Match, rankings *api.EventRankings) error {
-	rows := s.matchRows(matches)
+func (s *watchTableSink) snapshot(_ int, at time.Time, matches []api.Match, rankings *api.EventRankings) error {
+	// The first poll settles how the times are written, so that the rows
+	// printed under this table hours later still line up with it.
+	s.withDate = frc.NeedsDate(matches, time.Local, at)
+	rows, marked := matchTableRows(matches, constantPlayoffType(s.playoffType), s.color, at)
 	s.matchWidths = watchWidths(matchHeaders, rows)
 	if err := output.Render(s.out, output.Table{Headers: matchHeaders, Rows: rows},
 		output.RenderOptions{Format: "table", Color: s.mode}); err != nil {
 		return err
 	}
+	s.showLegend(marked)
 	if rankings != nil {
 		fmt.Fprintln(s.out)
 		if err := s.renderRankings(rankings); err != nil {
@@ -622,9 +667,17 @@ func (s *watchTableSink) changes(news watchNews) error {
 	// The header is data in table mode: it is what tells one poll's rows from
 	// the next when the stream is read back later.
 	fmt.Fprintf(s.out, "--- %s (poll %d) ---\n", news.at.Local().Format("15:04:05"), news.poll)
-	for _, c := range news.matches {
-		fmt.Fprintln(s.out, watchPadded(s.matchRow(c.match), s.matchWidths))
+	changed := make([]api.Match, len(news.matches))
+	for i, c := range news.matches {
+		changed[i] = c.match
 	}
+	rows, marked := matchRows(changed, constantPlayoffType(s.playoffType), s.color, s.withDate, news.at)
+	for _, row := range rows {
+		fmt.Fprintln(s.out, watchPadded(row, s.matchWidths))
+	}
+	// Once per poll, not once per row: a poll that brings in three surrogates
+	// is still one thing to explain.
+	s.showLegend(marked)
 	if len(news.rankings) > 0 && news.standings != nil {
 		fmt.Fprintln(s.out)
 		if err := s.renderRankings(news.standings); err != nil {
@@ -634,45 +687,15 @@ func (s *watchTableSink) changes(news watchNews) error {
 	return nil
 }
 
-func (s *watchTableSink) matchRows(matches []api.Match) [][]string {
-	rows := make([][]string, len(matches))
-	for i, m := range matches {
-		rows[i] = s.matchRow(m)
+// showLegend explains the surrogate and DQ marks the first time a poll prints
+// one. It goes to stderr, so a stream teed into a file keeps only the rows,
+// and it is printed once for the whole watch rather than once per row.
+func (s *watchTableSink) showLegend(marked bool) {
+	if !marked || s.legendShown {
+		return
 	}
-	return rows
-}
-
-// matchRow renders one match as a row of matchHeaders.
-//
-// This is a copy of the row `event matches` builds in cmd/matches.go, kept here
-// so that a streaming command cannot be broken by a change to a listing
-// command, and vice versa. The headers themselves are shared (matchHeaders),
-// so the two tables cannot silently grow different columns.
-func (s *watchTableSink) matchRow(m api.Match) []string {
-	red, blue := m.Alliances[frc.AllianceRed], m.Alliances[frc.AllianceBlue]
-	redCell := strings.Join(frc.MarkedTeams(red), ", ")
-	blueCell := strings.Join(frc.MarkedTeams(blue), ", ")
-	if !s.legendShown && strings.ContainsAny(redCell+blueCell, frc.MarkChars) {
-		s.legendShown = true
-		fmt.Fprintln(s.errw, frc.Legend)
-	}
-
-	score := ""
-	if frc.Played(m) {
-		score = fmt.Sprintf("%d-%d", red.Score, blue.Score)
-	}
-	epoch, source := frc.BestTime(m)
-	return []string{
-		frc.MatchLabel(m, s.playoffType),
-		m.Key,
-		output.Colorize(redCell, output.Red, s.color),
-		output.Colorize(blueCell, output.Blue, s.color),
-		score,
-		colorizeAlliance(frc.Winner(m), s.color),
-		frc.FormatTime(epoch, time.Local),
-		source,
-		frc.MatchStatus(m),
-	}
+	s.legendShown = true
+	fmt.Fprintln(s.errw, frc.Legend)
 }
 
 // renderRankings prints the whole standings table, since a rank changing moves

@@ -27,7 +27,7 @@ func newDistrictCmd() *cobra.Command {
 func newDistrictListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
-		Short: "List districts for a year",
+		Short: "List a season's districts",
 		Example: `  tba district list --year 2024
   tba districts list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -35,7 +35,7 @@ func newDistrictListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -58,7 +58,7 @@ func newDistrictListCmd() *cobra.Command {
 func newDistrictEventsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "events <key>",
-		Short: "List district events",
+		Short: "List a district's events",
 		Example: `  tba district events 2024ne
   tba district events 2024ne --format csv`,
 		Args: exactArgs(1, "a district key (e.g. tba district events 2024ne)"),
@@ -84,7 +84,7 @@ func newDistrictEventsCmd() *cobra.Command {
 func newDistrictTeamsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "teams <key>",
-		Short: "List district teams",
+		Short: "List a district's teams",
 		Example: `  tba district teams 2024ne
   tba district teams 2024ne --format tsv`,
 		Args: exactArgs(1, "a district key (e.g. tba district teams 2024ne)"),
@@ -110,7 +110,7 @@ func newDistrictTeamsCmd() *cobra.Command {
 func newDistrictRankingsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "rankings <key>",
-		Short: "Show district rankings",
+		Short: "Show a district's season rankings",
 		Long: `Show a district's season rankings, one row per team.
 
 A team's points come from its two qualifying district events, shown as Event 1
@@ -119,10 +119,19 @@ and Event 2 in the order they were played, plus the district championship
 its qual, alliance, award and elim points.
 
 --cutoff N draws a separator after rank N, where the district championship cut
-falls, in table and markdown output.`,
+falls, in table and markdown output.
+
+The ranks the API publishes include district championship points once the DCMP
+has been played, so late in a season "top N" is a line through the final
+standings rather than through the cut that decided who went. --pre-dcmp ranks
+instead on the points a team had before the DCMP, renumbers Rank by that
+order, keeps the published rank as Season Rank, adds the pre-DCMP total as its
+own column, and puts the cut line there; the cut line says which of the two it
+is. The JSON is the API's own answer either way.`,
 		Example: `  tba district rankings 2024ne
   tba district rankings 2024ne --format markdown
   tba district rankings 2024ne --cutoff 80
+  tba district rankings 2024ne --cutoff 80 --pre-dcmp
   tba district rankings 2024ne --detail --columns team,"e1 qual","e2 qual"`,
 		Args: exactArgs(1, "a district key (e.g. tba district rankings 2024ne)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -144,6 +153,15 @@ falls, in table and markdown output.`,
 			}
 			sort.SliceStable(rankings, func(i, j int) bool { return rankings[i].Rank < rankings[j].Rank })
 
+			preDCMP, _ := cmd.Flags().GetBool("pre-dcmp")
+			if preDCMP {
+				// Sorted in place: JSON output is handed the same slice, and
+				// the two should agree on the order.
+				sort.SliceStable(rankings, func(i, j int) bool {
+					return preDCMPTotal(rankings[i]) > preDCMPTotal(rankings[j])
+				})
+			}
+
 			detail, _ := cmd.Flags().GetBool("detail")
 			// Two qualifying events is the rule, but a team can be rostered at
 			// a third, and dropping those points silently would be worse than
@@ -155,7 +173,14 @@ falls, in table and markdown output.`,
 				}
 			}
 
-			headers := []string{"Rank", "Team", "Rookie Bonus"}
+			headers := []string{"Rank"}
+			if preDCMP {
+				// Rank counts the rows as they are now ordered, so the number
+				// the API published needs a column of its own -- and a name
+				// that says which of the two it is.
+				headers = append(headers, "Season Rank")
+			}
+			headers = append(headers, "Team", "Rookie Bonus")
 			for i := 1; i <= eventColumns; i++ {
 				headers = append(headers, fmt.Sprintf("Event %d", i))
 				if detail {
@@ -167,15 +192,30 @@ falls, in table and markdown output.`,
 				}
 			}
 			headers = append(headers, "DCMP", "Total")
+			if preDCMP {
+				headers = append(headers, "Pre-DCMP")
+			}
 
+			preRanks := preDCMPRanks(rankings)
 			rows := make([][]string, len(rankings))
 			for i, r := range rankings {
 				events := qualifyingEvents(r)
-				row := []string{
-					strconv.Itoa(r.Rank),
+				// A rank next to a cut line has to be the rank the cut was
+				// made on: the published one counts district championship
+				// points, so under --pre-dcmp it ran 2, 3, 11, 5 down a table
+				// ordered by something else.
+				rank := r.Rank
+				if preDCMP {
+					rank = preRanks[i]
+				}
+				row := []string{strconv.Itoa(rank)}
+				if preDCMP {
+					row = append(row, strconv.Itoa(r.Rank))
+				}
+				row = append(row,
 					output.TeamNumberFromKey(r.TeamKey),
 					strconv.Itoa(r.RookieBonus),
-				}
+				)
 				for n := 0; n < eventColumns; n++ {
 					if n >= len(events) {
 						row = append(row, "")
@@ -195,16 +235,21 @@ falls, in table and markdown output.`,
 					}
 				}
 				row = append(row, districtCMPPoints(r), strconv.Itoa(r.PointTotal))
+				if preDCMP {
+					row = append(row, strconv.Itoa(preDCMPTotal(r)))
+				}
 				rows[i] = row
 			}
 
+			table := output.Table{Headers: headers, Rows: rows}
 			if cutoff > 0 {
-				rows = insertCutoff(cmd, rows, rankings, cutoff, format, len(headers))
+				table.Dividers = cutoffDivider(cmd, rankings, cutoff, preDCMP, format)
 			}
-			return outputTable(cmd, rankings, headers, rows)
+			return outputTableWith(cmd, rankings, table)
 		},
 	}
 	c.Flags().Int("cutoff", 0, "Draw a separator after rank N, where the DCMP cut falls")
+	c.Flags().Bool("pre-dcmp", false, "Rank on the points each team had before the district championship")
 	c.Flags().Bool("detail", false, "Break each qualifying event into qual/alliance/award/elim points")
 	return c
 }
@@ -238,38 +283,98 @@ func districtCMPPoints(r api.DistrictRanking) string {
 	return strconv.Itoa(total)
 }
 
-// insertCutoff splices the DCMP cut marker in after the last team at or above
-// rank cutoff.
+// preDCMPRanks numbers rows already ordered by pre-DCMP total the way a
+// ranking is numbered: teams on the same points share a rank, and the next
+// team down takes the position it actually stands in -- 1, 2, 2, 4.
 //
-// The marker is a presentational row, so it is only drawn for the formats a
-// person reads: csv, tsv and json stay machine-clean. It also depends on the
-// rows being in rank order, so --sort takes precedence and says so on stderr
-// rather than leaving a line floating in the middle of a re-sorted table.
-func insertCutoff(cmd *cobra.Command, rows [][]string, rankings []api.DistrictRanking, cutoff int, format string, columns int) [][]string {
+// Counting the rows off instead handed four teams on 95 points the ranks 20,
+// 21, 22 and 23, which says one of them finished ahead of the others when the
+// standings say no such thing, and put a cut line between teams nothing
+// separates. TBA ranks a tie the same way.
+func preDCMPRanks(rankings []api.DistrictRanking) []int {
+	ranks := make([]int, len(rankings))
+	for i := range rankings {
+		if i > 0 && preDCMPTotal(rankings[i]) == preDCMPTotal(rankings[i-1]) {
+			ranks[i] = ranks[i-1]
+			continue
+		}
+		ranks[i] = i + 1
+	}
+	return ranks
+}
+
+// preDCMPTotal is a team's season points without its district championship,
+// which is the number the DCMP cut was actually made on.
+func preDCMPTotal(r api.DistrictRanking) int {
+	total := r.PointTotal
+	for _, e := range r.EventPoints {
+		if e.DistrictCMP {
+			total -= e.Total
+		}
+	}
+	return total
+}
+
+// anyDCMPPoints reports whether the district championship has been scored for
+// anybody in the list, which is what makes the published totals post-DCMP.
+func anyDCMPPoints(rankings []api.DistrictRanking) bool {
+	for _, r := range rankings {
+		for _, e := range r.EventPoints {
+			if e.DistrictCMP && e.Total != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cutoffDivider places the DCMP cut line after the last team above the cut.
+//
+// The line is presentation, so it is only drawn for the formats a person
+// reads: csv, tsv and json stay machine-clean. It also depends on the rows
+// being in the order the command put them in, so --sort takes precedence and
+// says so on stderr rather than leaving a line floating in the middle of a
+// re-sorted table.
+//
+// What the line says depends on what it is cutting. Once the district
+// championship has been scored the published ranks include its points, so a
+// "top N" line no longer marks who qualified for it; the label says as much,
+// and --pre-dcmp draws the line through the standings that did decide it.
+func cutoffDivider(cmd *cobra.Command, rankings []api.DistrictRanking, cutoff int, preDCMP bool, format string) map[int]string {
 	if format != "table" && format != "markdown" {
-		return rows
+		return nil
 	}
 	if sortSpec, _ := cmd.Flags().GetString("sort"); sortSpec != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "note: --cutoff needs rank order, so no cut line is drawn with --sort\n")
-		return rows
+		return nil
 	}
+
 	at := len(rankings)
-	for i, r := range rankings {
-		if r.Rank > cutoff {
-			at = i
-			break
+	if preDCMP {
+		// The rows are already ordered by pre-DCMP total, so the cut is
+		// simply after the Nth of them.
+		if cutoff < at {
+			at = cutoff
+		}
+	} else {
+		for i, r := range rankings {
+			if r.Rank > cutoff {
+				at = i
+				break
+			}
 		}
 	}
 	// Nothing to separate: every team is above the cut.
-	if at >= len(rows) {
-		return rows
+	if at >= len(rankings) || at <= 0 {
+		return nil
 	}
-	// Padded to the full width so that markdown still sees a well-formed row.
-	marker := make([]string, columns)
-	marker[0] = fmt.Sprintf("--- DCMP cutoff (top %d) ---", cutoff)
-	out := make([][]string, 0, len(rows)+1)
-	out = append(out, rows[:at]...)
-	out = append(out, marker)
-	out = append(out, rows[at:]...)
-	return out
+
+	label := fmt.Sprintf("DCMP cutoff (top %d)", cutoff)
+	switch {
+	case preDCMP:
+		label = fmt.Sprintf("top %d by pre-DCMP total", cutoff)
+	case anyDCMPPoints(rankings):
+		label = fmt.Sprintf("top %d by current total (includes DCMP points)", cutoff)
+	}
+	return map[int]string{at - 1: label}
 }

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -104,6 +106,46 @@ func TestOfflineAnswersFromTheCacheWithoutAnyRequest(t *testing.T) {
 	if n := len(requestPaths(t, srv)); n != 1 {
 		t.Errorf("--offline reached the network: %v", requestPaths(t, srv))
 	}
+	// The data is identical to a live run's, so the age of the copy is the
+	// only thing that can tell the user which one they are reading.
+	if !strings.Contains(errOut, "note: offline: /team/frc177 from cache (") {
+		t.Errorf("stderr should date the cached copy:\n%s", errOut)
+	}
+	if !strings.Contains(errOut, "ago)") {
+		t.Errorf("the offline note should carry an age:\n%s", errOut)
+	}
+	if strings.Contains(out, "offline") {
+		t.Errorf("the note belongs on stderr:\n%s", out)
+	}
+}
+
+// Reading one's own cache is not a request to anyone, so it needs no
+// credentials. `tba --offline ...` over a warm cache on a machine with no key
+// exited 4 "not authenticated", which is the one situation where offline is
+// most worth having.
+func TestOfflineNeedsNoAPIKey(t *testing.T) {
+	sharedCacheDir(t)
+	t.Setenv("TBA_CONFIG_DIR", t.TempDir())
+	t.Setenv("TBA_AUTH_KEY", "test-key")
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	first, stderr, err := runCmd(t, srv, "team", "view", "177", "--format", "json")
+	requireNoError(t, err, stderr)
+
+	// Same cache and config directory, no key anywhere.
+	t.Setenv("TBA_AUTH_KEY", "")
+	out, stderr, err := runCmd(t, srv, "team", "view", "177", "--format", "json", "--offline")
+	requireNoError(t, err, stderr)
+	if out != first {
+		t.Errorf("offline output differs:\n%s\n---\n%s", first, out)
+	}
+
+	// Without --offline the same run still asks for a key, because then it
+	// really is about to make a request.
+	_, _, err = runCmd(t, srv, "team", "view", "177")
+	if got := clierr.ExitCode(err); got != clierr.ExitAuth {
+		t.Errorf("exit code = %d (err %v), want %d", got, err, clierr.ExitAuth)
+	}
 }
 
 func TestOfflineFailsOnAnUncachedPath(t *testing.T) {
@@ -114,8 +156,10 @@ func TestOfflineFailsOnAnUncachedPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error for a path that was never fetched")
 	}
-	if clierr.ExitCode(err) != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", clierr.ExitCode(err), clierr.ExitFailure)
+	// "no copy of that here" is the answer a 404 gives, and a script can act
+	// on it the same way; exit 1 said the run itself had gone wrong.
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitNotFound)
 	}
 	requireErrorContains(t, err, "not cached: /team/frc177 (run without --offline to fetch)")
 	if out != "" {
@@ -134,6 +178,24 @@ func TestOfflineWithNoCacheIsAUsageError(t *testing.T) {
 	requireErrorContains(t, err, "--offline and --no-cache")
 	if n := len(requestPaths(t, srv)); n != 0 {
 		t.Errorf("a usage error should not make a request: %v", requestPaths(t, srv))
+	}
+}
+
+// A cache directory that cannot be opened has to say so. Running cacheless
+// after a silent failure makes --offline report "not cached" for everything,
+// which sends the user looking for the wrong problem.
+func TestABrokenCacheDirectoryIsReportedRatherThanIgnored(t *testing.T) {
+	blocked := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("in the way\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TBA_CACHE_DIR", blocked)
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, _, err := runCmd(t, srv, "team", "view", "177", "--offline")
+	requireErrorContains(t, err, "opening the response cache")
+	if strings.Contains(err.Error(), "not cached") {
+		t.Errorf("a broken cache dir should not read as a cache miss: %v", err)
 	}
 }
 

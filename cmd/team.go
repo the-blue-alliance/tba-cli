@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -35,10 +36,10 @@ func newTeamCmd() *cobra.Command {
 func newTeamViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <number>",
-		Short: "View team info",
+		Short: "Show a team's details",
 		Example: `  tba team view 177
   tba team view frc177 --format json
-  tba team view 1073 --jq .nickname -r`,
+  tba team view 177 --jq .nickname -r`,
 		Args: exactArgs(1, "a team number (e.g. tba team view 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateTeamArg(args[0]); err != nil {
@@ -68,7 +69,7 @@ func newTeamViewCmd() *cobra.Command {
 func newTeamListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
-		Short: "List teams",
+		Short: "List a season's teams",
 		Example: `  tba team list --year 2024
   tba teams list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -76,7 +77,7 @@ func newTeamListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -110,7 +111,7 @@ func newTeamListCmd() *cobra.Command {
 func newTeamEventsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "events <number>",
-		Short: "List team events",
+		Short: "List a team's events",
 		Example: `  tba team events 177 --year 2024
   tba team events frc177 --year 2024 --format csv`,
 		Args: exactArgs(1, "a team number (e.g. tba team events 177)"),
@@ -122,7 +123,7 @@ func newTeamEventsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -130,6 +131,10 @@ func newTeamEventsCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", teamKey(args[0]), year), &events); err != nil {
 				return err
 			}
+			// A season is read as a season: the API lists a team's events by
+			// key, which puts April's district championship ahead of March's
+			// district events.
+			frc.SortEvents(events)
 			rows := make([][]string, len(events))
 			for i, e := range events {
 				rows[i] = []string{e.Key, e.Name, e.StartDate, output.FormatLocation(e.City, e.StateProv, e.Country)}
@@ -182,7 +187,13 @@ to drive a loop over a team's whole history.`,
 func newTeamMatchesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "matches <number>",
-		Short: "List team matches for a year",
+		Short: "List a team's matches",
+		Long: `List the matches a team played, for one event or for a whole season.
+
+A season spans several events, and every one of them has a Qual 12, so the
+listing is grouped by event, in the order the team competed, with an Event
+column naming each. One event's listing drops that column and is simply the
+match table.`,
 		Example: `  tba team matches 177 --year 2024
   tba team matches frc177 --year 2024 --format tsv
   tba team matches 177 --event 2024cthar
@@ -197,44 +208,46 @@ func newTeamMatchesCmd() *cobra.Command {
 				return err
 			}
 
+			team := teamKey(args[0])
 			eventKey, _ := cmd.Flags().GetString("event")
 			var matches []api.Match
-			// Without --event the listing spans a whole season, whose events
-			// may have run different playoff brackets; the labels then fall
-			// back to a guess from each match's own season.
-			playoffTypeFor := constantPlayoffType(nil)
 			if eventKey != "" {
 				if err := validateEventKey(eventKey); err != nil {
 					return err
 				}
-				path := fmt.Sprintf("/team/%s/event/%s/matches", teamKey(args[0]), eventKey)
+				path := fmt.Sprintf("/team/%s/event/%s/matches", team, eventKey)
 				if err := client.Get(cmd.Context(), path, &matches); err != nil {
 					return err
 				}
-				playoffTypeFor = constantPlayoffType(eventPlayoffType(cmd, client, eventKey))
-			} else {
-				year, err := resolveYear(cmd)
-				if err != nil {
-					return err
-				}
-				path := fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year)
-				if err := client.Get(cmd.Context(), path, &matches); err != nil {
-					return err
-				}
+				return renderMatches(cmd, matches, constantPlayoffType(eventPlayoffType(cmd, client, eventKey)), eventKey)
 			}
-			return renderMatches(cmd, matches, playoffTypeFor)
+
+			year, err := resolveYear(cmd, client)
+			if err != nil {
+				return err
+			}
+			path := fmt.Sprintf("/team/%s/matches/%d", team, year)
+			if err := client.Get(cmd.Context(), path, &matches); err != nil {
+				return err
+			}
+			// The listing spans a whole season, whose events may have run
+			// different playoff brackets; the labels then fall back to a guess
+			// from each match's own season.
+			scope := fmt.Sprintf("team %s in %d", output.TeamNumberFromKey(team), year)
+			return renderSeasonMatches(cmd, matches, constantPlayoffType(nil), teamEventOrder(cmd, client, team, year), scope)
 		},
 	}
 	addYearFlag(c)
 	c.Flags().String("event", "", "Restrict to one event, by key (e.g. 2024cthar); overrides --year")
-	addMatchTableFlags(c)
+	// No --team here: the argument already names the team.
+	addMatchFilterFlags(c)
 	return c
 }
 
 func newTeamAwardsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "awards <number>",
-		Short: "List team awards",
+		Short: "List a team's awards",
 		Long: `List the awards a team has won, most recent season first.
 
 Without --year this is the team's whole award history. The event column shows
@@ -251,7 +264,7 @@ an error that lists them.`,
 		Example: `  tba team awards 177
   tba team awards frc177 --year 2024 --format markdown
   tba team awards 177 --type impact
-  tba team awards 177 --type 9`,
+  tba team awards 177 --type 0`,
 		Args: exactArgs(1, "a team number (e.g. tba team awards 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateTeamArg(args[0]); err != nil {
@@ -315,6 +328,20 @@ an error that lists them.`,
 	return c
 }
 
+// teamEventOrder ranks the events a team attended in a season, so that a
+// season's matches can be grouped the way the team played them.
+//
+// It is ordering, not data: a season listing is worth printing even when the
+// event list cannot be fetched, so a failure yields a nil order and the
+// listing falls back to grouping by event key.
+func teamEventOrder(cmd *cobra.Command, client *api.Client, team string, year int) map[string]int {
+	var events []api.Event
+	if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", team, year), &events); err != nil {
+		return nil
+	}
+	return frc.EventOrder(events)
+}
+
 // filterAwardsByType keeps only the awards with the given award_type.
 func filterAwardsByType(awards []api.Award, awardType int) []api.Award {
 	out := make([]api.Award, 0, len(awards))
@@ -373,7 +400,7 @@ func teamEventNames(cmd *cobra.Command, client *api.Client, key string, wanted b
 func newTeamMediaCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "media <number>",
-		Short: "List team media",
+		Short: "List a team's media",
 		Example: `  tba team media 177 --year 2024
   tba team media frc177 --year 2024 --jq '.[].view_url' -r`,
 		Args: exactArgs(1, "a team number (e.g. tba team media 177)"),
@@ -385,7 +412,7 @@ func newTeamMediaCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -407,7 +434,7 @@ func newTeamMediaCmd() *cobra.Command {
 func newTeamRobotsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "robots <number>",
-		Short: "List team robots",
+		Short: "List a team's robots",
 		Example: `  tba team robots 177
   tba team robots frc177 --format csv`,
 		Args: exactArgs(1, "a team number (e.g. tba team robots 177)"),
@@ -435,7 +462,7 @@ func newTeamRobotsCmd() *cobra.Command {
 func newTeamDistrictsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "districts <number>",
-		Short: "List team districts",
+		Short: "List a team's districts",
 		Example: `  tba team districts 177
   tba team districts frc177 --format json`,
 		Args: exactArgs(1, "a team number (e.g. tba team districts 177)"),

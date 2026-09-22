@@ -32,7 +32,7 @@ func newInsightCmd() *cobra.Command {
 func newInsightLeaderboardsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "leaderboards",
-		Short: "Show insight leaderboards for a year",
+		Short: "Show a season's leaderboards",
 		Long: `Show every leaderboard TBA publishes for a season.
 
 The table is Leaderboard | Rank | Key | Value, one board after another in the
@@ -44,9 +44,13 @@ typed_leaderboard_blue_banners, case-insensitively. --limit caps how many rows
 each board contributes, which keeps a season's worth of boards readable; pass
 --limit 0 for all of them.
 
+A board such as Blue Banners ties hundreds of teams on one value, so a tie
+shows the first 10 keys and a count of the rest; --expand prints every key.
+
 JSON output stays the array the API sent, narrowed to the board --board named.`,
 		Example: `  tba insight leaderboards --year 2024
   tba insight leaderboards --year 2024 --board "Blue Banners"
+  tba insight leaderboards --year 2024 --board "Blue Banners" --expand
   tba insight leaderboards --year 2024 --limit 0 --format csv
   tba insights leaderboards --year 2024 --jq '.[0].name' -r`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -54,11 +58,12 @@ JSON output stays the array the API sent, narrowed to the board --board named.`,
 			if limit < 0 {
 				return clierr.Usage("--limit cannot be negative (0 means every row)")
 			}
+			expand, _ := cmd.Flags().GetBool("expand")
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -91,7 +96,7 @@ JSON output stays the array the API sent, narrowed to the board --board named.`,
 					rows = append(rows, []string{
 						label,
 						strconv.Itoa(rank + 1),
-						joinInsightKeys(r.Keys, b.Data.KeyType),
+						joinInsightKeys(r.Keys, b.Data.KeyType, expand),
 						formatNumber(r.Value),
 					})
 				}
@@ -106,13 +111,14 @@ JSON output stays the array the API sent, narrowed to the board --board named.`,
 	addYearFlag(c)
 	c.Flags().String("board", "", `Only this leaderboard, by name (e.g. "Blue Banners")`)
 	c.Flags().Int("limit", 10, "Rows per leaderboard, or 0 for all of them")
+	c.Flags().Bool("expand", false, "List every tied key instead of the first few")
 	return c
 }
 
 func newInsightNotablesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "notables",
-		Short: "Show notable insights for a year",
+		Short: "Show a season's notable teams",
 		Long: `Show the notable teams TBA lists for a season.
 
 The table is Notable | Team | Context, where Context is whatever the board says
@@ -130,7 +136,7 @@ JSON output stays the array the API sent, narrowed to the board --board named.`,
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -233,17 +239,38 @@ func narrowInsightJSON(raw json.RawMessage, wanted []int, total int) (json.RawMe
 	return out, nil
 }
 
-// joinInsightKeys renders a tie: every key that reached one value, in one cell.
+// maxInsightKeys is how many keys a tie shows before it is summarised.
+//
+// The cap exists because the big boards are enormous ties: the 2024 blue
+// banner leaderboard puts about 450 team numbers on its first row, which is a
+// 3,000-character cell that destroys the table around it. Ten keys is enough
+// to see who is there, and the count says how much was left out.
+const maxInsightKeys = 10
+
+// joinInsightKeys renders a tie: the keys that reached one value, in one cell.
 // A board about teams shows bare team numbers, since "177, 1073" is what a
 // person reads a leaderboard for.
-func joinInsightKeys(keys []string, keyType string) string {
-	parts := make([]string, len(keys))
-	for i, k := range keys {
+//
+// expand is --expand: it prints every key, however many there are. JSON output
+// is never summarised, since it is the full document the API sent.
+func joinInsightKeys(keys []string, keyType string, expand bool) string {
+	shown := keys
+	hidden := 0
+	if !expand && len(keys) > maxInsightKeys {
+		shown = keys[:maxInsightKeys]
+		hidden = len(keys) - maxInsightKeys
+	}
+	parts := make([]string, len(shown))
+	for i, k := range shown {
 		if keyType == "team" {
 			parts[i] = output.TeamNumberFromKey(k)
 			continue
 		}
 		parts[i] = k
 	}
-	return strings.Join(parts, ", ")
+	joined := strings.Join(parts, ", ")
+	if hidden == 0 {
+		return joined
+	}
+	return fmt.Sprintf("%s … +%d more", joined, hidden)
 }

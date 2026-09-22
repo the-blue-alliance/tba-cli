@@ -468,8 +468,9 @@ func TestNon2xxIncludesTheStatusCodeAndBody(t *testing.T) {
 		t.Fatal("want an error for a 404")
 	}
 	// A 404 says what is missing in the API's own words, without the JSON
-	// wrapper around it; see TestNotFoundMessage* in errors_test.go.
-	if got, want := err.Error(), "not found: team not found"; got != want {
+	// wrapper around it and without a "not found:" prefix in front of a
+	// sentence that already says so; see TestNotFoundMessage* in errors_test.go.
+	if got, want := err.Error(), "team not found"; got != want {
 		t.Errorf("error = %q, want %q", got, want)
 	}
 }
@@ -661,5 +662,29 @@ func TestGetAndGetRawStillWorkWithoutAContext(t *testing.T) {
 	}
 	if _, err := c.GetRaw(context.Background(), "/status"); err != nil {
 		t.Fatalf("GetRaw: %v", err)
+	}
+}
+
+// A cache directory that cannot be created is a real fault, not a reason to
+// quietly run without a cache: a silent fallback turns every later symptom —
+// an --offline run insisting nothing was ever cached, a revalidation that
+// never happens — into a description of something other than the problem.
+func TestNewClientReportsAnUnusableCacheDirectory(t *testing.T) {
+	apiEnv(t)
+	blocked := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("in the way\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TBA_CACHE_DIR", blocked)
+
+	c, err := NewClient("")
+	if err == nil {
+		t.Fatalf("NewClient succeeded with a file where the cache should be: %+v", c)
+	}
+	if !strings.Contains(err.Error(), "opening the response cache") {
+		t.Errorf("error = %q, want it to name the response cache", err)
+	}
+	if !strings.Contains(err.Error(), blocked) {
+		t.Errorf("error = %q, want it to name %s", err, blocked)
 	}
 }

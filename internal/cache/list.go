@@ -2,7 +2,6 @@ package cache
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -134,21 +133,4 @@ func (c *Cache) Prune(cutoff time.Time, dryRun bool) (PruneResult, error) {
 // Put, for callers that need to control the timestamps themselves.
 func (c *Cache) WriteEntry(e *Entry) error {
 	return c.write(e.URL, e)
-}
-
-// FormatAge renders a duration as a short age such as "45s", "12m", "3h" or
-// "8d". Anything under a second, or in the future, reads as "0s".
-func FormatAge(d time.Duration) string {
-	switch {
-	case d < time.Second:
-		return "0s"
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	default:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
-	}
 }

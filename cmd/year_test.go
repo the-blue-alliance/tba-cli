@@ -1,13 +1,19 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
+	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
@@ -131,6 +137,175 @@ func TestYearRejectsANonsensicalValue(t *testing.T) {
 	requireErrorContains(t, err, "--year")
 	if got := clierr.ExitCode(err); got != clierr.ExitUsage {
 		t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+	}
+}
+
+// A year outside the range FRC seasons are named in is a typo, a number that
+// was meant to be something else, or an event key that lost its letters.
+// Turning it into a request produces an empty list and no explanation.
+func TestYearRejectsAYearThatIsNotASeason(t *testing.T) {
+	cases := []struct{ name, year string }{
+		{"before the first season", "1800"},
+		{"the year before the first season", "1991"},
+		{"far in the future", "3000"},
+		{"two years out", strconv.Itoa(currentYear() + 2)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := eventsFake(t, otherSeason())
+			_, _, err := runCmd(t, srv, "event", "list", "--year", c.year)
+
+			want := fmt.Sprintf("--year %s is not an FRC season (1992-%d)", c.year, currentYear()+1)
+			if err == nil || err.Error() != want {
+				t.Errorf("error = %v, want %q", err, want)
+			}
+			if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+				t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+			}
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a bad --year should not reach the API, got %v", got)
+			}
+		})
+	}
+}
+
+// The season after this calendar year is a real thing to ask about: a season
+// is named after the year it ends in, so from kickoff in January the coming
+// season already has events in it.
+func TestYearAcceptsNextSeason(t *testing.T) {
+	next := currentYear() + 1
+	srv := eventsFake(t, otherSeason(), next)
+
+	_, _, err := runCmd(t, srv, "event", "list", "--year", strconv.Itoa(next))
+	requireNoError(t, err, "")
+	if got := requestPaths(t, srv); !contains(got, fmt.Sprintf("/events/%d", next)) {
+		t.Errorf("requested %v, want next season", got)
+	}
+}
+
+func TestYearRejectsANonSeasonFromTheEnvironment(t *testing.T) {
+	srv := eventsFake(t, otherSeason())
+	t.Setenv("TBA_YEAR", "1800")
+
+	_, _, err := runCmd(t, srv, "event", "list")
+	requireErrorContains(t, err, "TBA_YEAR 1800 is not an FRC season")
+	if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+	}
+}
+
+// Ctrl-C during the season lookup used to be swallowed with every other
+// failure, so the command guessed a year and made another request before
+// giving up, instead of stopping when it was told to.
+func TestYearSurfacesACancelledSeasonLookup(t *testing.T) {
+	srv := eventsFake(t, otherSeason())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, _, err := runCtx(t, ctx, srv.URL, "event", "list")
+	if err == nil {
+		t.Fatal("want an error when the context is cancelled")
+	}
+	requireErrorContains(t, err, "looking up the current season")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("error = %v, want one wrapping context.Canceled", err)
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitInterrupt {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitInterrupt)
+	}
+	for _, p := range requestPaths(t, srv) {
+		if strings.HasPrefix(p, "/events/") {
+			t.Errorf("a cancelled lookup should not be followed by %s", p)
+		}
+	}
+}
+
+// A command that already has a client can lend it, so the season lookup is
+// paced by the same rate limiter as everything else the command does rather
+// than by one of its own.
+func TestResolveYearUsesALentClient(t *testing.T) {
+	season := otherSeason()
+	srv := newFakeTBA(t, map[string]any{"/status": statusWithSeason(season)})
+	t.Setenv("TBA_AUTH_KEY", "test-key")
+	t.Setenv("TBA_CACHE_DIR", t.TempDir())
+	t.Setenv("TBA_CONFIG_DIR", t.TempDir())
+
+	client, err := api.NewClient(srv.URL, api.WithUserAgent("lent-client"))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	cmd := &cobra.Command{Use: "test"}
+	addYearFlag(cmd)
+	cmd.SetContext(context.Background())
+
+	got, err := resolveYear(cmd, client)
+	requireNoError(t, err, "")
+	if got != season {
+		t.Errorf("year = %d, want %d", got, season)
+	}
+	reqs := requestsTo(t, srv)
+	if len(reqs) != 1 {
+		t.Fatalf("%d requests, want 1", len(reqs))
+	}
+	if ua := reqs[0].Headers.Get("User-Agent"); ua != "lent-client" {
+		t.Errorf("User-Agent = %q, want the lent client's: a second client was built", ua)
+	}
+}
+
+// Every command that resolves the default season hands the lookup the client
+// it already built, so the extra /status request is paced by the same rate
+// limiter as the rest of the command instead of by a second client's.
+//
+// What a command-level test can see is the request stream: /status goes out
+// first, before the command's own request, and every request carries the same
+// User-Agent. That the lookup really borrows the client rather than building
+// an identical one is pinned by TestResolveYearUsesALentClient above, which
+// gives the lent client a User-Agent of its own.
+func TestCommandsLendTheirClientToTheSeasonLookup(t *testing.T) {
+	season := otherSeason()
+	cases := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{"district list", fmt.Sprintf("/districts/%d", season), []string{"district", "list"}},
+		{"event list", fmt.Sprintf("/events/%d", season), []string{"event", "list"}},
+		{"team events", fmt.Sprintf("/team/frc177/events/%d", season), []string{"team", "events", "177"}},
+		{"team media", fmt.Sprintf("/team/frc177/media/%d", season), []string{"team", "media", "177"}},
+		{"team matches", fmt.Sprintf("/team/frc177/matches/%d", season), []string{"team", "matches", "177"}},
+		{"team search", fmt.Sprintf("/teams/%d/0", season), []string{"team", "search", "bobcat"}},
+		{"insight leaderboards", fmt.Sprintf("/insights/leaderboards/%d", season), []string{"insight", "leaderboards"}},
+		{"insight notables", fmt.Sprintf("/insights/notables/%d", season), []string{"insight", "notables"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{
+				"/status": statusWithSeason(season),
+				c.path:    "[]",
+			})
+			_, errOut, err := runCmd(t, srv, append(c.args, "--no-cache")...)
+			requireNoError(t, err, errOut)
+
+			reqs := requestsTo(t, srv)
+			if len(reqs) < 2 {
+				t.Fatalf("%d requests, want the season lookup and the command's own", len(reqs))
+			}
+			if reqs[0].Path != "/status" {
+				t.Errorf("first request = %s, want /status", reqs[0].Path)
+			}
+			if reqs[1].Path != c.path {
+				t.Errorf("second request = %s, want %s", reqs[1].Path, c.path)
+			}
+			ua := reqs[0].Headers.Get("User-Agent")
+			if ua == "" {
+				t.Fatal("the season lookup sent no User-Agent")
+			}
+			for _, r := range reqs[1:] {
+				if got := r.Headers.Get("User-Agent"); got != ua {
+					t.Errorf("%s sent User-Agent %q, want the same client's %q", r.Path, got, ua)
+				}
+			}
+		})
 	}
 }
 

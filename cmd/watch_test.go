@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 // --- fakes -------------------------------------------------------------
@@ -197,6 +201,13 @@ func jsonLines(t *testing.T, out string) []map[string]any {
 
 // The first poll prints the listing a user already knows, column for column,
 // so that `event watch` and `event matches` never drift apart.
+//
+// The two agree on the cells and part company on one thing only: `event
+// matches` leaves out a column no row has anything in, and `event watch` never
+// does, because its widths are fixed by the first poll and a column dropped
+// then could not come back when a later poll filled it in. That difference
+// cannot show here — this event has matches still to come, so every column
+// carries something — and the test below pins the case where it does.
 func TestEventWatchFirstPollPrintsTheSameTableAsEventMatches(t *testing.T) {
 	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	srv := watchServer(t)
@@ -212,6 +223,32 @@ func TestEventWatchFirstPollPrintsTheSameTableAsEventMatches(t *testing.T) {
 	}
 	if pollCount(t, srv) != 2 { // one for the watch, one for the listing
 		t.Errorf("polls = %d, want 2", pollCount(t, srv))
+	}
+}
+
+// A watch is a table that grows for hours, so its columns are the ones the
+// whole event could fill, not the ones this minute happens to. `event matches`
+// is a listing that is finished the moment it is printed, and drops the column
+// nothing filled.
+func TestEventWatchKeepsAColumnTheListingDrops(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 18, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	// Every match played: nothing counts down, so When is empty throughout.
+	watchSetBody(t, srv, watchMatchesPath, []api.Match{
+		watchQual(1, watchRed, watchBlue, 88, 61, "red", 1711130400),
+		watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000),
+	})
+
+	watched, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	requireNoError(t, err, errOut)
+	listed, _, err := runCmd(t, srv, "event", "matches", watchEventKey, "--format", "table")
+	requireNoError(t, err, "")
+
+	if !strings.Contains(lines(watched)[0], "When") {
+		t.Errorf("the watch header lost a column it may need later:\n%s", watched)
+	}
+	if strings.Contains(lines(listed)[0], "When") {
+		t.Errorf("the listing kept a column nothing filled:\n%s", listed)
 	}
 }
 
@@ -681,15 +718,16 @@ func TestEventWatchOfflineServesTheCacheOnceAndStops(t *testing.T) {
 	}
 }
 
-// Offline with nothing cached is a failure, not an empty watch.
+// Offline with nothing cached is a failure, not an empty watch. It exits 5:
+// the event is not here, which is the same answer a 404 gives.
 func TestEventWatchOfflineWithAnEmptyCacheFails(t *testing.T) {
 	srv := watchServer(t)
 	_, errOut, err := runWatch(t, srv, nil, "--offline")
 	if err == nil {
 		t.Fatal("want an error when the cache has never seen this event")
 	}
-	if got := clierr.ExitCode(err); got != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", got, clierr.ExitFailure)
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitNotFound)
 	}
 	if strings.Contains(errOut, "retrying at next interval") {
 		t.Errorf("offline has no next interval to retry at: %q", errOut)
@@ -792,5 +830,245 @@ func TestEventWatchHelpLeadsWithTheDefaults(t *testing.T) {
 	requireNoError(t, err, "")
 	for _, want := range []string{"(default 1m0s)", "(default 2h0m0s)", "minimum 15s"} {
 		requireContains(t, out, want)
+	}
+}
+
+// --- marks and the legend ----------------------------------------------
+
+// watchMarked is V1 with a surrogate on qm2 and a disqualification on qm3, the
+// two marks a row can carry.
+func watchMarked() []api.Match {
+	out := watchMatchesV1()
+	out[1].Alliances["red"] = api.Alliance{
+		Score: -1, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"},
+	}
+	out[2].Alliances["blue"] = api.Alliance{
+		Score: -1, TeamKeys: watchOther2, DQTeamKeys: []string{"frc6153"},
+	}
+	return out
+}
+
+// The legend explains the marks once for the whole table, not once per row:
+// the first poll used to print it again for every marked match it built.
+func TestEventWatchPrintsTheLegendOnceForTheFirstTable(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchMarked())
+
+	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	requireNoError(t, err, errOut)
+
+	if n := strings.Count(errOut, frc.Legend); n != 1 {
+		t.Errorf("the legend appears %d times on stderr, want once:\n%s", n, errOut)
+	}
+	if strings.Contains(out, "surrogate") {
+		t.Errorf("the legend must not be on stdout:\n%s", out)
+	}
+	requireContains(t, out, "2168*")
+	requireContains(t, out, "6153!")
+}
+
+// A poll that brings in a mark explains it, and only the first one does.
+func TestEventWatchPrintsTheLegendOnceWhenAPollIntroducesAMark(t *testing.T) {
+	srv := watchServer(t)
+	out, errOut, err := runWatch(t, srv, func() {
+		marked := watchMarked()
+		marked[1] = watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000)
+		marked[1].Alliances["red"] = api.Alliance{
+			Score: 101, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"},
+		}
+		watchSetBody(t, srv, watchMatchesPath, marked)
+	}, "--format", "table", "--max-polls", "3")
+	requireNoError(t, err, errOut)
+
+	if n := strings.Count(errOut, frc.Legend); n != 1 {
+		t.Errorf("the legend appears %d times on stderr, want once:\n%s", n, errOut)
+	}
+	requireContains(t, out, "2168*")
+}
+
+// No marks, nothing to explain.
+func TestEventWatchOmitsTheLegendWithoutMarks(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	srv := watchServer(t)
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "surrogate") {
+		t.Errorf("stderr = %q, want no legend", errOut)
+	}
+}
+
+// --- an event that is over ---------------------------------------------
+
+// watchAllPlayed is the event finished: every match has a result.
+func watchAllPlayed() []api.Match {
+	return []api.Match{
+		watchQual(1, watchRed, watchBlue, 88, 61, "red", 1711130400),
+		watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000),
+		watchQual(3, watchRed, watchOther2, 70, 54, "red", 1711131600),
+	}
+}
+
+// 2024cthar ended on the Sunday. Watching it on the Tuesday, there is nothing
+// to wait for, and polling a shared API once a minute for two hours to be told
+// so is nobody's idea of a good time.
+func TestEventWatchStopsOnAFinishedEvent(t *testing.T) {
+	clock := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
+
+	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	requireNoError(t, err, errOut)
+
+	if want := "note: 2024cthar ended 2024-03-24; nothing left to watch\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+	// The table is still printed: the answer to "what happened" is the point.
+	requireContains(t, out, "2024cthar_qm1")
+	if n := pollCount(t, srv); n != 1 {
+		t.Errorf("polls = %d, want 1", n)
+	}
+	if waits := clock.sleptFor(); len(waits) != 0 {
+		t.Errorf("waited %v, want no waiting at all", waits)
+	}
+}
+
+// During the event there is everything to watch, even with every match so far
+// played: that is what a lunch break looks like.
+func TestEventWatchKeepsWatchingDuringTheEvent(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 23, 12, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+		"--format", "table", "--max-polls", "2")
+	requireNoError(t, err, errOut)
+
+	if strings.Contains(errOut, "nothing left to watch") {
+		t.Errorf("stderr = %q, want the watch to have run its course", errOut)
+	}
+	if n := pollCount(t, srv); n != 2 {
+		t.Errorf("polls = %d, want 2", n)
+	}
+}
+
+// After the event but with a match still unplayed, the schedule is not the
+// whole story — a scoring correction is exactly what someone is waiting for.
+func TestEventWatchKeepsWatchingAnEndedEventWithAnUnplayedMatch(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+		"--format", "table", "--max-polls", "2")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "nothing left to watch") {
+		t.Errorf("stderr = %q, want the watch to have continued", errOut)
+	}
+}
+
+// Without the event there is no end date, so there is nothing to conclude and
+// the watch runs its course.
+func TestEventWatchKeepsWatchingWithoutTheEvent(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{watchMatchesPath: watchAllPlayed()})
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+		"--format", "table", "--max-polls", "2")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "nothing left to watch") {
+		t.Errorf("stderr = %q, want no conclusion without an end date", errOut)
+	}
+}
+
+// The stream form stops too, and its last line is still a snapshot rather than
+// an error.
+func TestEventWatchStopsOnAFinishedEventInJSON(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
+
+	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey)
+	requireNoError(t, err, errOut)
+	requireContains(t, errOut, "nothing left to watch")
+
+	got := jsonLines(t, out)
+	if len(got) != 1 || got[0]["type"] != "snapshot" {
+		t.Errorf("want one snapshot line, got:\n%s", out)
+	}
+}
+
+// --- a reader that walked away -----------------------------------------
+
+// withStdoutHangUp makes the hang-up probe answer true from the nth call on,
+// which is how a test breaks a pipe without one.
+func withStdoutHangUp(t *testing.T, from int) {
+	t.Helper()
+	previous := stdoutHungUp
+	calls := 0
+	stdoutHungUp = func(io.Writer) bool {
+		calls++
+		return calls >= from
+	}
+	t.Cleanup(func() { stdoutHungUp = previous })
+}
+
+// `tba event watch ... | head -1` leaves a poller with nobody to talk to: head
+// is gone, but a quiet poll writes nothing, so the broken pipe never surfaces.
+// The descriptor is asked instead, and the watch stops with exit 141 and no
+// message — the reader has already left.
+func TestEventWatchStopsWhenStdoutHangsUp(t *testing.T) {
+	clock := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	withStdoutHangUp(t, 2)
+	srv := watchServer(t)
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	if got := clierr.ExitCode(err); got != clierr.ExitBrokenPipe {
+		t.Errorf("exit code = %d, want %d (broken pipe)", got, clierr.ExitBrokenPipe)
+	}
+	if errOut != "" {
+		t.Errorf("stderr = %q, want nothing: the reader has gone", errOut)
+	}
+	if n := pollCount(t, srv); n != 1 {
+		t.Errorf("polls = %d, want 1: the watch should not poll again", n)
+	}
+	if waits := clock.sleptFor(); len(waits) != 0 {
+		t.Errorf("waited %v, want the watch to stop before the interval", waits)
+	}
+}
+
+// Hung up before the first poll, nothing is fetched at all.
+func TestEventWatchMakesNoRequestWhenStdoutIsAlreadyGone(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	withStdoutHangUp(t, 1)
+	srv := watchServer(t)
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	if got := clierr.ExitCode(err); got != clierr.ExitBrokenPipe {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitBrokenPipe)
+	}
+	if n := pollCount(t, srv); n != 0 {
+		t.Errorf("polls = %d, want none", n)
+	}
+	if errOut != "" {
+		t.Errorf("stderr = %q, want nothing", errOut)
+	}
+}
+
+// A buffer has no descriptor to ask about, which is what every other test in
+// this file relies on.
+func TestStdoutHungUpIgnoresWritersWithoutAFile(t *testing.T) {
+	if hungUp(&bytes.Buffer{}) {
+		t.Error("a buffer cannot hang up")
+	}
+	if writerFile(&bytes.Buffer{}) != nil {
+		t.Error("a buffer has no file behind it")
+	}
+}
+
+// The recording writer the root command wraps stdout in must not hide the file
+// from the probe.
+func TestWriterFileSeesThroughTheRecordingWriter(t *testing.T) {
+	if got := writerFile(&recordingWriter{w: os.Stdout}); got != os.Stdout {
+		t.Errorf("writerFile = %v, want os.Stdout", got)
 	}
 }

@@ -215,6 +215,12 @@ const teamsSimple2024ctharJSON = `[
   {"key": "frc5507", "team_number": 5507, "nickname": "Robotic Eagles", "name": "Ellington High School", "city": "Ellington", "state_prov": "Connecticut", "country": "USA"}
 ]`
 
+// The same list with only one of the teams in it, for the case where a column
+// is filled for some rows and empty for others.
+const teamsSimple2024partialJSON = `[
+  {"key": "frc177", "team_number": 177, "nickname": "Bobcat Robotics", "name": "Gordon & Llura Gund Foundation/RTX & South Windsor High School", "city": "South Windsor", "state_prov": "Connecticut", "country": "USA"}
+]`
+
 // A double-elimination bracket (2023 onwards): the status carries a
 // double_elim_round, and alliance 1 called in a backup team.
 const alliances2024ctharJSON = `[
@@ -239,9 +245,23 @@ const alliances2024ctharJSON = `[
     "backup": null,
     "status": {
       "playoff_average": null,
+      "level": "f",
+      "double_elim_round": "Finals",
+      "record": {"wins": 5, "losses": 2, "ties": 0},
+      "current_level_record": {"wins": 0, "losses": 2, "ties": 0},
+      "status": "eliminated"
+    }
+  },
+  {
+    "name": "Alliance 3",
+    "declines": [],
+    "picks": ["frc3467", "frc6153", "frc2168"],
+    "backup": null,
+    "status": {
+      "playoff_average": null,
       "level": "sf",
-      "double_elim_round": "Round 5",
-      "record": {"wins": 4, "losses": 2, "ties": 0},
+      "double_elim_round": "Round 4",
+      "record": {"wins": 2, "losses": 2, "ties": 0},
       "current_level_record": {"wins": 0, "losses": 1, "ties": 0},
       "status": "eliminated"
     }
@@ -372,6 +392,36 @@ const teamStatuses2024ctharJSON = `{
     "next_match_key": null,
     "last_match_key": "2024cthar_qm82"
   },
+  "frc230": {
+    "qual": {
+      "num_teams": 40,
+      "status": "completed",
+      "ranking": {
+        "team_key": "frc230",
+        "rank": 3,
+        "record": {"wins": 8, "losses": 4, "ties": 0},
+        "qual_average": null,
+        "matches_played": 12,
+        "dq": 0,
+        "sort_orders": [2.0, 0.0, 70.0, 22.0, 12.0]
+      },
+      "sort_order_info": [{"name": "Ranking Score", "precision": 2}]
+    },
+    "alliance": {"name": "Alliance 2", "number": 2, "pick": 0, "backup": null},
+    "playoff": {
+      "level": "f",
+      "double_elim_round": "Finals",
+      "current_level_record": {"wins": 0, "losses": 2, "ties": 0},
+      "record": {"wins": 5, "losses": 2, "ties": 0},
+      "status": "eliminated",
+      "playoff_average": null
+    },
+    "alliance_status_str": "<b>Captain</b> of <b>Alliance 2</b>",
+    "playoff_status_str": "<b>Eliminated</b> in the <b>Finals</b>",
+    "overall_status_str": "Team 230 was <b>Rank 3</b> with a record of <b>8-4-0</b> in quals, and was <b>eliminated</b> in the finals.",
+    "next_match_key": null,
+    "last_match_key": "2024cthar_f1m2"
+  },
   "frc2168": {
     "qual": null,
     "alliance": {"name": "Alliance 1", "number": 1, "pick": -1, "backup": {"in": "frc2168", "out": "frc5507"}},
@@ -392,6 +442,39 @@ const teamStatuses2024ctharJSON = `{
   "frc9999": null
 }`
 
+// A pre-2023 event: the playoff status has no double_elim_round at all.
+const teamStatuses2019ctharJSON = `{
+  "frc177": {
+    "qual": {
+      "num_teams": 40,
+      "status": "completed",
+      "ranking": {
+        "team_key": "frc177",
+        "rank": 1,
+        "record": {"wins": 10, "losses": 2, "ties": 0},
+        "qual_average": null,
+        "matches_played": 12,
+        "dq": 0,
+        "sort_orders": [2.5]
+      },
+      "sort_order_info": [{"name": "Ranking Score", "precision": 2}]
+    },
+    "alliance": {"name": "Alliance 1", "number": 1, "pick": 0, "backup": null},
+    "playoff": {
+      "level": "f",
+      "current_level_record": {"wins": 2, "losses": 0, "ties": 0},
+      "record": {"wins": 5, "losses": 2, "ties": 0},
+      "status": "won",
+      "playoff_average": 0.0
+    },
+    "alliance_status_str": "<b>Captain</b> of <b>Alliance 1</b>",
+    "playoff_status_str": "<b>Won</b> the event",
+    "overall_status_str": "Team 177 <b>won the event</b>.",
+    "next_match_key": null,
+    "last_match_key": "2019cthar_f1m2"
+  }
+}`
+
 const awards2024ctharJSON = `[
   {
     "name": "District Event Winner",
@@ -409,10 +492,12 @@ const awards2024ctharJSON = `[
   }
 ]`
 
+// The strongest team at the event is not the lowest-numbered one, and two
+// teams share an OPR, so the ordering and its tiebreak are both visible.
 const oprs2024ctharJSON = `{
-  "oprs": {"frc177": 55.4321, "frc1073": 41.1234, "frc5507": 30.5},
-  "dprs": {"frc177": 20.1111, "frc1073": 25.6666, "frc5507": 28.25},
-  "ccwms": {"frc177": 35.3210, "frc1073": 15.4568, "frc5507": 2.25}
+  "oprs": {"frc177": 55.4321, "frc1073": 41.1234, "frc5507": 30.5, "frc230": 61.2, "frc1071": 41.1234},
+  "dprs": {"frc177": 20.1111, "frc1073": 25.6666, "frc5507": 28.25, "frc230": 18.75, "frc1071": 24.0},
+  "ccwms": {"frc177": 35.3210, "frc1073": 15.4568, "frc5507": 2.25, "frc230": 42.45, "frc1071": 17.1234}
 }`
 
 const districtPoints2024ctharJSON = `{
@@ -438,7 +523,8 @@ const predictions2024ctharJSON = `{
     "qual": {
       "2024cthar_qm10": {"red": {"score": 70}, "blue": {"score": 71.05}, "winning_alliance": "blue", "prob": 0.5104},
       "2024cthar_qm1": {"red": {"score": 84.2}, "blue": {"score": 63.1}, "winning_alliance": "red", "prob": 0.7853},
-      "2024cthar_qm2": {"red": {"score": 55.5}, "blue": {"score": 77.25}, "winning_alliance": "blue", "prob": 0.6231}
+      "2024cthar_qm2": {"red": {"score": 55.5}, "blue": {"score": 77.25}, "winning_alliance": "blue", "prob": 0.6231},
+      "2024cthar_qm11": {"red": {"score": 0}, "blue": {"score": 0}, "winning_alliance": "red", "prob": 0.5}
     },
     "playoff": {
       "2024cthar_f1m1": {"red": {"score": 121}, "blue": {"score": 118.4}, "winning_alliance": "red", "prob": 0.52},
@@ -461,6 +547,80 @@ const predictions2024ctharJSON = `{
     ["frc230", [4]]
   ]
 }`
+
+// Two matches the model will not separate: one at an exact half, one with two
+// equal predicted scores. Both name a winner anyway.
+const predictionsTied2024ctharJSON = `{
+  "match_predictions": {
+    "qual": {
+      "2024cthar_qm20": {"red": {"score": 88.4}, "blue": {"score": 72.1}, "winning_alliance": "red", "prob": 0.5},
+      "2024cthar_qm21": {"red": {"score": 80}, "blue": {"score": 80}, "winning_alliance": "red", "prob": 0.6142},
+      "2024cthar_qm22": {"red": {"score": 84.2}, "blue": {"score": 63.1}, "winning_alliance": "red", "prob": 0.7853}
+    },
+    "playoff": {}
+  }
+}`
+
+// The matches behind the predictions above, as /event/2024cthar/matches sends
+// them: the same keys, so the prediction table can label them and name the
+// teams. The final is deliberately missing, since a prediction can name a
+// match the list does not carry.
+const matchesPredicted2024ctharJSON = `[
+  {
+    "key": "2024cthar_qm1", "comp_level": "qm", "set_number": 1, "match_number": 1,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_qm2", "comp_level": "qm", "set_number": 1, "match_number": 2,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc558", "frc3467", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_qm10", "comp_level": "qm", "set_number": 1, "match_number": 10,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc177", "frc195", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc1073", "frc558", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_qm11", "comp_level": "qm", "set_number": 1, "match_number": 11,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc5507", "frc1071", "frc1124"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc230", "frc2168", "frc3467"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_sf1m1", "comp_level": "sf", "set_number": 1, "match_number": 1,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc3467", "frc6153", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  },
+  {
+    "key": "2024cthar_sf3m1", "comp_level": "sf", "set_number": 3, "match_number": 1,
+    "event_key": "2024cthar", "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc230", "frc195", "frc1071"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc558", "frc1124", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null, "videos": []
+  }
+]`
 
 // Event insights as the API sends them: season-specific keys, the
 // [count, total, percent] triples the endpoint is full of, a nested object and
@@ -517,6 +677,130 @@ const districtRankings2024neJSON = `[
     "event_points": [
       {"event_key": "2024cthar", "district_cmp": false, "qual_points": 8, "alliance_points": 10, "award_points": 0, "elim_points": 16, "total": 34},
       {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 14, "alliance_points": 0, "award_points": 10, "elim_points": 10, "total": 34}
+    ]
+  }
+]`
+
+// The same district mid-season: the qualifying events have been played but the
+// district championship has not, so every total is a pre-DCMP total and a
+// "top N" line means exactly what it says.
+const districtRankingsMidSeason2024neJSON = `[
+  {
+    "team_key": "frc177",
+    "rank": 1,
+    "rookie_bonus": 0,
+    "point_total": 100,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 11, "alliance_points": 16, "award_points": 5, "elim_points": 20, "total": 52},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 16, "alliance_points": 14, "award_points": 0, "elim_points": 18, "total": 48}
+    ]
+  },
+  {
+    "team_key": "frc1073",
+    "rank": 2,
+    "rookie_bonus": 0,
+    "point_total": 82,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 10, "alliance_points": 14, "award_points": 0, "elim_points": 16, "total": 40},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 12, "award_points": 0, "elim_points": 18, "total": 42}
+    ]
+  },
+  {
+    "team_key": "frc5507",
+    "rank": 3,
+    "rookie_bonus": 10,
+    "point_total": 78,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 8, "alliance_points": 10, "award_points": 0, "elim_points": 16, "total": 34},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 14, "alliance_points": 0, "award_points": 10, "elim_points": 10, "total": 34}
+    ]
+  }
+]`
+
+// A district whose championship changed the order: 1073 out-scored 177 at the
+// DCMP and passed it, so the published rank 1 is not the team that led the
+// standings the DCMP cut was made on.
+const districtRankingsDCMPFlip2024neJSON = `[
+  {
+    "team_key": "frc1073",
+    "rank": 1,
+    "rookie_bonus": 0,
+    "point_total": 150,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 10, "alliance_points": 14, "award_points": 0, "elim_points": 16, "total": 40},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 12, "award_points": 0, "elim_points": 18, "total": 42},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 18, "alliance_points": 20, "award_points": 10, "elim_points": 20, "total": 68}
+    ]
+  },
+  {
+    "team_key": "frc177",
+    "rank": 2,
+    "rookie_bonus": 0,
+    "point_total": 145,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 11, "alliance_points": 16, "award_points": 5, "elim_points": 20, "total": 52},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 16, "alliance_points": 14, "award_points": 0, "elim_points": 18, "total": 48},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 10, "alliance_points": 15, "award_points": 0, "elim_points": 20, "total": 45}
+    ]
+  },
+  {
+    "team_key": "frc5507",
+    "rank": 3,
+    "rookie_bonus": 10,
+    "point_total": 78,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 8, "alliance_points": 10, "award_points": 0, "elim_points": 16, "total": 34},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 14, "alliance_points": 0, "award_points": 10, "elim_points": 10, "total": 34}
+    ]
+  }
+]`
+
+// districtRankingsPreDCMPTies2024neJSON has two teams level on pre-DCMP points
+// once the district championship is taken back off, which is what a real
+// district's standings are full of.
+const districtRankingsPreDCMPTies2024neJSON = `[
+  {
+    "team_key": "frc177",
+    "rank": 1,
+    "rookie_bonus": 0,
+    "point_total": 160,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 12, "alliance_points": 16, "award_points": 5, "elim_points": 17, "total": 50},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 16, "award_points": 5, "elim_points": 17, "total": 50},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 15, "alliance_points": 15, "award_points": 10, "elim_points": 20, "total": 60}
+    ]
+  },
+  {
+    "team_key": "frc1073",
+    "rank": 2,
+    "rookie_bonus": 0,
+    "point_total": 150,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 10, "alliance_points": 15, "award_points": 5, "elim_points": 15, "total": 45},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 15, "award_points": 5, "elim_points": 18, "total": 50},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 15, "alliance_points": 10, "award_points": 10, "elim_points": 20, "total": 55}
+    ]
+  },
+  {
+    "team_key": "frc5507",
+    "rank": 3,
+    "rookie_bonus": 0,
+    "point_total": 140,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 11, "alliance_points": 14, "award_points": 5, "elim_points": 15, "total": 45},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 12, "alliance_points": 16, "award_points": 5, "elim_points": 17, "total": 50},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 10, "alliance_points": 10, "award_points": 5, "elim_points": 20, "total": 45}
+    ]
+  },
+  {
+    "team_key": "frc230",
+    "rank": 4,
+    "rookie_bonus": 0,
+    "point_total": 130,
+    "event_points": [
+      {"event_key": "2024cthar", "district_cmp": false, "qual_points": 8, "alliance_points": 12, "award_points": 0, "elim_points": 15, "total": 35},
+      {"event_key": "2024ctwat", "district_cmp": false, "qual_points": 10, "alliance_points": 12, "award_points": 5, "elim_points": 18, "total": 45},
+      {"event_key": "2024necmp", "district_cmp": true, "qual_points": 15, "alliance_points": 15, "award_points": 0, "elim_points": 20, "total": 50}
     ]
   }
 ]`
@@ -610,6 +894,23 @@ const leaderboards2024JSON = `[
     "data": {
       "key_type": "event",
       "rankings": [{"value": 112.5, "keys": ["2024necmp"]}, {"value": 98, "keys": ["2024cthar"]}]
+    }
+  }
+]`
+
+// A leaderboard whose first row is a big tie: 14 teams share the top value,
+// which is what the real blue banner board looks like (about 450 teams) and
+// what the Key cell has to survive.
+const leaderboardsBigTie2024JSON = `[
+  {
+    "name": "typed_leaderboard_blue_banners",
+    "year": 2024,
+    "data": {
+      "key_type": "team",
+      "rankings": [
+        {"value": 6, "keys": ["frc177", "frc254", "frc1114", "frc118", "frc2056", "frc971", "frc1678", "frc2767", "frc1323", "frc180", "frc33", "frc67", "frc217", "frc2168"]},
+        {"value": 5, "keys": ["frc1073", "frc230"]}
+      ]
     }
   }
 ]`

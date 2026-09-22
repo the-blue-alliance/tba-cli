@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,6 +22,9 @@ func addYearFlag(c *cobra.Command) {
 	c.Flags().Int("year", 0, yearFlagUsage)
 }
 
+// firstFRCSeason is the earliest season The Blue Alliance holds data for.
+const firstFRCSeason = 1992
+
 // resolveYear returns the season a command should ask about: the --year flag
 // if it was given, else TBA_YEAR, else the config file, else the season The
 // Blue Alliance says is current, else the calendar year.
@@ -27,21 +32,42 @@ func addYearFlag(c *cobra.Command) {
 // The last step matters offline. A season is named after the calendar year it
 // ends in, so the calendar is right about it except for the few weeks around
 // the January kickoff, which is a far better answer than an error.
-func resolveYear(cmd *cobra.Command) (int, error) {
+//
+// client is optional, and is how a command lends the season lookup the client
+// it already built; every caller that has one does. Without it the lookup
+// builds its own, which works but gives the extra request its own rate
+// limiter, outside the pacing the rest of the command is doing.
+func resolveYear(cmd *cobra.Command, client ...*api.Client) (int, error) {
 	s := settings(cmd)
 	if s.Source("year") != sourceDefault {
-		year := s.Int("year")
-		if year <= 0 {
-			return 0, clierr.Usage("%s wants a season such as %d", s.origin("year"), currentYear())
-		}
-		return year, nil
+		return validateSeason(s.Int("year"), s.origin("year"))
 	}
-	return currentSeason(cmd), nil
+	var lent *api.Client
+	if len(client) > 0 {
+		lent = client[0]
+	}
+	return currentSeason(cmd, lent)
+}
+
+// validateSeason rejects a year that cannot name an FRC season.
+//
+// The upper bound is next calendar year rather than this one: a season is
+// named after the year it ends in, so from kickoff in January the coming
+// season is a real thing to ask about. Past that it is a typo, a four-digit
+// number that was meant to be something else, or an event key that lost its
+// letters — all of which are better reported than turned into a request for a
+// season that does not exist.
+func validateSeason(year int, origin string) (int, error) {
+	latest := currentYear() + 1
+	if year < firstFRCSeason || year > latest {
+		return 0, clierr.Usage("%s %d is not an FRC season (%d-%d)", origin, year, firstFRCSeason, latest)
+	}
+	return year, nil
 }
 
 // currentSeason asks the API which season is on, remembering the answer for a
 // day so that the default --year costs one extra request at most per day.
-func currentSeason(cmd *cobra.Command) int {
+func currentSeason(cmd *cobra.Command, client *api.Client) (int, error) {
 	noCache := settings(cmd).Bool("no-cache")
 
 	store, err := season.New()
@@ -50,35 +76,58 @@ func currentSeason(cmd *cobra.Command) int {
 	}
 	if store != nil && !noCache {
 		if year, ok := store.Get(); ok {
-			return year
+			return year, nil
 		}
 	}
-	if year, ok := fetchCurrentSeason(cmd); ok {
+	year, err := fetchCurrentSeason(cmd, client)
+	if err != nil {
+		return 0, err
+	}
+	if year > 0 {
 		if store != nil {
 			_ = store.Put(year)
 		}
-		return year
+		return year, nil
 	}
-	return currentYear()
+	return currentYear(), nil
 }
 
-// fetchCurrentSeason reads current_season from /status. Every failure —
-// no API key, no network, a 500, nonsense in the field — reports "unknown"
-// and lets the caller fall back to the calendar: a command that cannot work
-// out the season on its own is about to report the real problem anyway.
-func fetchCurrentSeason(cmd *cobra.Command) (int, bool) {
-	client, err := newClient(cmd)
-	if err != nil {
-		return 0, false
+// fetchCurrentSeason reads current_season from /status. It returns 0 for a
+// failure the calendar can paper over, and an error only for one it cannot.
+//
+// Almost everything is in the first group — no API key, no network, a 500,
+// nonsense in the field — because the season is named after the calendar year
+// it ends in, and a command that cannot work out the season on its own is
+// about to report the real problem anyway.
+//
+// The exception is the user's own context ending. Ctrl-C used to be swallowed
+// here along with everything else, so the command carried on with a guessed
+// year and made another request before failing, instead of stopping when it
+// was told to. The test is the caller's context rather than the shape of the
+// error, because a --timeout that expires also reports a deadline and is an
+// ordinary failure to fall back from.
+func fetchCurrentSeason(cmd *cobra.Command, client *api.Client) (int, error) {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if client == nil {
+		var err error
+		if client, err = newClient(cmd); err != nil {
+			return 0, nil
+		}
 	}
 	var status api.APIStatus
-	if err := client.Get(cmd.Context(), "/status", &status); err != nil {
-		return 0, false
+	if err := client.Get(ctx, "/status", &status); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return 0, fmt.Errorf("looking up the current season: %w", ctxErr)
+		}
+		return 0, nil
 	}
 	if status.CurrentSeason <= 0 {
-		return 0, false
+		return 0, nil
 	}
-	return status.CurrentSeason, true
+	return status.CurrentSeason, nil
 }
 
 // currentYear is the calendar year, which is the season's name outside of

@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 // eventTypeAlias maps a friendly --type value onto the TBA event_type codes it
@@ -98,11 +98,6 @@ type eventFilter struct {
 	country  string
 }
 
-// firstFRCSeason is the earliest season The Blue Alliance holds events for. A
-// year below it is a typo, and answering it with an empty list looks like "that
-// season had no events".
-const firstFRCSeason = 1992
-
 func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 	var f eventFilter
 	// Week 0 is not a week: the flag is 1-based, the way thebluealliance.com
@@ -113,12 +108,6 @@ func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 		return f, clierr.Usage("invalid --week %d (weeks are numbered from 1, as thebluealliance.com numbers them)", week)
 	}
 	f.week = week
-
-	// A season that predates FRC's records would print an empty list, which
-	// reads as "no events that year" rather than "no such year".
-	if year := settings(cmd).Int("year"); year != 0 && year < firstFRCSeason {
-		return f, clierr.Usage("--year %d is before the first FRC season (%d)", year, firstFRCSeason)
-	}
 
 	typeSpec, _ := cmd.Flags().GetString("type")
 	types, err := parseEventTypes(typeSpec)
@@ -190,15 +179,9 @@ func (f eventFilter) apply(events []api.Event) []api.Event {
 
 // sortEvents orders events the way a season calendar reads: earliest start
 // first, with the event key breaking ties so the order is stable and
-// reproducible across runs.
-func sortEvents(events []api.Event) {
-	sort.SliceStable(events, func(i, j int) bool {
-		if events[i].StartDate != events[j].StartDate {
-			return events[i].StartDate < events[j].StartDate
-		}
-		return events[i].Key < events[j].Key
-	})
-}
+// reproducible across runs. It is frc.SortEvents, so every listing of events
+// in the CLI agrees on what "in order" means.
+func sortEvents(events []api.Event) { frc.SortEvents(events) }
 
 // humanWeek renders TBA's 0-based week as the 1-based number people use.
 // Events with no week (championships, offseasons) get an empty cell.

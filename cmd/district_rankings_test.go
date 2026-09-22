@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"strings"
 	"testing"
 )
@@ -41,7 +42,7 @@ func TestDistrictRankingsDetail(t *testing.T) {
 
 func TestDistrictRankingsCutoffInTable(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
-		"/district/2024ne/rankings": districtRankings2024neJSON,
+		"/district/2024ne/rankings": districtRankingsMidSeason2024neJSON,
 	})
 	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--cutoff", "2", "--format", "table")
 	requireNoError(t, err, "")
@@ -59,9 +60,32 @@ func TestDistrictRankingsCutoffInTable(t *testing.T) {
 	}
 }
 
+// The cut line used to be written into the first cell, which widened the Rank
+// column to the length of the sentence. It is a line of its own now, so the
+// columns are as wide as the data and nothing else.
+func TestDistrictRankingsCutoffLeavesTheRankColumnAlone(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsMidSeason2024neJSON,
+	})
+	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne",
+		"--cutoff", "2", "--format", "table", "--columns", "rank,team")
+	requireNoError(t, err, "")
+
+	got := lines(out)
+	if got[0] != "Rank  Team" {
+		t.Errorf("header = %q, want the columns sized to their data", got[0])
+	}
+	if strings.TrimRight(got[2], " ") != "1     177" {
+		t.Errorf("first row = %q", got[2])
+	}
+	if strings.TrimRight(got[4], " ") != "--- DCMP cutoff (top 2) ---" {
+		t.Errorf("cut line = %q", got[4])
+	}
+}
+
 func TestDistrictRankingsCutoffInMarkdown(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
-		"/district/2024ne/rankings": districtRankings2024neJSON,
+		"/district/2024ne/rankings": districtRankingsMidSeason2024neJSON,
 	})
 	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne",
 		"--cutoff", "1", "--format", "markdown", "--columns", "rank,team")
@@ -70,11 +94,161 @@ func TestDistrictRankingsCutoffInMarkdown(t *testing.T) {
 	want := "| Rank | Team |\n" +
 		"| --- | --- |\n" +
 		"| 1 | 177 |\n" +
-		"| --- DCMP cutoff (top 1) --- |  |\n" +
+		"| --- DCMP cutoff (top 1) --- | |\n" +
 		"| 2 | 1073 |\n" +
 		"| 3 | 5507 |\n"
 	if out != want {
 		t.Errorf("markdown =\n%s\nwant\n%s", out, want)
+	}
+}
+
+// Once the DCMP has been scored the published totals include its points, so a
+// line through them is not the cut that decided who went, and says so.
+func TestDistrictRankingsCutoffSaysWhenTotalsIncludeDCMP(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankings2024neJSON,
+	})
+	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--cutoff", "2", "--format", "table")
+	requireNoError(t, err, "")
+	requireContains(t, out, "--- top 2 by current total (includes DCMP points) ---")
+}
+
+// --pre-dcmp ranks on the points a team had before the district championship,
+// which is the standing the cut was actually made on.
+func TestDistrictRankingsPreDCMP(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne",
+		"--pre-dcmp", "--cutoff", "1", "--format", "table",
+		"--columns", "rank,season rank,team,dcmp,total,pre-dcmp")
+	requireNoError(t, err, "")
+
+	got := lines(out)
+	want := []string{
+		"Rank  Season Rank  Team  DCMP  Total  Pre-DCMP",
+		"----  -----------  ----  ----  -----  --------",
+		"1     2            177   45    145    100",
+		"--- top 1 by pre-DCMP total ---",
+		"2     1            1073  68    150    82",
+		"3     3            5507        78     78",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d lines, want %d:\n%s", len(got), len(want), out)
+	}
+	for i := range want {
+		if strings.TrimRight(got[i], " ") != want[i] {
+			t.Errorf("line %d = %q, want %q", i, strings.TrimRight(got[i], " "), want[i])
+		}
+	}
+}
+
+// A rank beside a cut line has to be the rank the cut was made on. The
+// published one counts the district championship, so under --pre-dcmp it ran
+// 2, 3, 11, 5 down a table ordered by something else entirely.
+func TestDistrictRankingsPreDCMPRenumbersRank(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--pre-dcmp", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	records := parseCSV(t, out)
+	if records[0][0] != "Rank" || records[0][1] != "Season Rank" {
+		t.Fatalf("header = %v, want Rank then Season Rank", records[0])
+	}
+	if got := csvColumn(t, out, 0); !equalStrings(got, []string{"1", "2", "3"}) {
+		t.Errorf("Rank = %v, want the pre-DCMP order counted off", got)
+	}
+	if got := csvColumn(t, out, 1); !equalStrings(got, []string{"2", "1", "3"}) {
+		t.Errorf("Season Rank = %v, want the API's own ranks", got)
+	}
+}
+
+// Teams level on pre-DCMP points share a rank, and the next team down takes
+// the position it actually stands in: 1, 2, 2, 4. Counting the rows off gave
+// four teams on the same points four different ranks, which says one of them
+// finished ahead of the others when the standings say no such thing.
+func TestDistrictRankingsPreDCMPSharesARankForATie(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsPreDCMPTies2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--pre-dcmp", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	// 177 has 100 points before the DCMP, 1073 and 5507 have 95 each, 230 has
+	// 80.
+	if got := csvColumn(t, out, 0); !equalStrings(got, []string{"1", "2", "2", "4"}) {
+		t.Errorf("Rank = %v, want the tie to share a rank", got)
+	}
+	if got := csvColumn(t, out, len(parseCSV(t, out)[0])-1); !equalStrings(got, []string{"100", "95", "95", "80"}) {
+		t.Errorf("Pre-DCMP = %v, want the totals the ranks were made on", got)
+	}
+	// The published ranks are untouched: they are a different standing.
+	if got := csvColumn(t, out, 1); !equalStrings(got, []string{"1", "2", "3", "4"}) {
+		t.Errorf("Season Rank = %v, want the API's own ranks", got)
+	}
+}
+
+// Season Rank is a --pre-dcmp column: without it the one Rank is the API's.
+func TestDistrictRankingsSeasonRankIsOptIn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--format", "csv")
+	requireNoError(t, err, errOut)
+	if strings.Contains(out, "Season Rank") {
+		t.Errorf("Season Rank appeared unasked:\n%s", out)
+	}
+	if got := csvColumn(t, out, 0); !equalStrings(got, []string{"1", "2", "3"}) {
+		t.Errorf("Rank = %v, want the API's own ranks", got)
+	}
+}
+
+// The renumbering is presentation: the JSON stays the API's own answer, ranks
+// and all, in the order the command chose.
+func TestDistrictRankingsPreDCMPLeavesTheJSONRanksAlone(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--pre-dcmp", "--json")
+	requireNoError(t, err, errOut)
+
+	arr := decodeJSON(t, out).([]any)
+	want := []float64{2, 1, 3}
+	for i, rank := range want {
+		if got := arr[i].(map[string]any)["rank"]; got != rank {
+			t.Errorf("rank %d = %v, want %v", i, got, rank)
+		}
+	}
+}
+
+// The reordering is the answer, not a view of it, so JSON follows it too.
+func TestDistrictRankingsPreDCMPReordersJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--pre-dcmp", "--json")
+	requireNoError(t, err, "")
+
+	arr := decodeJSON(t, out).([]any)
+	want := []string{"frc177", "frc1073", "frc5507"}
+	for i, key := range want {
+		if got := arr[i].(map[string]any)["team_key"]; got != key {
+			t.Errorf("team %d = %v, want %s", i, got, key)
+		}
+	}
+}
+
+// Without --pre-dcmp there is no extra column to explain.
+func TestDistrictRankingsPreDCMPColumnIsOptIn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankings2024neJSON,
+	})
+	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--format", "csv")
+	requireNoError(t, err, "")
+	if strings.Contains(out, "Pre-DCMP") {
+		t.Errorf("Pre-DCMP column appeared unasked:\n%s", out)
 	}
 }
 
@@ -83,12 +257,12 @@ func TestDistrictRankingsCutoffIsTableOnly(t *testing.T) {
 	for _, format := range []string{"csv", "tsv", "json"} {
 		t.Run(format, func(t *testing.T) {
 			srv := newFakeTBA(t, map[string]any{
-				"/district/2024ne/rankings": districtRankings2024neJSON,
+				"/district/2024ne/rankings": districtRankingsMidSeason2024neJSON,
 			})
 			out, _, err := runCmd(t, srv, "district", "rankings", "2024ne",
 				"--cutoff", "2", "--format", format)
 			requireNoError(t, err, "")
-			if strings.Contains(out, "DCMP cutoff") {
+			if strings.Contains(out, "cutoff") || strings.Contains(out, "---") {
 				t.Errorf("%s output carries the cut line:\n%s", format, out)
 			}
 		})
@@ -158,5 +332,25 @@ func TestDistrictRankingsJq(t *testing.T) {
 	requireNoError(t, err, "")
 	if strings.TrimSpace(out) != "145" {
 		t.Errorf("jq output = %q", out)
+	}
+}
+
+// district rankings renders through the divider-aware table path; its flag
+// errors must follow the same contract as every other table: a bad --sort or
+// --columns is a usage mistake (exit 2), and --sort on a JSON payload that is
+// a list still reorders it.
+func TestDistrictRankingsFlagErrorsAreUsageErrors(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankings2024neJSON,
+	})
+	_ = requireExitCode(t, clierr.ExitUsage, srv, "district", "rankings", "2024ne", "--format", "table", "--sort=bogus")
+	_ = requireExitCode(t, clierr.ExitUsage, srv, "district", "rankings", "2024ne", "--format", "table", "--columns", "nope")
+	_ = requireExitCode(t, clierr.ExitUsage, srv, "district", "rankings", "2024ne", "--json", "--columns", "rank")
+
+	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--json", "--sort=-total")
+	requireNoError(t, err, "")
+	arr := decodeJSON(t, out).([]any)
+	if first := arr[0].(map[string]any); first["team_key"] != "frc177" {
+		t.Errorf("--sort=-total should put 177 (145 points) first, got %v", first["team_key"])
 	}
 }

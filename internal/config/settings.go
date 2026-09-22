@@ -13,6 +13,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/fsutil"
 )
 
 // settingsFileName is the layered-settings file, kept beside auth.yaml.
@@ -271,35 +272,6 @@ func updateSettings(mutate func(map[string]any)) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	return writeFileAtomic(path, out)
-}
-
-// writeFileAtomic replaces path through a temp file and a rename, so a reader
-// sees either the old file or the new one and never a partial write.
-func writeFileAtomic(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tba-config-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(name)
-		return err
-	}
-	// CreateTemp already makes the file 0600, but say so explicitly: the file
-	// sits next to auth.yaml and is nobody else's business.
-	if err := os.Chmod(name, 0600); err != nil {
-		os.Remove(name)
-		return err
-	}
-	if err := os.Rename(name, path); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return nil
+	// 0600: the file sits next to auth.yaml and is nobody else's business.
+	return fsutil.WriteFileAtomic(path, out, 0600)
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
@@ -120,10 +121,13 @@ func normalizeFormat(raw string) (string, bool) {
 // that a typo in the config file is not hidden by an unrelated setting.
 func colorMode(cmd *cobra.Command) (output.ColorMode, error) {
 	s := settings(cmd)
-	mode, err := output.ParseColorMode(s.String("color"))
+	raw := s.String("color")
+	mode, err := output.ParseColorMode(raw)
 	if err != nil {
-		// Like every other bad flag value, this is exit 2.
-		return mode, clierr.Wrap(clierr.KindUsage, err)
+		// Like every other bad flag value, this is exit 2 — and, like --format,
+		// it names the layer the value came from. "invalid --color" is advice
+		// about a flag the user never typed when the value is in config.yaml.
+		return mode, clierr.Usage("invalid %s %q (want: auto, always, never)", s.origin("color"), raw)
 	}
 	if s.Bool("no-color") {
 		return output.ColorNever, nil
@@ -196,6 +200,15 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 // rankings, event awards, team matches, team search, insights) should pass a
 // note too.
 func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []string, rows [][]string, note string) error {
+	return outputTableWithNote(cmd, data, output.Table{Headers: headers, Rows: rows}, note)
+}
+
+// outputTableWithNote is the one place a built table meets the output flags:
+// --format, --sort, --columns, --no-headers, --color, and the empty-listing
+// note. Every tabular command ends up here, so the flag contract (a bad flag
+// exits 2, --sort reorders JSON only when the payload is a list) holds
+// everywhere without each caller restating it.
+func outputTableWithNote(cmd *cobra.Command, data interface{}, table output.Table, note string) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -207,13 +220,30 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 		return err
 	}
 	w := cmd.OutOrStdout()
-	table := output.Table{Headers: headers, Rows: rows}
+
+	sortSpec := settings(cmd).String("sort")
+
+	// --sort is about the order of the result, not its shape, so it also
+	// reorders the JSON array the table was built from. When the payload is
+	// not that array — an object keyed by team, a document with the rows
+	// nested inside — there is no order to apply, and saying so beats printing
+	// an unsorted answer to a command that asked for a sorted one.
+	//
+	// Whether the payload can be reordered at all does not depend on which
+	// column was named, so it is settled first. Validating the column name
+	// first meant `event rankings --json --sort=name` answered `unknown column
+	// "name"` — with a list of the valid ones — for a payload that would have
+	// been refused whichever column was picked, and the same --sort worked in
+	// table form.
+	if format == "json" && sortSpec != "" && !output.CanPermute(data, identityOrder(len(table.Rows))) {
+		return clierr.Usage("--sort cannot reorder this JSON payload (it is not a list of rows); " +
+			"use --jq to sort it, or drop --format json")
+	}
 
 	// Sorting runs before column selection so that a table can be ordered by a
 	// column the user chose not to display.
 	// A bad --sort or --columns is a mistake in the invocation, not a failure
 	// of the work, so it exits 2 like any other flag error.
-	sortSpec := settings(cmd).String("sort")
 	var order []int
 	if sortSpec != "" {
 		if order, err = table.SortOrder(sortSpec); err != nil {
@@ -227,15 +257,6 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 		if columns != "" {
 			return clierr.Usage("--columns applies to tabular formats; use --jq to shape JSON")
 		}
-		// --sort is about the order of the result, not its shape, so it also
-		// reorders the JSON array the table was built from. When the payload is
-		// not that array — an object keyed by team, a document with the rows
-		// nested inside — there is no order to apply, and saying so beats
-		// printing an unsorted answer to a command that asked for a sorted one.
-		if sortSpec != "" && !output.CanPermute(data, order) {
-			return clierr.Usage("--sort cannot reorder this JSON payload (it is not a list of rows); " +
-				"use --jq to sort it, or drop --format json")
-		}
 		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
 	}
 	if columns != "" {
@@ -245,17 +266,47 @@ func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []st
 	}
 
 	noHeaders := settings(cmd).Bool("no-headers")
-	if err := output.Render(w, table, output.RenderOptions{
+	if err := renderRows(w, table, output.RenderOptions{
 		Format:    format,
 		NoHeaders: noHeaders,
 		Color:     color,
 	}); err != nil {
 		return err
 	}
-	if len(rows) == 0 && note != "" {
+	if len(table.Rows) == 0 && note != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
 	}
 	return nil
+}
+
+// renderRows writes a table in one of the formats a person or a spreadsheet
+// reads — or nothing at all, when there is nothing to put under the headers.
+//
+// A bare header row is not an answer: it is a table pretending to have found
+// something, and piped into a file it is a row of column names with no data
+// under it. The reason there is nothing goes to stderr, where the note already
+// is, so stdout stays exactly the data — which is what the README has always
+// said an empty listing prints. JSON never reaches here: `[]` is a perfectly
+// clear answer, and the reader of it is a program.
+//
+// `event export` renders its own tables, so a file it writes keeps its header
+// whatever it found: a file's header is a schema rather than a view.
+func renderRows(w io.Writer, table output.Table, opts output.RenderOptions) error {
+	if len(table.Rows) == 0 {
+		return nil
+	}
+	return output.Render(w, table, opts)
+}
+
+// identityOrder is the permutation of n rows that changes nothing. It stands
+// for "some order of this many rows", which is all CanPermute needs to answer
+// whether a payload can be reordered at all.
+func identityOrder(n int) []int {
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
+	}
+	return order
 }
 
 // exactArgs is cobra.ExactArgs with an error a person can act on.
@@ -339,4 +390,64 @@ func validateMatchKey(arg string) error {
 		return clierr.Usage("%q is not a valid match key (expected something like 2024cthar_qm12)", arg)
 	}
 	return nil
+}
+
+// groupArgs rejects a stray argument under a command whose only job is to
+// group others.
+//
+// Cobra applies that check to the root alone: `tba teem` is an error with a
+// suggestion, while `tba team blah` printed the group's help on stdout and
+// exited 0, so a typo in a script looked like a successful run. This is the
+// root's rule, spelled out once and applied at every level.
+func groupArgs() cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
+		// Cobra's own wording for the same mistake on the root, so a typo
+		// reads the same however deep in the tree it was made.
+		if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
+			msg += "\n\nDid you mean this?\n"
+			for _, s := range suggestions {
+				msg += "\t" + s + "\n"
+			}
+		}
+		return clierr.Usage("%s", msg)
+	}
+}
+
+// asGroup makes one command reject an unknown subcommand.
+//
+// The argument check has to be paired with something to run, because cobra
+// asks "is this command runnable?" before it validates arguments and answers
+// a command with neither Run nor RunE by printing help. With no arguments the
+// behaviour is unchanged: the group prints its own help.
+func asGroup(cmd *cobra.Command) {
+	if cmd.Args == nil {
+		cmd.Args = groupArgs()
+	}
+	// The distance cobra fills in on the path groupArgs stands in for, set
+	// where the command is built rather than while its arguments are being
+	// checked: SuggestionsFor compares against zero otherwise and never
+	// suggests anything, and a validator is no place to be configuring the
+	// command it is validating.
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = 2
+	}
+	if !cmd.Runnable() {
+		cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }
+	}
+}
+
+// applyGroupArgs applies asGroup to every command in the tree that groups
+// others, so a new group cannot be added without the check.
+func applyGroupArgs(root *cobra.Command) {
+	for _, c := range root.Commands() {
+		if !c.HasSubCommands() {
+			continue
+		}
+		asGroup(c)
+		applyGroupArgs(c)
+	}
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/cache"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
+	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
@@ -168,13 +169,8 @@ func NewClient(baseURL string, opts ...Option) (*Client, error) {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	key, err := config.GetAPIKey(baseURL)
-	if err != nil {
-		return nil, err
-	}
 	c := &Client{
 		http:       &http.Client{},
-		apiKey:     key,
 		baseURL:    baseURL,
 		useCache:   true,
 		userAgent:  userAgent,
@@ -186,11 +182,30 @@ func NewClient(baseURL string, opts ...Option) (*Client, error) {
 		randFloat:  rand.Float64,
 		now:        time.Now,
 	}
-	if cc, err := cache.New(); err == nil {
-		c.cache = cc
+	// A cache that cannot be opened is reported rather than shrugged off.
+	// Running cacheless after a silent failure makes every later symptom —
+	// an --offline run insisting nothing is cached, a revalidation that never
+	// happens — describe something other than the actual problem.
+	cc, err := cache.New()
+	if err != nil {
+		return nil, fmt.Errorf("opening the response cache: %w", err)
 	}
+	c.cache = cc
+	// The options are applied before the key is looked up, because --offline
+	// decides whether there needs to be one.
 	for _, opt := range opts {
 		opt(c)
+	}
+	// Reading one's own cache is not a request to anyone, so it needs no
+	// credentials: `tba --offline event rankings 2024cthar` used to exit 4
+	// "not authenticated" over a warm cache on a machine with no key, which
+	// is the one situation where offline is most worth having.
+	if !c.offline {
+		key, err := config.GetAPIKey(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		c.apiKey = key
 	}
 	return c, nil
 }
@@ -229,8 +244,17 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 
 	if c.offline {
 		if cached == nil {
-			return nil, fmt.Errorf("not cached: %s (run without --offline to fetch)", path)
+			// "we have no copy of that" is the same answer as a 404 as far as
+			// a script is concerned: the thing asked for is not here, and
+			// trying again will not change it. Exit 5, like every other
+			// not-found, rather than 1, which means the run itself failed.
+			return nil, clierr.NotFound("not cached: %s (run without --offline to fetch)", path)
 		}
+		// Say how old the copy is, exactly as the stale-fallback path does.
+		// Offline output is indistinguishable from live output otherwise, and
+		// a week-old ranking read as today's is the kind of mistake the user
+		// only finds out about later.
+		c.notef("note: offline: %s from cache (%s ago)", path, humanize.Age(max(0, c.now().Sub(cached.FetchedAt))))
 		return []byte(cached.Body), nil
 	}
 
@@ -246,7 +270,7 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 	if err != nil && cached != nil && ctx.Err() == nil {
 		if reason, ok := fallbackReason(err); ok {
 			c.notef("note: %s unavailable (%s); using cached copy from %s ago",
-				path, reason, cache.FormatAge(c.now().Sub(cached.FetchedAt)))
+				path, reason, humanize.Age(max(0, c.now().Sub(cached.FetchedAt))))
 			return []byte(cached.Body), nil
 		}
 	}

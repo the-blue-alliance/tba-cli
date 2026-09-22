@@ -183,3 +183,57 @@ const teamStatusBackupJSON = `{
   "next_match_key": null,
   "last_match_key": null
 }`
+
+// The Waterbury district event of 2024, the one team 177 finished before
+// Hartford started.
+const event2024ctwatJSON = `{
+  "key": "2024ctwat",
+  "name": "NE District Waterbury Event",
+  "event_code": "ctwat",
+  "event_type": 1,
+  "city": "Waterbury",
+  "state_prov": "CT",
+  "country": "USA",
+  "start_date": "2024-03-08",
+  "end_date": "2024-03-10",
+  "year": 2024,
+  "short_name": "Waterbury",
+  "event_type_string": "District",
+  "week": 1,
+  "webcasts": [],
+  "playoff_type": 10
+}`
+
+// A 2024 status as the API really answers one mid-season: six numbers in
+// sort_orders, but only five of them named in sort_order_info. The sixth is a
+// padding column the season does not use, and printing it as "Sort Order 6"
+// invents a statistic.
+const teamStatusExtraSortOrderJSON = `{
+  "qual": {
+    "num_teams": 40,
+    "ranking": {
+      "dq": 0,
+      "matches_played": 12,
+      "qual_average": null,
+      "rank": 3,
+      "record": {"losses": 3, "ties": 0, "wins": 9},
+      "sort_orders": [2.5, 0.5, 88.0, 31.0, 12.0, 0.0],
+      "team_key": "frc177"
+    },
+    "sort_order_info": [
+      {"name": "Ranking Score", "precision": 2},
+      {"name": "Avg Coop", "precision": 2},
+      {"name": "Avg Match", "precision": 0},
+      {"name": "Avg Auto", "precision": 1},
+      {"name": "Avg Stage", "precision": 1}
+    ],
+    "status": "completed"
+  },
+  "alliance": null,
+  "playoff": null,
+  "alliance_status_str": "",
+  "playoff_status_str": "",
+  "overall_status_str": "",
+  "next_match_key": null,
+  "last_match_key": null
+}`

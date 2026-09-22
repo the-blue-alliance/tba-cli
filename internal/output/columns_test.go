@@ -297,3 +297,158 @@ func TestPermuteSliceLeavesRawJSONAlone(t *testing.T) {
 		t.Fatalf("PermuteSlice reordered raw JSON bytes: %#v", got)
 	}
 }
+
+// Column selection leaves the rows where they are, so a divider still marks
+// the same gap afterwards.
+func TestSelectColumnsKeepsDividers(t *testing.T) {
+	tbl := Table{
+		Headers:  []string{"Rank", "Team", "Total"},
+		Rows:     [][]string{{"1", "177", "145"}, {"2", "1073", "132"}},
+		Dividers: map[int]string{0: "cut"},
+	}
+	got, err := tbl.SelectColumns("team")
+	if err != nil {
+		t.Fatalf("SelectColumns: %v", err)
+	}
+	if got.Dividers[0] != "cut" {
+		t.Errorf("dividers = %v, want the cut to survive", got.Dividers)
+	}
+}
+
+// A re-sorted table has no honest place for a line that marked a gap in the
+// original order.
+func TestReorderDropsDividers(t *testing.T) {
+	tbl := Table{
+		Headers:  []string{"Rank", "Team"},
+		Rows:     [][]string{{"1", "177"}, {"2", "1073"}},
+		Dividers: map[int]string{0: "cut"},
+	}
+	if got := tbl.Reorder([]int{1, 0}); got.Dividers != nil {
+		t.Errorf("dividers = %v, want none after a reorder", got.Dividers)
+	}
+}
+
+// A record is three numbers, not a string: compared as text "9-3-0" sorts
+// above "11-1-0" because "9" beats "1".
+func TestSortOrderComparesRecordsAsNumbers(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Team", "Record"},
+		Rows: [][]string{
+			{"177", "9-3-0"},
+			{"1073", "11-1-0"},
+			{"5507", "10-2-0"},
+			{"230", "10-3-0"},
+			{"195", "10-2-1"},
+		},
+	}
+	order, err := tbl.SortOrder("-record")
+	if err != nil {
+		t.Fatalf("SortOrder: %v", err)
+	}
+	got := make([]string, 0, len(order))
+	for _, i := range order {
+		got = append(got, tbl.Rows[i][1])
+	}
+	want := []string{"11-1-0", "10-3-0", "10-2-1", "10-2-0", "9-3-0"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("records = %v, want %v", got, want)
+		}
+	}
+}
+
+// Two-part records are records too, and a blank one is not.
+func TestSortOrderHandlesShortAndMissingRecords(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Record"},
+		Rows:    [][]string{{"9-3"}, {""}, {"11-1"}, {"not a record"}},
+	}
+	order, err := tbl.SortOrder("record")
+	if err != nil {
+		t.Fatalf("SortOrder: %v", err)
+	}
+	got := make([]string, 0, len(order))
+	for _, i := range order {
+		got = append(got, tbl.Rows[i][0])
+	}
+	want := []string{"", "9-3", "11-1", "not a record"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("cells = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestDropEmptyColumns(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Rank", "Team", "Record", "Played"},
+		Rows: [][]string{
+			{"1", "177", "", "8"},
+			{"2", "1073", "  ", "8"},
+		},
+	}
+	got := tbl.DropEmptyColumns()
+	wantHeaders := []string{"Rank", "Team", "Played"}
+	if len(got.Headers) != len(wantHeaders) {
+		t.Fatalf("headers = %v, want %v", got.Headers, wantHeaders)
+	}
+	for i := range wantHeaders {
+		if got.Headers[i] != wantHeaders[i] {
+			t.Fatalf("headers = %v, want %v", got.Headers, wantHeaders)
+		}
+	}
+	if got.Rows[0][2] != "8" {
+		t.Errorf("row 0 = %v", got.Rows[0])
+	}
+	// The receiver is untouched, so a caller can still render the full table.
+	if len(tbl.Headers) != 4 {
+		t.Errorf("the original table lost a column: %v", tbl.Headers)
+	}
+}
+
+// A blank for one row and not another is data, not an empty column.
+func TestDropEmptyColumnsKeepsAPartlyFilledColumn(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Team", "Name"},
+		Rows:    [][]string{{"177", "Bobcat Robotics"}, {"1073", ""}},
+	}
+	if got := tbl.DropEmptyColumns(); len(got.Headers) != 2 {
+		t.Errorf("headers = %v, want both kept", got.Headers)
+	}
+}
+
+// Every column of an empty table is empty. Dropping them all would turn "no
+// results" into a table with no shape at all.
+func TestDropEmptyColumnsLeavesAnEmptyTableAlone(t *testing.T) {
+	tbl := Table{Headers: []string{"Rank", "Team"}}
+	if got := tbl.DropEmptyColumns(); len(got.Headers) != 2 {
+		t.Errorf("headers = %v, want both kept", got.Headers)
+	}
+}
+
+// A dropped column is gone from the table, so asking for it is the ordinary
+// unknown-column error and the message lists what is left.
+func TestDropEmptyColumnsThenSelectingTheDroppedColumnFails(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Rank", "Record", "Played"},
+		Rows:    [][]string{{"1", "", "8"}},
+	}.DropEmptyColumns()
+	_, err := tbl.SelectColumns("record")
+	if err == nil {
+		t.Fatalf("want an error for a column that is no longer there")
+	}
+	if !strings.Contains(err.Error(), "valid columns: Rank, Played") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestDropEmptyColumnsKeepsDividers(t *testing.T) {
+	tbl := Table{
+		Headers:  []string{"Rank", "Record"},
+		Rows:     [][]string{{"1", ""}, {"2", ""}},
+		Dividers: map[int]string{0: "cut"},
+	}
+	if got := tbl.DropEmptyColumns(); got.Dividers[0] != "cut" {
+		t.Errorf("dividers = %v", got.Dividers)
+	}
+}

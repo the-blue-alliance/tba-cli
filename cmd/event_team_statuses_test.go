@@ -12,12 +12,66 @@ func TestEventTeamStatuses(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
-	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Playoff Status,Overall\n" +
-		`177,1,10-2-0,Alliance 1,Captain,F,won,"Team 177 was Rank 1 with a record of 10-2-0 in quals, competed in the playoffs as the Captain of Alliance 1, and won the event."` + "\n" +
-		`1073,2,9-3-0,Alliance 1,1,SF,eliminated,"Team 1073 was Rank 2 with a record of 9-3-0 in quals, and was eliminated in the playoffs."` + "\n" +
-		"5507,30,4-8-0,,,,,Team 5507 was Rank 30 with a record of 4-8-0 in quals.\n" +
-		"2168,,,Alliance 1,Backup,F,won,Team 2168 competed in the playoffs as a Backup on Alliance 1.\n" +
+	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Round,Playoff Status\n" +
+		"177,1,10-2-0,Alliance 1,Captain,F,Finals,won\n" +
+		"1073,2,9-3-0,Alliance 1,1,SF,Round 4,eliminated\n" +
+		"230,3,8-4-0,Alliance 2,Captain,F,Finals,finalist\n" +
+		"5507,30,4-8-0,,,,,\n" +
+		"2168,,,Alliance 1,Backup,F,Finals,won\n" +
 		"9999,,,,,,,\n"
+	if out != want {
+		t.Errorf("csv =\n%s\nwant\n%s", out, want)
+	}
+}
+
+// TBA's summary is a 250-character sentence. It is in the JSON either way, and
+// only joins the table when it is asked for.
+func TestEventTeamStatusesOverallIsOptIn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/teams/statuses": teamStatuses2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+	if strings.Contains(out, "Overall") || strings.Contains(out, "was Rank 1 with a record") {
+		t.Errorf("the prose column is on by default:\n%s", out)
+	}
+
+	out, _, err = runCmd(t, srv, "event", "team-statuses", "2024cthar", "--overall", "--format", "csv")
+	requireNoError(t, err, "")
+	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Round,Playoff Status,Overall\n" +
+		"177,1,10-2-0,Alliance 1,Captain,F,Finals,won," +
+		`"Team 177 was Rank 1 with a record of 10-2-0 in quals, competed in the playoffs as the Captain of Alliance 1, and won the event."` + "\n"
+	if !strings.HasPrefix(out, want) {
+		t.Errorf("csv =\n%s\nwant it to start\n%s", out, want)
+	}
+}
+
+// A pre-2023 bracket has no double_elim_round, so no team at the event has a
+// Round; the table leaves the column out rather than printing it empty for
+// everybody.
+func TestEventTeamStatusesRoundIsDroppedWithoutADoubleElimBracket(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2019cthar/teams/statuses": teamStatuses2019ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "event", "team-statuses", "2019cthar", "--format", "table")
+	requireNoError(t, err, "")
+
+	if got := lines(out)[0]; strings.Contains(got, "Round") {
+		t.Errorf("header = %q, want no Round column", got)
+	}
+}
+
+// csv keeps it, so that the columns of a file are the same whether the event
+// it describes ran a double-elimination bracket or not.
+func TestEventTeamStatusesCSVKeepsTheRoundColumn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2019cthar/teams/statuses": teamStatuses2019ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "event", "team-statuses", "2019cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Round,Playoff Status\n" +
+		"177,1,10-2-0,Alliance 1,Captain,F,,won\n"
 	if out != want {
 		t.Errorf("csv =\n%s\nwant\n%s", out, want)
 	}
@@ -31,7 +85,7 @@ func TestEventTeamStatusesPutUnrankedTeamsLast(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar",
 		"--format", "csv", "--columns", "team", "--no-headers")
 	requireNoError(t, err, "")
-	if out != "177\n1073\n5507\n2168\n9999\n" {
+	if out != "177\n1073\n230\n5507\n2168\n9999\n" {
 		t.Errorf("teams = %q", out)
 	}
 }
@@ -41,7 +95,7 @@ func TestEventTeamStatusesStripTheStatusMarkup(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2024cthar/teams/statuses": teamStatuses2024ctharJSON,
 	})
-	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar", "--format", "tsv")
+	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar", "--overall", "--format", "tsv")
 	requireNoError(t, err, "")
 
 	if strings.Contains(out, "<b>") || strings.Contains(out, "</b>") {
@@ -90,5 +144,26 @@ func TestEventTeamStatusesRequestsTheRightPath(t *testing.T) {
 	requireNoError(t, err, "")
 	if got := requestPaths(t, srv); len(got) != 1 || got[0] != "/event/2024cthar/teams/statuses" {
 		t.Errorf("requested %v", got)
+	}
+}
+
+// A team on the alliance that lost the final finished second, not "eliminated"
+// the way a team knocked out in the first round did.
+func TestEventTeamStatusesCallTheLosingFinalistAFinalist(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/teams/statuses": teamStatuses2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar",
+		"--format", "csv", "--columns", "team,playoff level,playoff status", "--no-headers")
+	requireNoError(t, err, "")
+
+	want := "177,F,won\n" +
+		"1073,SF,eliminated\n" +
+		"230,F,finalist\n" +
+		"5507,,\n" +
+		"2168,F,won\n" +
+		"9999,,\n"
+	if out != want {
+		t.Errorf("csv =\n%s\nwant\n%s", out, want)
 	}
 }

@@ -198,6 +198,22 @@ func TestTeamEvents(t *testing.T) {
 	requireContains(t, got[3], "2024necmp")
 }
 
+// The API lists a team's events by key, which puts 2024necmp -- April's
+// district championship -- ahead of the March district events that qualified
+// the team for it. A season is read as a season.
+func TestTeamEventsListsTheSeasonInOrder(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": teamEvents177In2024JSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "events", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	want := []string{"2024ctwat", "2024cthar", "2024necmp"}
+	if got := csvColumn(t, out, 0); !equalStrings(got, want) {
+		t.Errorf("events = %v, want %v (chronological)", got, want)
+	}
+}
+
 func TestTeamEventsDefaultsToCurrentYear(t *testing.T) {
 	path := fmt.Sprintf("/team/frc177/events/%d", currentYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
@@ -221,9 +237,18 @@ func TestTeamMatches(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("want header + separator + 2 rows, got %d:\n%s", len(got), out)
 	}
-	if got[0] != "Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status" {
-		t.Errorf("header = %q", got[0])
+	// A season's listing leads with the event each match belongs to. When is
+	// empty for a listing of played matches, and such a column is left out.
+	for _, want := range append([]string{"Event"}, matchHeaders...) {
+		if want == "When" {
+			continue
+		}
+		requireContains(t, got[0], want)
 	}
+	if !strings.HasPrefix(got[0], "Event") {
+		t.Errorf("header = %q, want the Event column first", got[0])
+	}
+	requireContains(t, got[2], "2024cthar")
 	requireContains(t, got[2], "Qual 1")
 	requireContains(t, got[2], "2024cthar_qm1")
 	requireContains(t, got[2], "red")

@@ -181,3 +181,108 @@ func TestRenderRejectsAnUnknownFormat(t *testing.T) {
 func lines(s string) []string {
 	return strings.Split(strings.TrimRight(s, "\n"), "\n")
 }
+
+// A divider is a line between rows — a district championship cut, say — and
+// the point of it is that it does not live in a cell, so it cannot widen one.
+func TestRenderTableDrawsDividers(t *testing.T) {
+	got := render(t, Table{
+		Headers:  []string{"Rank", "Team"},
+		Rows:     [][]string{{"1", "177"}, {"2", "1073"}},
+		Dividers: map[int]string{0: "top 1 by pre-DCMP total"},
+	}, RenderOptions{Format: "table"})
+
+	want := "Rank  Team\n" +
+		"----  ----\n" +
+		"1     177 \n" +
+		"--- top 1 by pre-DCMP total ---\n" +
+		"2     1073\n"
+	if got != want {
+		t.Errorf("table =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestRenderMarkdownDrawsDividers(t *testing.T) {
+	got := render(t, Table{
+		Headers:  []string{"Rank", "Team", "Total"},
+		Rows:     [][]string{{"1", "177", "145"}, {"2", "1073", "132"}},
+		Dividers: map[int]string{0: "DCMP cutoff (top 1)"},
+	}, RenderOptions{Format: "markdown"})
+
+	want := "| Rank | Team | Total |\n" +
+		"| --- | --- | --- |\n" +
+		"| 1 | 177 | 145 |\n" +
+		"| --- DCMP cutoff (top 1) --- | | |\n" +
+		"| 2 | 1073 | 132 |\n"
+	if got != want {
+		t.Errorf("markdown =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// A divider is presentation, so the machine-readable formats never see one.
+func TestRenderDividersAreSkippedByDelimitedFormats(t *testing.T) {
+	tbl := Table{
+		Headers:  []string{"Rank", "Team"},
+		Rows:     [][]string{{"1", "177"}, {"2", "1073"}},
+		Dividers: map[int]string{0: "DCMP cutoff (top 1)"},
+	}
+	for _, format := range []string{"csv", "tsv"} {
+		got := render(t, tbl, RenderOptions{Format: format})
+		if strings.Contains(got, "cutoff") || strings.Contains(got, "---") {
+			t.Errorf("%s carries the divider:\n%s", format, got)
+		}
+		if n := len(lines(got)); n != 3 {
+			t.Errorf("%s has %d lines, want header and two rows:\n%s", format, n, got)
+		}
+	}
+}
+
+// A break is the quieter divider: the rows below are a different kind of thing
+// from the rows above, which needs a gap rather than a sentence.
+func TestRenderTableDrawsBreaks(t *testing.T) {
+	got := render(t, Table{
+		Headers: []string{"Stat", "Red"},
+		Rows:    [][]string{{"Total Points", "96"}, {"Endgame Robot 1", "Parked"}},
+		Breaks:  map[int]bool{0: true},
+	}, RenderOptions{Format: "table"})
+
+	want := "Stat             Red   \n" +
+		"---------------  ------\n" +
+		"Total Points     96    \n" +
+		"\n" +
+		"Endgame Robot 1  Parked\n"
+	if got != want {
+		t.Errorf("table =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// A break after the last row would only add a blank line to whatever comes
+// next, and a blank line in a data file is a broken record.
+func TestRenderBreaksAreSkippedAtTheEndAndByOtherFormats(t *testing.T) {
+	tbl := Table{
+		Headers: []string{"Stat", "Red"},
+		Rows:    [][]string{{"Total Points", "96"}},
+		Breaks:  map[int]bool{0: true, 9: true},
+	}
+	if got := render(t, tbl, RenderOptions{Format: "table"}); got != "Stat          Red\n------------  ---\nTotal Points  96 \n" {
+		t.Errorf("table = %q", got)
+	}
+	for _, format := range []string{"csv", "tsv", "markdown"} {
+		got := render(t, tbl, RenderOptions{Format: format})
+		if n := len(lines(got)); n > 3 {
+			t.Errorf("%s has %d lines, want no blank one:\n%q", format, n, got)
+		}
+	}
+}
+
+// An empty divider is nothing to draw, and one past the last row has no gap to
+// sit in.
+func TestRenderIgnoresEmptyAndOutOfRangeDividers(t *testing.T) {
+	got := render(t, Table{
+		Headers:  []string{"Rank"},
+		Rows:     [][]string{{"1"}},
+		Dividers: map[int]string{0: "", 5: "nowhere"},
+	}, RenderOptions{Format: "table"})
+	if got != "Rank\n----\n1   \n" {
+		t.Errorf("table = %q", got)
+	}
+}

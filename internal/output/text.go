@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // Unwrapper is implemented by writers that decorate another writer, such as
@@ -20,20 +22,20 @@ type TerminalReporter interface {
 	IsTerminal() bool
 }
 
-// IsTTY reports whether w is a terminal: an *os.File backed by a character
-// device, possibly behind one or more wrappers, or anything that says so via
-// TerminalReporter.
+// IsTTY reports whether w is a terminal: an *os.File the operating system
+// will answer terminal questions about, possibly behind one or more wrappers,
+// or anything that says so via TerminalReporter.
+//
+// The test used to be "is this a character device", which /dev/null also is,
+// so `tba ... > /dev/null` rendered a table and coloured it. x/term asks the
+// kernel the question that was actually meant.
 func IsTTY(w io.Writer) bool {
 	for w != nil {
 		switch v := w.(type) {
 		case TerminalReporter:
 			return v.IsTerminal()
 		case *os.File:
-			fi, err := v.Stat()
-			if err != nil {
-				return false
-			}
-			return fi.Mode()&os.ModeCharDevice != 0
+			return term.IsTerminal(int(v.Fd()))
 		case Unwrapper:
 			w = v.Unwrap()
 		default:

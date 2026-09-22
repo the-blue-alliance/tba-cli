@@ -30,7 +30,7 @@ func newAuthCmd() *cobra.Command {
 func newAuthLoginCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate with TBA API",
+		Short: "Authenticate with the TBA API",
 		Long: `Store a TBA API key for later commands.
 
 Get one at ` + config.APIKeyPage + `: sign in, then create a
@@ -157,7 +157,7 @@ func maskKey(key string) string {
 func newAuthLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
-		Short: "Remove stored API key",
+		Short: "Remove the stored API key",
 		Example: `  tba auth logout
   tba auth logout --base-url http://localhost:8080/api/v3`,
 		RunE: func(cmd *cobra.Command, args []string) error {

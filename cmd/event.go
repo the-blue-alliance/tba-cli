@@ -37,9 +37,9 @@ func newEventCmd() *cobra.Command {
 func newEventViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <key>",
-		Short: "View event info",
+		Short: "Show an event's details",
 		Example: `  tba event view 2024cthar
-  tba event view 2024necmp --format json`,
+  tba event view 2024cthar --format json`,
 		Args: exactArgs(1, "an event key (e.g. tba event view 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
@@ -97,7 +97,7 @@ func eventDetailPairs(event api.Event) []string {
 func newEventListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
-		Short: "List events for a year",
+		Short: "List a season's events",
 		Long: `List the events of a season.
 
 Every filter is applied to the season's event list after it is fetched, so any
@@ -118,7 +118,7 @@ returns.`,
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -166,7 +166,7 @@ returns.`,
 func newEventTeamsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "teams <key>",
-		Short: "List teams at event",
+		Short: "List the teams at an event",
 		Example: `  tba event teams 2024cthar
   tba event teams 2024cthar --format csv`,
 		Args: exactArgs(1, "an event key (e.g. tba event teams 2024cthar)"),
@@ -201,7 +201,7 @@ func eventTeamsTable(teams []api.Team) output.Table {
 func newEventMatchesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "matches <key>",
-		Short: "List matches at event",
+		Short: "List an event's matches",
 		Example: `  tba event matches 2024cthar
   tba event matches 2024cthar --team 177 --upcoming
   tba event matches 2024cthar --level playoff
@@ -223,7 +223,7 @@ func newEventMatchesCmd() *cobra.Command {
 			// The event is fetched second and only for its playoff_type, which
 			// decides how playoff matches are named.
 			playoffType := eventPlayoffType(cmd, client, args[0])
-			return renderMatches(cmd, matches, constantPlayoffType(playoffType))
+			return renderMatches(cmd, matches, constantPlayoffType(playoffType), args[0])
 		},
 	}
 	addMatchTableFlags(c)
@@ -233,7 +233,7 @@ func newEventMatchesCmd() *cobra.Command {
 func newEventRankingsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rankings <key>",
-		Short: "Show event rankings",
+		Short: "Show qualification rankings",
 		Long: `Show the qualification rankings for an event.
 
 After Rank, Team, Name, Record, Played and DQ the table carries one column per
@@ -278,7 +278,9 @@ as Total Ranking Points. The columns therefore differ from season to season.`,
 				}
 			}
 
-			table := eventRankingsTable(&rankings, nicknames)
+			// A column no team has anything in is dropped on screen but kept
+			// in a file, whose header is a schema rather than a view.
+			table := dropEmptyColumnsFor(format, eventRankingsTable(&rankings, nicknames))
 			return outputTable(cmd, rankings, table.Headers, table.Rows)
 		},
 	}
@@ -287,6 +289,10 @@ as Total Ranking Points. The columns therefore differ from season to season.`,
 // eventRankingsTable renders qualification rankings, lowest rank first. The
 // columns after DQ are whatever the season declared, so they change from year
 // to year; nicknames fills the Name column and may be nil or incomplete.
+//
+// Every column the season declared is here; whether the ones nobody filled in
+// are worth printing is the caller's question, since the answer differs
+// between a table on screen and a file whose header is a schema.
 //
 // The rankings are sorted in place: the caller hands JSON output the same
 // struct, and the two should agree on the order.
@@ -323,14 +329,15 @@ func eventRankingsTable(rankings *api.EventRankings, nicknames map[string]string
 func newEventAlliancesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "alliances <key>",
-		Short: "Show event alliances",
+		Short: "Show playoff alliances",
 		Long: `Show the playoff alliances at an event, how they were built and how far
 they got.
 
 Captain, Pick 1 and Pick 2 are the three teams in selection order. Backup names
 the team called in mid-playoffs, as "1234 in for 5678" when the API says who it
 replaced. Status and Level come from the alliance's playoff status, and Record
-is its playoff win-loss-tie.`,
+is its playoff win-loss-tie. The alliance that lost the final reads "finalist"
+rather than the "eliminated" the API sends for every alliance that went out.`,
 		Example: `  tba event alliances 2024cthar
   tba event alliances 2024cthar --format json
   tba event alliances 2024cthar --columns alliance,captain,status`,
@@ -366,7 +373,7 @@ func eventAlliancesTable(alliances []api.EventAlliance) output.Table {
 		}
 		status, level, record := "", "", ""
 		if a.Status != nil {
-			status = a.Status.Status
+			status = playoffStatus(a.Status)
 			level = strings.ToUpper(a.Status.Level)
 			record = formatWLT(a.Status.Record)
 		}
@@ -418,7 +425,7 @@ func joinTeamNumbers(keys []string) string {
 func newEventAwardsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "awards <key>",
-		Short: "Show event awards",
+		Short: "Show an event's awards",
 		Example: `  tba event awards 2024cthar
   tba event awards 2024cthar --format csv`,
 		Args: exactArgs(1, "an event key (e.g. tba event awards 2024cthar)"),
@@ -465,8 +472,15 @@ func eventAwardsTable(awards []api.Award) output.Table {
 func newEventOPRsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "oprs <key>",
-		Short: "Show event OPRs",
+		Short: "Show OPR, DPR and CCWM for each team",
+		Long: `Show the contributions TBA calculates for each team at an event.
+
+OPR is offensive power rating, DPR defensive power rating and CCWM calculated
+contribution to winning margin. The table is ordered by OPR, highest first,
+since that is the question the command is asked; --sort reorders it by any
+column, and ties keep team-number order.`,
 		Example: `  tba event oprs 2024cthar
+  tba event oprs 2024cthar --sort team
   tba event oprs 2024cthar --format csv`,
 		Args: exactArgs(1, "an event key (e.g. tba event oprs 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -488,20 +502,21 @@ func newEventOPRsCmd() *cobra.Command {
 }
 
 // eventOPRsTable renders the calculated contributions, one row per team,
-// ordered by team number.
+// highest OPR first.
+//
+// Team-number order was the wrong default: nobody asks for an event's OPRs to
+// find out what team 177 scored, they ask to see who the strongest teams were.
+// Ties fall back to team number so the order is the same every run, and
+// --sort is there for anyone who wants it another way.
 func eventOPRsTable(oprs api.EventOPRs) output.Table {
 	teamKeys := make([]string, 0, len(oprs.OPRs))
 	for team := range oprs.OPRs {
 		teamKeys = append(teamKeys, team)
 	}
 	// Map iteration order is random; sort so the output is stable.
-	sort.Slice(teamKeys, func(i, j int) bool {
-		a, errA := strconv.Atoi(output.TeamNumberFromKey(teamKeys[i]))
-		b, errB := strconv.Atoi(output.TeamNumberFromKey(teamKeys[j]))
-		if errA == nil && errB == nil {
-			return a < b
-		}
-		return teamKeys[i] < teamKeys[j]
+	sortTeamKeys(teamKeys)
+	sort.SliceStable(teamKeys, func(i, j int) bool {
+		return oprs.OPRs[teamKeys[i]] > oprs.OPRs[teamKeys[j]]
 	})
 	var rows [][]string
 	for _, team := range teamKeys {
@@ -518,7 +533,7 @@ func eventOPRsTable(oprs api.EventOPRs) output.Table {
 func newEventDistrictPointsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "district-points <key>",
-		Short: "Show event district points",
+		Short: "Show the district points an event awarded",
 		Long: `Show the district points an event awarded, highest total first.
 
 --tiebreakers adds the values that break a tie on total points: the team's

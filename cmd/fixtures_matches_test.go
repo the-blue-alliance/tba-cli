@@ -292,6 +292,49 @@ const matchViewQM12JSON = `{
   "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}]
 }`
 
+// A 2026-shaped breakdown: recent seasons write an unfilled slot as the string
+// "None" rather than as a null, and carry the game's own constants -- the
+// thresholds a bonus is measured against -- alongside what the alliances did.
+const matchView2026JSON = `{
+  "key": "2026cthar_qm7",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 7,
+  "event_key": "2026cthar",
+  "time": 1774531200,
+  "actual_time": 1774531500,
+  "winning_alliance": "red",
+  "alliances": {
+    "red": {"score": 96, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 74, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": {
+    "red": {
+      "totalPoints": 96,
+      "rp": 3,
+      "autoPoints": 24,
+      "foulCount": 0,
+      "autoTowerRobot1": "None",
+      "autoTowerRobot2": "None",
+      "endgameRobot1": "Parked",
+      "coopertitionThreshold": 12,
+      "ensembleBonusThreshold": 30
+    },
+    "blue": {
+      "totalPoints": 74,
+      "rp": 1,
+      "autoPoints": 12,
+      "foulCount": 0,
+      "autoTowerRobot1": "None",
+      "autoTowerRobot2": "None",
+      "endgameRobot1": "None",
+      "coopertitionThreshold": 12,
+      "ensembleBonusThreshold": 30
+    }
+  },
+  "videos": []
+}`
+
 // A semifinal, whose name depends on the event's bracket.
 const matchViewSF13JSON = `{
   "key": "2024cthar_sf13m1",
@@ -367,5 +410,180 @@ const match2015ctwatQM7JSON = `{
     "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
+  "videos": []
+}`
+
+// A team's whole 2024 season, as /team/frc177/matches/2024 returns it: two
+// district events whose qualification numbers collide, in the arbitrary order
+// the API answers with. Sorting this as one list interleaves the events —
+// Qual 46 at Waterbury next to Qual 46 at Hartford — which is what grouping by
+// event exists to prevent.
+const teamMatches177Season2024JSON = `[
+  {
+    "key": "2024cthar_qm46",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 46,
+    "event_key": "2024cthar",
+    "time": 1711211400,
+    "predicted_time": 1711211400,
+    "actual_time": 1711211580,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 94, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 70, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024ctwat_qm46",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 46,
+    "event_key": "2024ctwat",
+    "time": 1709996400,
+    "predicted_time": 1709996400,
+    "actual_time": 1709996640,
+    "winning_alliance": "blue",
+    "alliances": {
+      "red": {"score": 61, "team_keys": ["frc1071", "frc4055", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 83, "team_keys": ["frc177", "frc1124", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024cthar_qm12",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 12,
+    "event_key": "2024cthar",
+    "time": 1711130400,
+    "predicted_time": 1711130700,
+    "actual_time": 1711130820,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 88, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024ctwat_qm5",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 5,
+    "event_key": "2024ctwat",
+    "time": 1709913600,
+    "predicted_time": 1709913600,
+    "actual_time": 1709913780,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 70, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 54, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  }
+]`
+
+// A 2024 Crescendo qualification match with both score breakdowns, shortened
+// from a real one but keeping its shape: a total, ranking points, the point
+// columns, the fouls, the counts, and the flags neither alliance earned, which
+// is most of a real breakdown.
+const matchViewBreakdown2024JSON = `{
+  "key": "2024cthar_qm18",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 18,
+  "event_key": "2024cthar",
+  "time": 1711136400,
+  "predicted_time": 1711136400,
+  "actual_time": 1711136640,
+  "winning_alliance": "red",
+  "alliances": {
+    "red": {"score": 88, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 61, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": {
+    "red": {
+      "adjustPoints": 0,
+      "autoAmpNoteCount": 1,
+      "autoAmpNotePoints": 2,
+      "autoLeavePoints": 6,
+      "autoLineRobot1": "Yes",
+      "autoLineRobot2": "Yes",
+      "autoLineRobot3": "Yes",
+      "autoPoints": 23,
+      "autoSpeakerNoteCount": 3,
+      "autoSpeakerNotePoints": 15,
+      "coopertitionBonusAchieved": false,
+      "coopertitionCriteriaMet": false,
+      "endGameHarmonyPoints": 2,
+      "endGameNoteInTrapPoints": 0,
+      "endGameOnStagePoints": 6,
+      "endGameParkPoints": 0,
+      "endGameRobot1": "StageLeft",
+      "endGameTotalStagePoints": 8,
+      "ensembleBonusAchieved": true,
+      "foulCount": 1,
+      "foulPoints": 2,
+      "g424Penalty": false,
+      "melodyBonusAchieved": true,
+      "micCenterStage": false,
+      "micStageLeft": true,
+      "rp": 5,
+      "techFoulCount": 0,
+      "teleopAmpNoteCount": 9,
+      "teleopAmpNotePoints": 9,
+      "teleopPoints": 57,
+      "teleopSpeakerNoteAmplifiedCount": 8,
+      "teleopSpeakerNoteAmplifiedPoints": 40,
+      "teleopSpeakerNoteCount": 4,
+      "teleopTotalNotePoints": 57,
+      "totalPoints": 88,
+      "trapCenterStage": false
+    },
+    "blue": {
+      "adjustPoints": 0,
+      "autoAmpNoteCount": 0,
+      "autoAmpNotePoints": 0,
+      "autoLeavePoints": 4,
+      "autoLineRobot1": "Yes",
+      "autoLineRobot2": "Yes",
+      "autoLineRobot3": "No",
+      "autoPoints": 14,
+      "autoSpeakerNoteCount": 2,
+      "autoSpeakerNotePoints": 10,
+      "coopertitionBonusAchieved": false,
+      "coopertitionCriteriaMet": false,
+      "endGameHarmonyPoints": 0,
+      "endGameNoteInTrapPoints": 0,
+      "endGameOnStagePoints": 3,
+      "endGameParkPoints": 1,
+      "endGameRobot1": "Parked",
+      "endGameTotalStagePoints": 4,
+      "ensembleBonusAchieved": false,
+      "foulCount": 0,
+      "foulPoints": 0,
+      "g424Penalty": false,
+      "melodyBonusAchieved": false,
+      "micCenterStage": false,
+      "micStageLeft": false,
+      "rp": 1,
+      "techFoulCount": 0,
+      "teleopAmpNoteCount": 5,
+      "teleopAmpNotePoints": 5,
+      "teleopPoints": 43,
+      "teleopSpeakerNoteAmplifiedCount": 6,
+      "teleopSpeakerNoteAmplifiedPoints": 30,
+      "teleopSpeakerNoteCount": 4,
+      "teleopTotalNotePoints": 43,
+      "totalPoints": 61,
+      "trapCenterStage": false
+    }
+  },
   "videos": []
 }`

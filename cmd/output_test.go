@@ -81,9 +81,14 @@ func TestBadColorValueIsReportedEvenWithNoColor(t *testing.T) {
 func TestSortFlagHelpShowsBothForms(t *testing.T) {
 	out, _, err := runCmd(t, nil, "district", "list", "--help")
 	requireNoError(t, err, "")
-	requireContains(t, out, "prefix with - to descend (e.g. --sort=-opr)")
+	requireContains(t, out, "prefix with - to descend (e.g. --sort=name)")
 	if strings.Contains(out, "use the --sort=-col form") {
 		t.Errorf("the --sort help still claims only one form works:\n%s", out)
+	}
+	// The example used to be --sort=-opr, which fails as soon as the output
+	// is piped: the OPR payload is an object, not a list of rows.
+	if strings.Contains(out, "--sort=-opr") {
+		t.Errorf("the --sort example does not work in every format:\n%s", out)
 	}
 }
 
@@ -330,6 +335,29 @@ func TestSortOnANonListJSONPayloadIsAUsageError(t *testing.T) {
 	if len(lines(out)) < 2 {
 		t.Fatalf("want a sorted csv table, got:\n%s", out)
 	}
+}
+
+// Whether a payload can be reordered has nothing to do with which column was
+// named, so it is answered first. Checking the column first sent people off to
+// pick a different one from a list of valid columns, when every one of them
+// would have been refused for the same reason.
+func TestSortOnANonListJSONPayloadIsReportedBeforeTheColumnName(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	err := requireExitCode(t, clierr.ExitUsage, srv,
+		"event", "oprs", "2024cthar", "--json", "--sort", "nosuchcolumn")
+	requireErrorContains(t, err, "--sort cannot reorder this JSON payload")
+	if strings.Contains(err.Error(), "valid columns") || strings.Contains(err.Error(), "unknown column") {
+		t.Errorf("the column name is beside the point here: %v", err)
+	}
+}
+
+// A tabular format has no such objection, so there the unknown column is
+// exactly what went wrong and is still named.
+func TestSortStillReportsAnUnknownColumnInTabularFormats(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	err := requireExitCode(t, clierr.ExitUsage, srv,
+		"event", "oprs", "2024cthar", "--format", "csv", "--sort", "nosuchcolumn")
+	requireErrorContains(t, err, "nosuchcolumn")
 }
 
 // A jq expression that does not parse is a mistake in the command line, so it

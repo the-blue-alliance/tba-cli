@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
@@ -85,12 +87,173 @@ func initSettings(cmd *cobra.Command) error {
 	for _, name := range s.file.Unknown {
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown key %q in %s\n", name, s.file.Path)
 	}
+	if err := s.validate(); err != nil {
+		return err
+	}
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	cmd.SetContext(context.WithValue(ctx, settingsCtxKey{}, s))
 	return nil
+}
+
+// validate checks the settings whose values have to make sense whatever layer
+// they came from.
+//
+// `tba config set retries -1` was refused while `--retries -1` and
+// TBA_RETRIES=-1 were accepted without a word, so the same nonsense was an
+// error in one place and silently something else in another. The wording is
+// the config file's, with the layer named when it is not the flag the user
+// would otherwise go looking for.
+func (s *settingsSet) validate() error {
+	if err := s.validateShapes(); err != nil {
+		return err
+	}
+	if s.Int("retries") < 0 {
+		return s.settingError("retries", "retries cannot be negative")
+	}
+	if s.Duration("timeout") <= 0 {
+		return s.settingError("timeout", "timeout must be positive")
+	}
+	return s.validateBaseURL()
+}
+
+// validateBaseURL refuses a base URL that is not one.
+//
+// `tba config set base-url nonsense` had been refused all along, while
+// TBA_BASE_URL=nonsense went through and surfaced three layers down as
+// "not authenticated for nonsense" -- a message about a key, for a mistake in
+// a URL. config.Key.ParseValue is the judge here too, so the same text gets
+// the same answer wherever it was written.
+func (s *settingsSet) validateBaseURL() error {
+	raw := s.String("base-url")
+	if raw == "" {
+		// Unset means the default, which is a URL by construction.
+		return nil
+	}
+	k, ok := config.LookupKey("base-url")
+	if !ok {
+		return nil
+	}
+	if _, err := k.ParseValue(raw); err != nil {
+		return s.settingError("base-url", err.Error())
+	}
+	return nil
+}
+
+// validateShapes refuses a value the setting cannot hold, wherever it was
+// written down.
+//
+// viper coerced instead, and quietly: TBA_RETRIES=abc became 0, which turns
+// retries off, and TBA_TIMEOUT=5 became five nanoseconds, after which every
+// request timed out and nothing said why. config.yaml was no better — `timeout:
+// 5` there is the same five nanoseconds, and `retries: abc` the same silent 0 —
+// while `tba config set timeout 5` had been refused all along. The same text is
+// the same mistake in all three places, and config.Key.ParseValue is the same
+// judge.
+//
+// format and color are left out: their accepted words are listed where they
+// are read, with better messages than a generic one could be. So is a layer a
+// higher one has already overridden, because precedence is the whole point of
+// the layering: a flag still beats whatever the environment or the file holds.
+func (s *settingsSet) validateShapes() error {
+	for _, k := range config.Keys {
+		switch k.Kind {
+		case config.KindBool, config.KindInt, config.KindDuration:
+		default:
+			continue
+		}
+		var raw, where string
+		switch s.Source(k.Name) {
+		case sourceEnv:
+			where = envKey(k.Name)
+			raw = os.Getenv(where)
+		case sourceConfig:
+			// YAML has already decided what `timeout: 5` is — an int, not a
+			// duration — so the value goes back to the text the file holds
+			// and through the same parser `config set` uses.
+			raw = rawConfigValue(s.file.Values[k.Name])
+		default:
+			continue
+		}
+		if _, err := k.ParseValue(raw); err == nil {
+			continue
+		}
+		// Only the shape is judged here, in the layer's own terms, because
+		// "5" looks like a perfectly good timeout until you learn it means
+		// five nanoseconds. A value of the right shape but the wrong size —
+		// retries: -1, year: 1800 — belongs to whoever knows the range, and
+		// those messages already name the layer the value came from.
+		if parsesAs(k.Kind, raw) {
+			continue
+		}
+		if where != "" {
+			return clierr.Usage("%s %q is not %s", where, raw, envWant(k.Kind))
+		}
+		return clierr.Usage("%s %q in %s is not %s", k.Name, raw, s.file.Path, envWant(k.Kind))
+	}
+	return nil
+}
+
+// rawConfigValue is the text a config.yaml value was written as, so that it
+// can be judged by the parser `tba config set` uses. YAML types it on the way
+// in — `timeout: 5` arrives as an int and `no-cache: true` as a bool — and
+// nothing is lost by writing it back out: what matters is whether "5" is a
+// duration, not that YAML was willing to call it a number.
+func rawConfigValue(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case int:
+		return strconv.Itoa(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
+}
+
+// parsesAs reports whether raw is a value of that kind at all, leaving how
+// large or small it is to ParseValue.
+func parsesAs(kind config.Kind, raw string) bool {
+	var err error
+	switch kind {
+	case config.KindBool:
+		_, err = strconv.ParseBool(raw)
+	case config.KindInt:
+		_, err = strconv.Atoi(raw)
+	case config.KindDuration:
+		_, err = time.ParseDuration(raw)
+	}
+	return err == nil
+}
+
+// envWant is the shape a value of that kind has to have, for an error message.
+func envWant(kind config.Kind) string {
+	switch kind {
+	case config.KindBool:
+		return "a boolean (true or false)"
+	case config.KindInt:
+		return "a whole number"
+	case config.KindDuration:
+		return "a duration; write the unit, as in 5s or 1m"
+	default:
+		return "a valid value"
+	}
+}
+
+// settingError reports a bad value, naming where it came from unless it came
+// from the flag the message already mentions.
+func (s *settingsSet) settingError(name, message string) error {
+	if s.Source(name) == sourceFlag || s.Source(name) == sourceDefault {
+		return clierr.Usage("%s", message)
+	}
+	return clierr.Usage("%s (from %s)", message, s.origin(name))
 }
 
 // settings returns the layered settings for this invocation, building them if

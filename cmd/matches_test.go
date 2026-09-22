@@ -12,10 +12,22 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
-// localTime renders a Unix timestamp the way a match listing does, so the
-// expectations below do not depend on the machine's time zone.
+// localTime renders a Unix timestamp the way a single-day match listing does,
+// so the expectations below do not depend on the machine's time zone.
 func localTime(epoch int64) string {
-	return time.Unix(epoch, 0).In(time.Local).Format("Mon 15:04")
+	return time.Unix(epoch, 0).In(time.Local).Format(frc.TimeLayout)
+}
+
+// localDateTime is localTime for a listing that spans more than one day, which
+// carries the date as well — and the year too when the match did not happen in
+// the year the clock is in, so that these expectations do not go stale as the
+// seasons the fixtures are from recede.
+func localDateTime(epoch int64) string {
+	at := time.Unix(epoch, 0).In(time.Local)
+	if at.Year() != nowFunc().In(time.Local).Year() {
+		return at.Format(frc.YearTimeLayout)
+	}
+	return at.Format(frc.DatedTimeLayout)
 }
 
 func eventMatchesServer(t *testing.T) *httptest.Server {
@@ -46,17 +58,22 @@ func TestEventMatchesColumns(t *testing.T) {
 	requireNoError(t, err, "")
 
 	records := parseCSV(t, out)
-	wantHeader := []string{"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner", "Time", "Time Source", "Status"}
+	wantHeader := []string{
+		"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner",
+		"Time", "When", "Time Source", "Status",
+	}
 	if !equalStrings(records[0], wantHeader) {
 		t.Errorf("header = %v, want %v", records[0], wantHeader)
 	}
 
-	// Qual 12: played, red wins, and a surrogate on blue.
+	// Qual 12: played, red wins, and a surrogate on blue. The event ran from
+	// Friday to Sunday, so its times carry the date; a played match has no
+	// countdown left to print.
 	want := []string{
 		"Qual 12", "2024cthar_qm12",
 		"177, 1073, 5507", "230, 1071, 4055*",
 		"88-61", "red",
-		localTime(1711130820), "actual", "Played",
+		localDateTime(1711130820), "", "actual", "Played",
 	}
 	if got := findRow(t, records, "2024cthar_qm12"); !equalStrings(got, want) {
 		t.Errorf("qm12 row =\n%v\nwant\n%v", got, want)
@@ -66,6 +83,7 @@ func TestEventMatchesColumns(t *testing.T) {
 // An unplayed match scores -1/-1; the score column stays blank and the status
 // says so. Its time is the queue's prediction, not a result.
 func TestEventMatchesLeavesAnUnplayedScoreBlank(t *testing.T) {
+	withNow(t, time.Unix(1711122000-1080, 0))
 	srv := eventMatchesServer(t)
 	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
@@ -74,7 +92,7 @@ func TestEventMatchesLeavesAnUnplayedScoreBlank(t *testing.T) {
 		"Qual 2", "2024cthar_qm2",
 		"558, 3467, 2168", "195, 1124, 6153",
 		"", "",
-		localTime(1711122000), "predicted", "Scheduled",
+		localDateTime(1711122000), "in 18m", "predicted", "Scheduled",
 	}
 	if got := findRow(t, parseCSV(t, out), "2024cthar_qm2"); !equalStrings(got, want) {
 		t.Errorf("unplayed row =\n%v\nwant\n%v", got, want)
@@ -227,14 +245,17 @@ func TestEventMatchesFilterByTeam(t *testing.T) {
 	}
 }
 
-// A team that played no matches is an empty listing, not an error.
+// A team that played no matches is an empty listing, not an error -- and an
+// empty listing is empty: no rows, and so no header row either, since a lone
+// row of column names in the file a pipeline collects is not data.
 func TestEventMatchesFilterByTeamWithNoMatches(t *testing.T) {
 	srv := eventMatchesServer(t)
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "9999", "--format", "csv")
-	requireNoError(t, err, "")
-	if got := csvColumn(t, out, 1); len(got) != 0 {
-		t.Errorf("matches = %v, want none", got)
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "9999", "--format", "csv")
+	requireNoError(t, err, errOut)
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
 	}
+	requireContains(t, errOut, "note: no matches for team 9999 at 2024cthar")
 }
 
 func TestEventMatchesFilterByLevel(t *testing.T) {
@@ -420,13 +441,15 @@ func TestEventMatchesTimeSourceIsADroppableColumn(t *testing.T) {
 	if !equalStrings(records[0], []string{"Match", "Time"}) {
 		t.Errorf("header = %v", records[0])
 	}
-	if records[1][1] != localTime(1711122000) {
+	if records[1][1] != localDateTime(1711122000) {
 		t.Errorf("time = %q", records[1][1])
 	}
 }
 
 // A 2021 remote event ran no matches. The listing is empty, and that is not an
-// error.
+// error — but a bare header row is not an answer either, so stdout stays empty
+// and the reason goes to stderr, where it cannot land in a file the table was
+// piped into.
 func TestEventMatchesWithNoMatches(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2021ctwat":         event2021ctwatJSON,
@@ -435,14 +458,158 @@ func TestEventMatchesWithNoMatches(t *testing.T) {
 	out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", "table")
 	requireNoError(t, err, errOut)
 
-	if got := lines(out); got[0] != strings.Join([]string{}, "") && !strings.HasPrefix(got[0], "Match") {
-		t.Errorf("want just a header, got:\n%s", out)
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
 	}
-	if len(lines(out)) != 2 {
-		t.Errorf("want a header and its separator only, got:\n%s", out)
+	if want := "note: no matches posted yet for 2021ctwat\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// An empty listing prints nothing on stdout, which is what the README has
+// always said it does: a lone row of column names is a table pretending to
+// have found something, and in a file a pipeline collects it is a header with
+// no data under it. JSON is the exception it has always been.
+func TestEmptyListingPrintsNothingOnStdout(t *testing.T) {
+	for _, format := range []string{"table", "csv", "tsv", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+			out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", format)
+			requireNoError(t, err, errOut)
+			if out != "" {
+				t.Errorf("stdout = %q, want nothing", out)
+			}
+		})
+	}
+	t.Run("json", func(t *testing.T) {
+		srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+		out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", "json")
+		requireNoError(t, err, errOut)
+		if strings.TrimSpace(out) != "[]" {
+			t.Errorf("stdout = %q, want []", out)
+		}
+	})
+}
+
+// The rule is in the shared table plumbing, so it holds for a listing that is
+// nothing like a match table -- including the one kind that carries a cut line
+// and goes through its own entry point.
+func TestEmptyListingsPrintNothingAcrossCommands(t *testing.T) {
+	cases := []struct {
+		name  string
+		serve map[string]any
+		args  []string
+	}{
+		{"event list", map[string]any{"/events/2024": "[]"}, []string{"event", "list", "--year", "2024"}},
+		{"district rankings", map[string]any{"/district/2024ne/rankings": "[]"}, []string{"district", "rankings", "2024ne"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			for _, format := range []string{"table", "csv"} {
+				srv := newFakeTBA(t, c.serve)
+				out, errOut, err := runCmd(t, srv, append(c.args, "--format", format)...)
+				requireNoError(t, err, errOut)
+				if out != "" {
+					t.Errorf("%s stdout = %q, want nothing", format, out)
+				}
+			}
+		})
+	}
+}
+
+// Every format a person reads gets the note; JSON does not, because an empty
+// array already says it and its reader is a program.
+func TestEventMatchesEmptyNoteByFormat(t *testing.T) {
+	for _, format := range []string{"table", "csv", "tsv", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+			_, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--format", format)
+			requireNoError(t, err, errOut)
+			if want := "note: no matches posted yet for 2021ctwat\n"; errOut != want {
+				t.Errorf("stderr = %q, want %q", errOut, want)
+			}
+		})
+	}
+}
+
+func TestEventMatchesEmptyJSONIsAnEmptyArray(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2021ctwat/matches": "[]"})
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2021ctwat", "--json")
+	requireNoError(t, err, errOut)
+	if strings.TrimSpace(out) != "[]" {
+		t.Errorf("stdout = %q, want an empty array", out)
 	}
 	if errOut != "" {
-		t.Errorf("stderr = %q", errOut)
+		t.Errorf("stderr = %q, want nothing alongside JSON", errOut)
+	}
+}
+
+// A filter that matched nothing is a different answer from an event with no
+// schedule, and says so.
+func TestEventMatchesNoteWhenTheTeamFilterEmptiesTheListing(t *testing.T) {
+	srv := eventMatchesServer(t)
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "9999", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no matches for team 9999 at 2024cthar\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+func TestEventMatchesNoteWhenTheLevelFilterEmptiesTheListing(t *testing.T) {
+	srv := eventMatchesServer(t)
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--level", "qf", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no qf matches for 2024cthar\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// An event whose matches are all played has nothing upcoming, which is what
+// asking on the Monday after looks like.
+func TestEventMatchesNoteWhenNothingIsUpcoming(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2019ctwat":         event2019ctwatJSON,
+		"/event/2019ctwat/matches": matches2019ctwatJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2019ctwat", "--upcoming", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no upcoming matches for 2019ctwat\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// A team's season listing names the team and the season it found nothing in.
+func TestTeamMatchesNoteWhenASeasonIsEmpty(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/team/frc177/matches/2024": "[]"})
+	_, errOut, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no matches posted yet for team 177 in 2024\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// At one event it names the event, the way the question was asked.
+func TestTeamMatchesNoteAtAnEvent(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/event/2021ctwat/matches": "[]",
+	})
+	_, errOut, err := runCmd(t, srv, "team", "matches", "177", "--event", "2021ctwat", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no matches posted yet for 2021ctwat\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// A listing with rows in it says nothing at all.
+func TestEventMatchesSaysNothingWhenItHasRows(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2019ctwat":         event2019ctwatJSON,
+		"/event/2019ctwat/matches": matches2019ctwatJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "event", "matches", "2019ctwat", "--format", "table")
+	requireNoError(t, err, errOut)
+	if errOut != "" {
+		t.Errorf("stderr = %q, want nothing", errOut)
 	}
 }
 
@@ -455,14 +622,73 @@ func TestEventMatchesFor2015(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "matches", "2015ctwat", "--format", "csv")
 	requireNoError(t, err, "")
 
+	// The one match is played, so When counts down to nothing -- and stays,
+	// empty, because a file keeps every column. 2015 is not today, so the time
+	// carries its date, and not this season either, so it carries its year.
 	want := []string{
 		"Qual 7", "2015ctwat_qm7",
 		"177, 1071, 2168", "230, 195, 558",
 		"44-44", "tie",
-		localTime(1427464800), "scheduled", "Played",
+		localDateTime(1427464800), "", "scheduled", "Played",
 	}
 	if got := findRow(t, parseCSV(t, out), "2015ctwat_qm7"); !equalStrings(got, want) {
 		t.Errorf("row =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// Nothing counts down in a listing of matches that are all played, so When is
+// blank the whole way down. A header with nothing under it is not a column --
+// on screen. In csv it is: the header of a file is a schema, and a column that
+// comes and goes with the event asked about is not one.
+func TestEventMatchesDropsTheEmptyWhenColumn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":         event2024ctharJSON,
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	header := lines(out)[0]
+	if strings.Contains(header, "When") {
+		t.Errorf("header = %q, want no When column", header)
+	}
+	if !strings.Contains(header, "Time") || !strings.Contains(header, "Status") {
+		t.Errorf("header = %q, want the columns that do carry something", header)
+	}
+}
+
+func TestEventMatchesCSVKeepsTheEmptyWhenColumn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	for _, format := range []string{"csv", "tsv"} {
+		t.Run(format, func(t *testing.T) {
+			out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", format)
+			requireNoError(t, err, errOut)
+			want := []string{
+				"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner",
+				"Time", "When", "Time Source", "Status",
+			}
+			got := strings.Split(lines(out)[0], map[string]string{"csv": ",", "tsv": "\t"}[format])
+			if !equalStrings(got, want) {
+				t.Errorf("header = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// A column that is blank on some rows and not others is data, not emptiness:
+// a played match has nothing to count down to, and that is the answer.
+func TestEventMatchesKeepsWhenForAnUpcomingMatch(t *testing.T) {
+	withNow(t, time.Unix(1711220400-600, 0))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + matchViewUnplayedJSON + "]",
+	})
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	if header := parseCSV(t, out)[0]; !contains(header, "When") {
+		t.Errorf("header = %v, want the When column kept", header)
 	}
 }
 
@@ -474,26 +700,95 @@ func TestTeamMatchesColumnsAndOrder(t *testing.T) {
 	requireNoError(t, err, "")
 
 	records := parseCSV(t, out)
-	wantHeader := []string{"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner", "Time", "Time Source", "Status"}
+	wantHeader := append([]string{"Event"}, matchHeaders...)
 	if !equalStrings(records[0], wantHeader) {
 		t.Errorf("header = %v, want %v", records[0], wantHeader)
 	}
 	want := []string{"2024cthar_qm2", "2024cthar_qm3", "2024cthar_qm7", "2024cthar_qm12", "2024cthar_sf13m1", "2024cthar_f1m2"}
-	if got := csvColumn(t, out, 1); !equalStrings(got, want) {
+	if got := csvColumn(t, out, 2); !equalStrings(got, want) {
 		t.Errorf("order = %v, want %v", got, want)
 	}
 }
 
 // Without --event the listing spans a season, so there is no single bracket to
-// ask about and no event is fetched.
-func TestTeamMatchesForAYearFetchesNoEvent(t *testing.T) {
+// ask about: the second request is the team's event list, which orders the
+// groups, not an event fetched for its playoff type.
+func TestTeamMatchesForAYearFetchesTheTeamsEvents(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/matches/2024": matches2024ctharJSON,
+		"/team/frc177/events/2024":  teamEvents177In2024JSON,
 	})
 	_, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); !equalStrings(got, []string{"/team/frc177/matches/2024"}) {
-		t.Errorf("requests = %v", got)
+
+	want := []string{"/team/frc177/matches/2024", "/team/frc177/events/2024"}
+	if got := requestPaths(t, srv); !equalStrings(got, want) {
+		t.Errorf("requests = %v, want %v", got, want)
+	}
+}
+
+// A season's listing is grouped by event, in the order the team competed, and
+// each row says which event it belongs to. Sorted as one list, Waterbury's
+// Qual 46 would land next to Hartford's.
+func TestTeamMatchesGroupsASeasonByEvent(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": teamMatches177Season2024JSON,
+		"/team/frc177/events/2024":  teamEvents177In2024JSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, "")
+
+	records := parseCSV(t, out)
+	if records[0][0] != "Event" {
+		t.Errorf("header = %v, want the Event column first", records[0])
+	}
+	// Waterbury ran in week 1 and Hartford in week 3, though the API listed
+	// the events the other way round.
+	wantKeys := []string{"2024ctwat_qm5", "2024ctwat_qm46", "2024cthar_qm12", "2024cthar_qm46"}
+	if got := csvColumn(t, out, 2); !equalStrings(got, wantKeys) {
+		t.Errorf("order = %v, want %v", got, wantKeys)
+	}
+	wantEvents := []string{"2024ctwat", "2024ctwat", "2024cthar", "2024cthar"}
+	if got := csvColumn(t, out, 0); !equalStrings(got, wantEvents) {
+		t.Errorf("event column = %v, want %v", got, wantEvents)
+	}
+}
+
+// The event list only orders the groups. Without it the listing still groups,
+// by event key, rather than interleaving the season.
+func TestTeamMatchesGroupsWithoutTheEventList(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": teamMatches177Season2024JSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	wantKeys := []string{"2024cthar_qm12", "2024cthar_qm46", "2024ctwat_qm5", "2024ctwat_qm46"}
+	if got := csvColumn(t, out, 2); !equalStrings(got, wantKeys) {
+		t.Errorf("order = %v, want %v", got, wantKeys)
+	}
+}
+
+// One event needs no Event column: every row would carry the same key.
+func TestTeamMatchesAtAnEventHasNoEventColumn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar":                     event2024ctharJSON,
+		"/team/frc177/event/2024cthar/matches": teamMatches177At2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--event", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+	if got := parseCSV(t, out)[0][0]; got != "Match" {
+		t.Errorf("first column = %q, want the match label", got)
+	}
+}
+
+// An event listing never carries the column either: the key is in the command.
+func TestEventMatchesHasNoEventColumn(t *testing.T) {
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+	if got := parseCSV(t, out)[0][0]; got != "Match" {
+		t.Errorf("first column = %q, want the match label", got)
 	}
 }
 
@@ -556,22 +851,50 @@ func TestTeamMatchesFilterByLevel(t *testing.T) {
 	})
 	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--level", "playoff", "--format", "csv")
 	requireNoError(t, err, "")
-	if got := csvColumn(t, out, 1); !equalStrings(got, []string{"2024cthar_sf13m1", "2024cthar_f1m2"}) {
+	if got := csvColumn(t, out, 2); !equalStrings(got, []string{"2024cthar_sf13m1", "2024cthar_f1m2"}) {
 		t.Errorf("matches = %v", got)
 	}
 }
 
-// team matches takes --team too, so the same filters work everywhere a match
-// listing does.
-func TestTeamMatchesFilterByTeam(t *testing.T) {
+// `team matches 177` is already about one team, so a --team of its own could
+// only disagree with the argument — and `--team 254` used to print an empty
+// table rather than say so.
+func TestTeamMatchesHasNoTeamFlag(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/matches/2024": matches2024ctharJSON,
 	})
-	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--team", "5507", "--format", "csv")
+	_, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--team", "254")
+	requireErrorContains(t, err, "unknown flag: --team")
+	if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+	}
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a rejected flag should not reach the API, got %v", got)
+	}
+}
+
+// The listing about an event keeps --team: there, narrowing to one team is the
+// whole point.
+func TestEventMatchesKeepsTheTeamFlag(t *testing.T) {
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--team", "5507", "--format", "csv")
 	requireNoError(t, err, "")
 	want := []string{"2024cthar_qm12", "2024cthar_sf13m1", "2024cthar_f1m2"}
 	if got := csvColumn(t, out, 1); !equalStrings(got, want) {
 		t.Errorf("matches = %v, want %v", got, want)
+	}
+}
+
+// The filters that do make sense on a team's listing still do.
+func TestTeamMatchesKeepsTheOtherFilters(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": matches2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024",
+		"--level", "playoff", "--format", "csv")
+	requireNoError(t, err, "")
+	if got := csvColumn(t, out, 2); !equalStrings(got, []string{"2024cthar_sf13m1", "2024cthar_f1m2"}) {
+		t.Errorf("matches = %v", got)
 	}
 }
 
@@ -586,10 +909,15 @@ func parseCSV(t *testing.T, s string) [][]string {
 	return records
 }
 
-// csvColumn returns one column of a csv body, without its header.
+// csvColumn returns one column of a csv body, without its header. An empty
+// listing prints nothing at all, headers included, so there is no column in it
+// to return.
 func csvColumn(t *testing.T, s string, col int) []string {
 	t.Helper()
 	records := parseCSV(t, s)
+	if len(records) == 0 {
+		return nil
+	}
 	out := make([]string, 0, len(records))
 	for _, row := range records[1:] {
 		if col < len(row) {
@@ -639,4 +967,122 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// Today's competition needs no date on every row: the weekday and the clock
+// are what a team in the pits reads, and they know what day it is.
+func TestEventMatchesOmitsTheDateForTodaysMatches(t *testing.T) {
+	withNow(t, time.Unix(1711120920, 0))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localTime(1711120920) {
+		t.Errorf("time = %q, want %q", got, localTime(1711120920))
+	}
+}
+
+// The same listing read later is a listing of history, and "Fri 11:22" names
+// one of the season's Fridays without saying which.
+func TestEventMatchesAddsTheDateOnceTheDayIsPast(t *testing.T) {
+	withNow(t, time.Unix(1711120920+30*24*3600, 0))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localDateTime(1711120920) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1711120920))
+	}
+}
+
+// A listing that spans days writes the date, because a weekday alone could be
+// any weekend of the season.
+func TestEventMatchesAddsTheDateAcrossDays(t *testing.T) {
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	row := findRow(t, parseCSV(t, out), "2024cthar_f1m2")
+	if got := row[6]; got != localDateTime(1711307040) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1711307040))
+	}
+}
+
+// A listing of an older season carries the year as well as the date: "Mar 22
+// 11:40" says nothing about which season it was, which is the first thing
+// anybody asks about an old match.
+func TestEventMatchesAddTheYearForAnOlderSeason(t *testing.T) {
+	withNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	want := time.Unix(1711122000, 0).In(time.Local).Format(frc.YearTimeLayout)
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm2")[6]; got != want {
+		t.Errorf("time = %q, want %q", got, want)
+	}
+}
+
+// A listing inside the season keeps the shorter form.
+func TestEventMatchesLeaveTheYearOffThisSeason(t *testing.T) {
+	withNow(t, time.Date(2024, 5, 1, 12, 0, 0, 0, time.Local))
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	want := time.Unix(1711122000, 0).In(time.Local).Format(frc.DatedTimeLayout)
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm2")[6]; got != want {
+		t.Errorf("time = %q, want %q", got, want)
+	}
+}
+
+// A season's listing always spans days, so every row carries its date.
+func TestTeamMatchesSeasonTimesCarryTheDate(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/matches/2024": teamMatches177Season2024JSON,
+		"/team/frc177/events/2024":  teamEvents177In2024JSON,
+	})
+	out, _, err := runCmd(t, srv, "team", "matches", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, "")
+
+	// Column 7 is Time, one to the right of the season listing's Event column.
+	if got := findRow2(t, parseCSV(t, out), "2024ctwat_qm5")[7]; got != localDateTime(1709913780) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1709913780))
+	}
+}
+
+// The countdown answers "when", which only a match still to come has: a played
+// one has a score instead, and a relative time on it would change every run.
+func TestEventMatchesWhenCountsDownUnplayedMatchesOnly(t *testing.T) {
+	withNow(t, time.Unix(1711122000-7200, 0))
+	srv := eventMatchesServer(t)
+	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, "")
+
+	records := parseCSV(t, out)
+	if got := findRow(t, records, "2024cthar_qm2")[7]; got != "in 2h" {
+		t.Errorf("When = %q, want %q", got, "in 2h")
+	}
+	for _, key := range []string{"2024cthar_qm3", "2024cthar_qm7", "2024cthar_qm12", "2024cthar_f1m2"} {
+		if got := findRow(t, records, key)[7]; got != "" {
+			t.Errorf("When for the played %s = %q, want it empty", key, got)
+		}
+	}
+}
+
+// findRow2 is findRow for a season listing, whose Key column sits behind the
+// Event column.
+func findRow2(t *testing.T, records [][]string, key string) []string {
+	t.Helper()
+	for _, row := range records[1:] {
+		if len(row) > 2 && row[2] == key {
+			return row
+		}
+	}
+	t.Fatalf("no row for %q in %v", key, records)
+	return nil
 }

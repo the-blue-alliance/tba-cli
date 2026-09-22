@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -59,6 +60,9 @@ func NewRootCmd() *cobra.Command {
 
 	// Cobra reports a bad flag as a plain error; tag it so main can exit 2.
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		if advice := negativeNumberArg(err); advice != nil {
+			return advice
+		}
 		return clierr.Wrap(clierr.KindUsage, err)
 	})
 
@@ -73,7 +77,11 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")
 	rootCmd.PersistentFlags().Bool("no-headers", false, "Omit the header row from table, csv, tsv and markdown output")
 	rootCmd.PersistentFlags().String("columns", "", "Select and order columns by header name or 1-based index (e.g. --columns key,name)")
-	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (e.g. --sort=-opr)")
+	// The example is a column every listing has and every format can order
+	// by. It used to be --sort=-opr, which fails the moment the output is
+	// piped: the OPR payload is an object keyed by team, and an object has no
+	// row order to rearrange.
+	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (e.g. --sort=name)")
 	rootCmd.PersistentFlags().String("color", "auto", "When to colorize output: auto, always, never")
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (alias for --color=never; wins over --color)")
 
@@ -90,10 +98,42 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newOpenCmd())
 	rootCmd.AddCommand(newConfigCmd())
 
+	// A command that only groups others must still refuse an unknown one;
+	// applied to the finished tree so a new group cannot forget it.
+	applyGroupArgs(rootCmd)
+
 	// Argument completion is wired onto the finished tree; see completion.go.
 	attachCompletions(rootCmd)
 
 	return rootCmd
+}
+
+// shorthandFlagPattern picks the offending token out of pflag's complaint
+// about a shorthand flag it does not know: "unknown shorthand flag: '5' in -5".
+var shorthandFlagPattern = regexp.MustCompile(`^unknown shorthand flag: '.' in (-[^ ]+)$`)
+
+// negativeNumberArg recognises a team number someone wrote with a minus sign
+// and answers the question they actually have.
+//
+// `tba team view -5` came back as "unknown shorthand flag: '5' in -5", which
+// is about pflag's parser rather than about anything the user typed on
+// purpose: there is no -5 flag and there never will be, because the argument
+// is a team number. It returns nil for anything else, so a real unknown
+// shorthand still gets cobra's own wording.
+func negativeNumberArg(err error) error {
+	match := shorthandFlagPattern.FindStringSubmatch(err.Error())
+	if match == nil {
+		return nil
+	}
+	token := match[1]
+	digits := token[1:]
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return nil
+		}
+	}
+	return clierr.Usage("%q looks like a negative number; team numbers and keys never start with '-' (did you mean %q?)",
+		token, digits)
 }
 
 // Run executes an already-built command tree.
@@ -116,10 +156,20 @@ func Run(ctx context.Context, root *cobra.Command) error {
 	if err == nil {
 		return nil
 	}
+	if cmd == nil {
+		cmd = root
+	}
+	// The line that says what went wrong is printed first, above the usage
+	// hint. It used to come last, below the call shape and the "run --help"
+	// line, so on a small terminal the one line worth reading was the one
+	// that had already scrolled away.
+	//
+	// A closed stdout and a Ctrl-C get no line at all: the reader has already
+	// gone, and the person who pressed Ctrl-C knows they did.
+	if !clierr.Silent(err) {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Error:", err)
+	}
 	if clierr.ExitCode(err) == clierr.ExitUsage {
-		if cmd == nil {
-			cmd = root
-		}
 		printUsageHint(cmd)
 	}
 	return err

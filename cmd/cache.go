@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/cache"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 )
 
 // staleAfter is when a cached entry stops being worth counting as current.
@@ -47,7 +48,7 @@ type cacheInfoReport struct {
 func newCacheInfoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "info",
-		Short: "Show cache directory, size and entry ages",
+		Short: "Show the cache directory, size and entry ages",
 		Example: `  tba cache info
   tba cache info --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -97,12 +98,20 @@ func newCacheInfoCmd() *cobra.Command {
 	}
 }
 
+// ageAgo says how long before now t was.
+//
+// A timestamp in the future is a clock that moved, not a cache entry from
+// tomorrow, so it is clamped: "0s ago" rather than a countdown.
+func ageAgo(now, t time.Time) string {
+	return humanize.Age(max(0, now.Sub(t))) + " ago"
+}
+
 // ageOrDash renders how long ago t was, or a dash when there is no such entry.
 func ageOrDash(now time.Time, t *time.Time) string {
 	if t == nil {
 		return "-"
 	}
-	return cache.FormatAge(now.Sub(*t)) + " ago"
+	return ageAgo(now, *t)
 }
 
 // cacheListRow is one cached response, as `cache list` reports it.
@@ -149,7 +158,7 @@ func newCacheListCmd() *cobra.Command {
 				data = append(data, row)
 				rows = append(rows, []string{
 					row.Path,
-					cache.FormatAge(now.Sub(e.FetchedAt)) + " ago",
+					ageAgo(now, e.FetchedAt),
 					ageOrDash(now, row.ValidatedAt),
 					cache.FormatSize(e.Size),
 					e.ETag,

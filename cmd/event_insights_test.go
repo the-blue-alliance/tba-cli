@@ -12,6 +12,7 @@ func predictionsServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return newFakeTBA(t, map[string]any{
 		"/event/2024cthar/predictions": predictions2024ctharJSON,
+		"/event/2024cthar/matches":     matchesPredicted2024ctharJSON,
 	})
 }
 
@@ -27,13 +28,101 @@ func TestEventPredictionsTable(t *testing.T) {
 		"--format", "csv")
 	requireNoError(t, err, "")
 	want := []string{
-		"Match,Red Score,Blue Score,Predicted Winner,Confidence",
-		"2024cthar_qm1,84.2,63.1,Red,78.53%",
-		"2024cthar_qm2,55.5,77.25,Blue,62.31%",
-		"2024cthar_qm10,70,71.05,Blue,51.04%",
-		"2024cthar_sf1m1,101.5,99.9,Red,50.88%",
-		"2024cthar_sf3m1,95,110.2,Blue,66%",
-		"2024cthar_f1m1,121,118.4,Red,52%",
+		"Match,Key,Red,Blue,Red Score,Blue Score,Predicted Winner,Confidence",
+		`Qual 1,2024cthar_qm1,"177, 1073, 5507","230, 1071, 4055",84.20,63.10,red,78.53%`,
+		`Qual 2,2024cthar_qm2,"558, 3467, 2168","195, 1124, 6153",55.50,77.25,blue,62.31%`,
+		`Qual 10,2024cthar_qm10,"177, 195, 6153","1073, 558, 4055",70.00,71.05,blue,51.04%`,
+		// A 0-0 prediction is no prediction: no winner, no confidence.
+		`Qual 11,2024cthar_qm11,"5507, 1071, 1124","230, 2168, 3467",0.00,0.00,,`,
+		`SF 1,2024cthar_sf1m1,"177, 1073, 5507","3467, 6153, 2168",101.50,99.90,red,50.88%`,
+		`SF 3,2024cthar_sf3m1,"230, 195, 1071","558, 1124, 4055",95.00,110.20,blue,66.00%`,
+		// The match list does not carry the final, so it is labelled from its
+		// key and has no teams to show.
+		"Final 1,2024cthar_f1m1,,,121.00,118.40,red,52.00%",
+	}
+	got := lines(out)
+	if len(got) != len(want) {
+		t.Fatalf("got %d lines, want %d:\n%s", len(got), len(want), out)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// A column of percentages is read by comparing them, so they all carry two
+// decimals: "66%" next to "51.04%" made the reader count digits.
+func TestEventPredictionsConfidenceKeepsTwoDecimals(t *testing.T) {
+	out, errOut, err := runCmd(t, predictionsServer(t), "event", "predictions", "2024cthar",
+		"--format", "csv", "--no-headers", "--columns", "confidence")
+	requireNoError(t, err, errOut)
+
+	for _, got := range lines(out) {
+		if got == "" {
+			continue // the 0-0 match, which has no confidence at all
+		}
+		if !strings.HasSuffix(got, "%") || len(got) < 4 || got[len(got)-4] != '.' {
+			t.Errorf("confidence = %q, want two decimals before the %%", got)
+		}
+	}
+	requireContains(t, out, "66.00%")
+}
+
+// Every other Winner column in the tool prints the API's own lowercase "red"
+// and "blue"; this one title-cased them, so the same column read two ways
+// depending on which command wrote it, and a script that matched one missed
+// the other.
+func TestEventPredictionsWinnerIsLowercase(t *testing.T) {
+	out, errOut, err := runCmd(t, predictionsServer(t), "event", "predictions", "2024cthar",
+		"--format", "csv", "--no-headers", "--columns", "predicted winner")
+	requireNoError(t, err, errOut)
+
+	for _, got := range lines(out) {
+		if got != "" && got != "red" && got != "blue" {
+			t.Errorf("winner = %q, want red, blue or nothing", got)
+		}
+	}
+	requireContains(t, out, "red")
+	requireContains(t, out, "blue")
+}
+
+// A predicted score is a number the model computed, and a column of them is
+// read by comparing them, so they all carry two decimals -- "0", "28.5" and
+// "36.42" one under the other put the decimal point in three places.
+func TestEventPredictionsScoresKeepTwoDecimals(t *testing.T) {
+	out, errOut, err := runCmd(t, predictionsServer(t), "event", "predictions", "2024cthar",
+		"--format", "csv", "--no-headers", "--columns", "red score,blue score")
+	requireNoError(t, err, errOut)
+
+	for _, line := range lines(out) {
+		for _, got := range strings.Split(line, ",") {
+			if len(got) < 4 || got[len(got)-3] != '.' {
+				t.Errorf("predicted score = %q, want two decimals", got)
+			}
+		}
+	}
+	requireContains(t, out, "0.00")
+	requireContains(t, out, "84.20")
+}
+
+// A model that cannot separate the two alliances has not predicted a winner.
+// "Red / 50%" reads as a prediction; it is the model declining to make one,
+// whether it says so with an exact half or with two equal scores.
+func TestEventPredictionsNameNoWinnerOnATie(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/predictions": predictionsTied2024ctharJSON,
+		"/event/2024cthar/matches":     "[]",
+	})
+	out, errOut, err := runCmd(t, srv, "event", "predictions", "2024cthar",
+		"--format", "csv", "--columns", "key,predicted winner,confidence")
+	requireNoError(t, err, errOut)
+
+	want := []string{
+		"Key,Predicted Winner,Confidence",
+		"2024cthar_qm20,,",
+		"2024cthar_qm21,,",
+		"2024cthar_qm22,red,78.53%",
 	}
 	got := lines(out)
 	if len(got) != len(want) {
@@ -51,9 +140,10 @@ func TestEventPredictionsTable(t *testing.T) {
 func TestEventPredictionsAreInPlayOrder(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		out, _, err := runCmd(t, predictionsServer(t), "event", "predictions", "2024cthar",
-			"--format", "tsv", "--no-headers", "--columns", "match")
+			"--format", "tsv", "--no-headers", "--columns", "key")
 		requireNoError(t, err, "")
-		want := "2024cthar_qm1 2024cthar_qm2 2024cthar_qm10 2024cthar_sf1m1 2024cthar_sf3m1 2024cthar_f1m1"
+		want := "2024cthar_qm1 2024cthar_qm2 2024cthar_qm10 2024cthar_qm11 " +
+			"2024cthar_sf1m1 2024cthar_sf3m1 2024cthar_f1m1"
 		if got := strings.Join(lines(out), " "); got != want {
 			t.Fatalf("run %d ordered them %q", i, got)
 		}
@@ -273,8 +363,10 @@ func TestEventInsightsOfAnEventWithNone(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/insights": "{}"})
 	out, _, err := runCmd(t, srv, "event", "insights", "2024cthar", "--format", "table")
 	requireNoError(t, err, "")
-	if got := lines(out); len(got) != 2 || !strings.HasPrefix(got[0], "Section") {
-		t.Errorf("output = %q", out)
+	// Nothing to report prints nothing: a "Section" header with no section
+	// under it is a table pretending to have found something.
+	if out != "" {
+		t.Errorf("output = %q, want nothing", out)
 	}
 }
 
@@ -328,5 +420,49 @@ func TestEventInsightCommandsCarryExamples(t *testing.T) {
 				t.Errorf("event %s has no Example block", sub.Name())
 			}
 		}
+	}
+}
+
+// The match list is a convenience. Losing it costs the labels their polish and
+// the teams their columns, not the table.
+func TestEventPredictionsSurviveAMissingMatchList(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/predictions": predictions2024ctharJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "event", "predictions", "2024cthar",
+		"--format", "csv", "--columns", "match,red,blue", "--no-headers")
+	requireNoError(t, err, errOut)
+
+	got := lines(out)
+	if got[0] != "Qual 1,," {
+		t.Errorf("first row = %q, want a label read out of the key", got[0])
+	}
+	if !contains(requestPaths(t, srv), "/event/2024cthar/matches") {
+		t.Errorf("the match list was never attempted: %v", requestPaths(t, srv))
+	}
+}
+
+// JSON does not carry the labels or the team lists, so it must not pay for
+// them either.
+func TestEventPredictionsJSONSkipsTheMatchList(t *testing.T) {
+	srv := predictionsServer(t)
+	_, _, err := runCmd(t, srv, "event", "predictions", "2024cthar", "--json")
+	requireNoError(t, err, "")
+	if got := requestPaths(t, srv); len(got) != 1 || got[0] != "/event/2024cthar/predictions" {
+		t.Errorf("requested %v, want only the predictions", got)
+	}
+}
+
+// The other two tables say nothing about individual matches.
+func TestEventPredictionsOtherTablesSkipTheMatchList(t *testing.T) {
+	for _, flag := range []string{"--rankings", "--stats"} {
+		t.Run(flag, func(t *testing.T) {
+			srv := predictionsServer(t)
+			_, _, err := runCmd(t, srv, "event", "predictions", "2024cthar", flag, "--format", "csv")
+			requireNoError(t, err, "")
+			if contains(requestPaths(t, srv), "/event/2024cthar/matches") {
+				t.Errorf("%s fetched the match list: %v", flag, requestPaths(t, srv))
+			}
+		})
 	}
 }
