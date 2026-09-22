@@ -1,8 +1,9 @@
 package frc
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -23,11 +24,71 @@ type KV struct {
 // flattened into dotted paths ("autoCommunity.B.1"), booleans read as yes and
 // no, and numbers drop the trailing zeroes JSON gives them. Sorting the keys
 // means the same game always prints in the same order.
+//
+// The sort is aware of the array indices in those paths: a 12-element array
+// reads 1, 2, ... 10, 11 rather than the 1, 10, 11, 2 a plain string sort
+// gives, which for a game piece grid is the difference between a readable
+// listing and a puzzle.
 func FlattenBreakdown(breakdown map[string]interface{}) []KV {
 	out := make([]KV, 0, len(breakdown))
 	flattenInto(&out, "", breakdown)
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	slices.SortFunc(out, func(a, b KV) int { return CompareBreakdownKeys(a.Key, b.Key) })
 	return out
+}
+
+// CompareBreakdownKeys orders two flattened breakdown paths, segment by
+// segment, comparing segments that are whole numbers as numbers. It returns
+// the usual negative/zero/positive.
+func CompareBreakdownKeys(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		if c := compareSegment(as[i], bs[i]); c != 0 {
+			return c
+		}
+	}
+	// A prefix sorts before what extends it: "auto" before "auto.0".
+	return cmp.Compare(len(as), len(bs))
+}
+
+// compareSegment orders one path segment. A numeric segment sorts before a
+// named one, so the indices of an array stay together even in the unlikely
+// event that something else shares their level.
+func compareSegment(a, b string) int {
+	an, aNum := segmentNumber(a)
+	bn, bNum := segmentNumber(b)
+	switch {
+	case aNum && bNum:
+		if c := cmp.Compare(an, bn); c != 0 {
+			return c
+		}
+		// "01" and "1" are different keys that read as the same number;
+		// fall back to the text so the order stays total.
+		return strings.Compare(a, b)
+	case aNum:
+		return -1
+	case bNum:
+		return 1
+	default:
+		return strings.Compare(a, b)
+	}
+}
+
+// segmentNumber reads a segment as an array index. Only plain non-negative
+// digits count: a key that merely starts with a digit is a name.
+func segmentNumber(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // AllianceBreakdown pulls one alliance's section out of a match's
