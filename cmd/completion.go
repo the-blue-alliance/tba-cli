@@ -193,12 +193,40 @@ func completeNothing(_ *cobra.Command, _ []string, _ string) ([]string, cobra.Sh
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeValues offers a fixed list of values, filtered by what has been
+// typed so far. It is what an enum flag wants: --format has six values and the
+// shell should not be offering file names instead.
+func completeValues(values ...string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		var out []string
+		for _, v := range values {
+			if hasPrefixFold(v, toComplete) {
+				out = append(out, v)
+			}
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+// attachGlobalFlagCompletions handles the persistent flags. Cobra keys
+// completion functions by the flag itself, so registering them once on the
+// root covers every command that inherits them.
+func attachGlobalFlagCompletions(root *cobra.Command) {
+	_ = root.RegisterFlagCompletionFunc("format", completeValues("auto", "table", "json", "csv", "tsv", "markdown"))
+	_ = root.RegisterFlagCompletionFunc("color", completeValues("auto", "always", "never"))
+	// These take a value only the user knows; a list of files is never it.
+	for _, name := range []string{"jq", "columns", "sort", "base-url", "timeout", "retries"} {
+		_ = root.RegisterFlagCompletionFunc(name, completeNothing)
+	}
+}
+
 // attachCompletions wires argument completion onto a finished command tree.
 //
 // It walks the tree instead of being set in each constructor so that adding a
 // command that takes an event key gets completion for free, and so that all
 // the completion behaviour is described in one place.
 func attachCompletions(root *cobra.Command) {
+	attachGlobalFlagCompletions(root)
 	for _, group := range root.Commands() {
 		switch group.Name() {
 		case "event":
