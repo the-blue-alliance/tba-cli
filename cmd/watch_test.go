@@ -327,7 +327,8 @@ func TestEventWatchEmitsOneJSONLinePerChange(t *testing.T) {
 	if poll, _ := change["poll"].(float64); poll != 2 {
 		t.Errorf("poll = %v, want 2", change["poll"])
 	}
-	if ts, _ := change["ts"].(string); ts != "2024-03-22T14:32:07"+tzOffset(t, "2024-03-22T14:32:07") {
+	wantTS := time.Date(2024, 3, 22, 14, 32, 7, 0, time.Local).Format(time.RFC3339)
+	if ts, _ := change["ts"].(string); ts != wantTS {
 		t.Errorf("ts = %q, want the RFC3339 time of the poll", ts)
 	}
 	match, ok := change["match"].(map[string]any)
@@ -337,17 +338,6 @@ func TestEventWatchEmitsOneJSONLinePerChange(t *testing.T) {
 	if _, ok := match["alliances"]; !ok {
 		t.Errorf("the embedded match should be the full API match: %v", match)
 	}
-}
-
-// tzOffset renders the machine's UTC offset at a local time, so the RFC3339
-// expectation above does not depend on where the test runs.
-func tzOffset(t *testing.T, layout string) string {
-	t.Helper()
-	at, err := time.ParseInLocation("2006-01-02T15:04:05", layout, time.Local)
-	if err != nil {
-		t.Fatalf("parsing %q: %v", layout, err)
-	}
-	return at.Format("-07:00")
 }
 
 // A poll the API answers with 304 found nothing new, and says nothing.
