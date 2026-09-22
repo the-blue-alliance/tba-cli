@@ -239,9 +239,23 @@ const alliances2024ctharJSON = `[
     "backup": null,
     "status": {
       "playoff_average": null,
+      "level": "f",
+      "double_elim_round": "Finals",
+      "record": {"wins": 5, "losses": 2, "ties": 0},
+      "current_level_record": {"wins": 0, "losses": 2, "ties": 0},
+      "status": "eliminated"
+    }
+  },
+  {
+    "name": "Alliance 3",
+    "declines": [],
+    "picks": ["frc3467", "frc6153", "frc2168"],
+    "backup": null,
+    "status": {
+      "playoff_average": null,
       "level": "sf",
-      "double_elim_round": "Round 5",
-      "record": {"wins": 4, "losses": 2, "ties": 0},
+      "double_elim_round": "Round 4",
+      "record": {"wins": 2, "losses": 2, "ties": 0},
       "current_level_record": {"wins": 0, "losses": 1, "ties": 0},
       "status": "eliminated"
     }
@@ -371,6 +385,36 @@ const teamStatuses2024ctharJSON = `{
     "overall_status_str": "Team 5507 was <b>Rank 30</b> with a record of <b>4-8-0</b> in quals.",
     "next_match_key": null,
     "last_match_key": "2024cthar_qm82"
+  },
+  "frc230": {
+    "qual": {
+      "num_teams": 40,
+      "status": "completed",
+      "ranking": {
+        "team_key": "frc230",
+        "rank": 3,
+        "record": {"wins": 8, "losses": 4, "ties": 0},
+        "qual_average": null,
+        "matches_played": 12,
+        "dq": 0,
+        "sort_orders": [2.0, 0.0, 70.0, 22.0, 12.0]
+      },
+      "sort_order_info": [{"name": "Ranking Score", "precision": 2}]
+    },
+    "alliance": {"name": "Alliance 2", "number": 2, "pick": 0, "backup": null},
+    "playoff": {
+      "level": "f",
+      "double_elim_round": "Finals",
+      "current_level_record": {"wins": 0, "losses": 2, "ties": 0},
+      "record": {"wins": 5, "losses": 2, "ties": 0},
+      "status": "eliminated",
+      "playoff_average": null
+    },
+    "alliance_status_str": "<b>Captain</b> of <b>Alliance 2</b>",
+    "playoff_status_str": "<b>Eliminated</b> in the <b>Finals</b>",
+    "overall_status_str": "Team 230 was <b>Rank 3</b> with a record of <b>8-4-0</b> in quals, and was <b>eliminated</b> in the finals.",
+    "next_match_key": null,
+    "last_match_key": "2024cthar_f1m2"
   },
   "frc2168": {
     "qual": null,

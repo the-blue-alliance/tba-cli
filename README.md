@@ -413,7 +413,10 @@ altogether. Seasons without a win/loss record (2015) show an empty Record.
 `event alliances` shows `Alliance | Captain | Pick 1 | Pick 2 | Backup | Status |
 Level | Record | Declines`. Backup reads "1234 in for 5678" when the API says who
 the backup replaced, Level is the playoff round the alliance reached (`QF`, `SF`,
-`F`) and Record is its playoff win-loss-tie.
+`F`) and Record is its playoff win-loss-tie. The API calls the alliance that lost
+the final "eliminated", like every other alliance that went out; the table and
+`event team-statuses` both read it as `finalist`, and the JSON keeps the API's
+own word.
 
 `event team-statuses` is the event-wide view of where each team stands:
 `Team | Rank | Record | Alliance | Pick | Playoff Level | Round | Playoff

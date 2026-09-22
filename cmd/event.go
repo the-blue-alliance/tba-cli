@@ -330,7 +330,8 @@ they got.
 Captain, Pick 1 and Pick 2 are the three teams in selection order. Backup names
 the team called in mid-playoffs, as "1234 in for 5678" when the API says who it
 replaced. Status and Level come from the alliance's playoff status, and Record
-is its playoff win-loss-tie.`,
+is its playoff win-loss-tie. The alliance that lost the final reads "finalist"
+rather than the "eliminated" the API sends for every alliance that went out.`,
 		Example: `  tba event alliances 2024cthar
   tba event alliances 2024cthar --format json
   tba event alliances 2024cthar --columns alliance,captain,status`,
@@ -366,7 +367,7 @@ func eventAlliancesTable(alliances []api.EventAlliance) output.Table {
 		}
 		status, level, record := "", "", ""
 		if a.Status != nil {
-			status = a.Status.Status
+			status = playoffStatus(a.Status)
 			level = strings.ToUpper(a.Status.Level)
 			record = formatWLT(a.Status.Record)
 		}

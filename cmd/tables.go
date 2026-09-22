@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -53,6 +54,22 @@ func outputTableWith(cmd *cobra.Command, data interface{}, table output.Table) e
 		NoHeaders: settings(cmd).Bool("no-headers"),
 		Color:     color,
 	})
+}
+
+// playoffStatus renders an alliance's playoff standing.
+//
+// TBA marks the alliance that lost the final "eliminated", the same word it
+// gives an alliance knocked out in the first round. Nobody describes second
+// place that way, and the level is right there to tell the two apart, so an
+// alliance eliminated at level "f" is the finalist.
+func playoffStatus(s *api.AllianceStatus) string {
+	if s == nil {
+		return ""
+	}
+	if strings.EqualFold(s.Status, "eliminated") && strings.EqualFold(s.Level, "f") {
+		return "finalist"
+	}
+	return s.Status
 }
 
 // formatWLT renders a win-loss-tie record. A nil record — 2015, which had no
