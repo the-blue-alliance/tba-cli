@@ -22,6 +22,14 @@ type Table struct {
 	// reorders rows drops them rather than leaving a line stranded in the
 	// middle of a differently-sorted table.
 	Dividers map[int]string
+	// Breaks marks the gaps between rows that are worth a blank line: a break
+	// at key i leaves one after Rows[i]. It says the rows below are a
+	// different kind of thing from the rows above, which is a weaker claim
+	// than a divider's labelled rule and needs no words to make.
+	//
+	// Like Dividers it is presentation, honoured only by the aligned text
+	// table: a blank line in csv or markdown is a broken file, not a pause.
+	Breaks map[int]bool
 }
 
 // dividerAfter returns the text to draw after row i, if any.
@@ -115,6 +123,11 @@ func renderText(w io.Writer, t Table, noHeaders, color bool) {
 			// Drawn whole, on its own line: squeezing it into the first cell
 			// would widen that column by the length of the sentence.
 			fmt.Fprintf(w, "--- %s ---\n", text)
+		}
+		// Not after the last row, where it would only add a trailing blank
+		// line to whatever follows the table.
+		if t.Breaks[i] && i+1 < len(t.Rows) {
+			fmt.Fprintln(w)
 		}
 	}
 }

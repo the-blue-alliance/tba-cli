@@ -41,7 +41,8 @@ The breakdown is printed as one table with a column per alliance, since what
 a breakdown is for is comparing the two. Its fields change every season and are
 documented nowhere, so they are ordered rather than interpreted: the total,
 the ranking points, everything else that scores, the penalties, then the rest.
-A field both alliances left at zero is dropped; --full keeps every one.`,
+A field neither alliance did anything in is dropped, as are the season's own
+constants, the thresholds a bonus is measured against; --full keeps every one.`,
 		Example: `  tba match view 2024cthar_qm12
   tba match view 2024cthar_qm12 --full
   tba match view 2024cthar_sf3m1 --format json`,
@@ -183,10 +184,16 @@ func printBreakdown(w io.Writer, m api.Match, view matchView) {
 		colorizeAlliance("Red", view.color),
 		colorizeAlliance("Blue", view.color),
 	}
+	table := output.Table{Headers: headers, Rows: cells}
+	// How the match was scored and how the game was played are two different
+	// readings, and the first is short: a blank line keeps the totals from
+	// being read as the head of a forty-row list.
+	if n := frc.PointsBandLen(rows); n > 0 && n < len(rows) {
+		table.Breaks = map[int]bool{n - 1: true}
+	}
 	// A failure here is a failure to write to stdout, which the recording
 	// writer around it reports for the whole command.
-	_ = output.Render(w, output.Table{Headers: headers, Rows: cells},
-		output.RenderOptions{Format: "table", Color: view.mode})
+	_ = output.Render(w, table, output.RenderOptions{Format: "table", Color: view.mode})
 }
 
 // printVideos lists the match's videos as links that can be clicked or curled.

@@ -292,6 +292,49 @@ const matchViewQM12JSON = `{
   "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}]
 }`
 
+// A 2026-shaped breakdown: recent seasons write an unfilled slot as the string
+// "None" rather than as a null, and carry the game's own constants -- the
+// thresholds a bonus is measured against -- alongside what the alliances did.
+const matchView2026JSON = `{
+  "key": "2026cthar_qm7",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 7,
+  "event_key": "2026cthar",
+  "time": 1774531200,
+  "actual_time": 1774531500,
+  "winning_alliance": "red",
+  "alliances": {
+    "red": {"score": 96, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 74, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": {
+    "red": {
+      "totalPoints": 96,
+      "rp": 3,
+      "autoPoints": 24,
+      "foulCount": 0,
+      "autoTowerRobot1": "None",
+      "autoTowerRobot2": "None",
+      "endgameRobot1": "Parked",
+      "coopertitionThreshold": 12,
+      "ensembleBonusThreshold": 30
+    },
+    "blue": {
+      "totalPoints": 74,
+      "rp": 1,
+      "autoPoints": 12,
+      "foulCount": 0,
+      "autoTowerRobot1": "None",
+      "autoTowerRobot2": "None",
+      "endgameRobot1": "None",
+      "coopertitionThreshold": 12,
+      "ensembleBonusThreshold": 30
+    }
+  },
+  "videos": []
+}`
+
 // A semifinal, whose name depends on the event's bracket.
 const matchViewSF13JSON = `{
   "key": "2024cthar_sf13m1",
