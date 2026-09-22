@@ -129,7 +129,12 @@ state is Connecticut.
 Results are ranked: an exact nickname first, then a nickname the query starts,
 then a nickname that contains it, then the teams that matched on some other
 field, with team number breaking ties. The columns are `Number`, `Name`,
-`Location` and `Rookie`.
+`Location`, `Rookie` and `Matched`.
+
+`Matched` says which field the query landed in and what it says there, cut to 60
+characters — `name: Bobcat Robotics Booster Club`. Teams often match on the full
+sponsor-and-school name, which no other column shows, so without it a search for
+`bobcat` looks like it answered with strangers.
 
 When the list is cut short, the count goes to stderr so stdout stays data:
 
@@ -148,7 +153,12 @@ note: no teams match "nosuchteam"
 
 The search runs over the season's team list — about 20 pages of 500 teams — so
 the first search of a season fetches those pages, and later searches revalidate
-the cached copies instead of downloading them again. Searching every season is
+the cached copies instead of downloading them again. That first walk takes a few
+seconds, so it says so on stderr before it starts:
+
+```
+note: fetching the 2026 team list (about 20 pages, cached for next time)
+``` Searching every season is
 not offered: it would repeat that walk once per year, so `--year 0` and
 `--all-years` are usage errors.
 
@@ -1003,7 +1013,7 @@ identical archives.
 | `tba team view <number>` | View team info |
 | `tba team list` | List all teams (defaults to the current season) |
 | `tba team list` | List all teams (defaults to the current year) |
-| `tba team search <query>` | Search a season's teams by nickname, name, location or number (`--fields`, `--limit`) |
+| `tba team search <query>` | Search a season's teams by nickname, name, location or number, saying what matched (`--fields`, `--limit`) |
 | `tba team events <number>` | List team events |
 | `tba team years <number>` | List the seasons a team competed in |
 | `tba team matches <number>` | List team matches |
