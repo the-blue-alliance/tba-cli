@@ -217,25 +217,3 @@ func TestPruneOnAnEmptyCache(t *testing.T) {
 		t.Errorf("Prune = %+v, want an empty result", res)
 	}
 }
-
-func TestFormatAge(t *testing.T) {
-	cases := []struct {
-		in   time.Duration
-		want string
-	}{
-		{0, "0s"},
-		{-time.Hour, "0s"},
-		{900 * time.Millisecond, "0s"},
-		{45 * time.Second, "45s"},
-		{12 * time.Minute, "12m"},
-		{90 * time.Minute, "1h"},
-		{23 * time.Hour, "23h"},
-		{25 * time.Hour, "1d"},
-		{40 * 24 * time.Hour, "40d"},
-	}
-	for _, c := range cases {
-		if got := FormatAge(c.in); got != c.want {
-			t.Errorf("FormatAge(%v) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}

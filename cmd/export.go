@@ -36,9 +36,14 @@ const exportTempPattern = ".tba-export-*"
 // directory back the way it found it.
 const exportBackupPattern = ".tba-export-backup-*"
 
-// renameFile is os.Rename, replaceable so that a test can see what an export
+// exportRename is os.Rename, replaceable so that a test can see what an export
 // does when the filesystem refuses half way through the rename phase.
-var renameFile = os.Rename
+//
+// It is named for the export rather than for the operation because
+// internal/fsutil has a seam of its own by the obvious name, and two package
+// variables called renameFile made "which one does this test replace?" a
+// question worth asking.
+var exportRename = os.Rename
 
 func newEventExportCmd() *cobra.Command {
 	c := &cobra.Command{
@@ -483,7 +488,7 @@ func commitExport(dir string, pending []staged, force bool) error {
 			_ = os.Remove(p)
 		}
 		for _, b := range backups {
-			_ = renameFile(b.temp, b.final)
+			_ = exportRename(b.temp, b.final)
 		}
 	}
 
@@ -493,7 +498,7 @@ func commitExport(dir string, pending []staged, force bool) error {
 			undo(nil)
 			return err
 		}
-		if err := renameFile(p, aside); err != nil {
+		if err := exportRename(p, aside); err != nil {
 			_ = os.Remove(aside)
 			undo(nil)
 			return err
@@ -503,7 +508,7 @@ func commitExport(dir string, pending []staged, force bool) error {
 
 	var renamed []string
 	for _, s := range pending {
-		if err := renameFile(s.temp, s.final); err != nil {
+		if err := exportRename(s.temp, s.final); err != nil {
 			undo(renamed)
 			return err
 		}

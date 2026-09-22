@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
-
-	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 )
 
 // EntryInfo describes one cache entry without carrying its body.
@@ -135,15 +133,4 @@ func (c *Cache) Prune(cutoff time.Time, dryRun bool) (PruneResult, error) {
 // Put, for callers that need to control the timestamps themselves.
 func (c *Cache) WriteEntry(e *Entry) error {
 	return c.write(e.URL, e)
-}
-
-// FormatAge renders a duration as a short age such as "45s", "12m", "3h" or
-// "8d". Anything under a second, or in the future, reads as "0s": a cache
-// entry stamped later than now is a clock that moved, not something that has
-// not happened yet.
-func FormatAge(d time.Duration) string {
-	if d < 0 {
-		d = 0
-	}
-	return humanize.Age(d)
 }

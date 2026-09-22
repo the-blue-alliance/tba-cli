@@ -135,6 +135,22 @@ func TestCacheList(t *testing.T) {
 	requireContains(t, got[3], `"etag-frc177"`)
 }
 
+// An entry stamped later than now is a clock that moved, not a response from
+// tomorrow, so its age is clamped rather than counted forwards: "in 3h"
+// dressed up as "3h ago" would be a lie in both directions.
+func TestCacheListClampsAnEntryFromTheFuture(t *testing.T) {
+	t.Setenv("TBA_CACHE_DIR", t.TempDir())
+	future := time.Now().Add(3 * time.Hour)
+	seedEntry(t, fakeBase+"/status", future, future)
+
+	out, _, err := runCmd(t, nil, "cache", "list", "--format", "csv", "--no-headers")
+	requireNoError(t, err, "")
+	requireContains(t, out, "0s ago")
+	if strings.Contains(out, "3h ago") {
+		t.Errorf("a future timestamp must not read as an age:\n%s", out)
+	}
+}
+
 func TestCacheListJSON(t *testing.T) {
 	t.Setenv("TBA_CACHE_DIR", t.TempDir())
 	now := time.Now()
