@@ -64,7 +64,9 @@ func (t Table) SelectColumns(spec string) (Table, error) {
 		idx = append(idx, i)
 	}
 
-	out := Table{Headers: make([]string, len(idx)), Rows: make([][]string, len(t.Rows))}
+	// Column selection leaves the rows where they are, so the dividers
+	// between them still point at the right gaps.
+	out := Table{Headers: make([]string, len(idx)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers}
 	for n, i := range idx {
 		out.Headers[n] = t.Headers[i]
 	}
@@ -112,7 +114,9 @@ func (t Table) SortOrder(spec string) ([]int, error) {
 }
 
 // Reorder returns a Table whose rows follow order. Indices outside the table
-// are skipped, so a stale permutation cannot panic.
+// are skipped, so a stale permutation cannot panic. Any dividers are dropped:
+// they mark gaps in the original order, and there is no honest place for them
+// in a re-sorted table.
 func (t Table) Reorder(order []int) Table {
 	rows := make([][]string, 0, len(order))
 	for _, i := range order {

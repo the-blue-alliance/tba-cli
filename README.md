@@ -438,13 +438,22 @@ team that has not been to one. `--detail` breaks each qualifying event into its
 `E1 Qual`, `E1 Alliance`, `E1 Award` and `E1 Elim` points.
 
 `--cutoff N` draws a `--- DCMP cutoff (top N) ---` line after rank N, so the
-championship cut is visible at a glance. It is presentation, so it appears only
-in `table` and `markdown` output; `csv`, `tsv` and `json` are unchanged. It also
-needs the rows to be in rank order, so combining it with `--sort` prints a note
-on stderr and draws no line.
+championship cut is visible at a glance. The line is drawn between the rows
+rather than inside a cell, so it never widens a column. It is presentation, so
+it appears only in `table` and `markdown` output; `csv`, `tsv` and `json` are
+unchanged. It also needs the rows to be in rank order, so combining it with
+`--sort` prints a note on stderr and draws no line.
+
+Once the district championship has been scored the published ranks include its
+points, so a line through them is no longer the cut that decided who went; it
+then reads `--- top N by current total (includes DCMP points) ---`. `--pre-dcmp`
+ranks on the points each team had before the championship, adds them as a
+`Pre-DCMP` column and draws the line there, which is the standing the cut was
+actually made on. It reorders the JSON too.
 
 ```
 tba district rankings 2024ne --cutoff 80
+tba district rankings 2024ne --cutoff 80 --pre-dcmp
 tba district rankings 2024ne --detail --format csv > ne-2024.csv
 ```
 
@@ -1010,7 +1019,7 @@ identical archives.
 | `tba district list` | List districts (defaults to the current season) |
 | `tba district events <key>` | List district events |
 | `tba district teams <key>` | List district teams |
-| `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--detail`) |
+| `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--pre-dcmp`, `--detail`) |
 | `tba insight leaderboards` | Show leaderboards (`--board`, `--limit N`, `--expand`) |
 | `tba insight notables` | Show notable insights (`--board`) |
 | `tba open <target>` | Open a team, event or match on thebluealliance.com |

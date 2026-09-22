@@ -297,3 +297,33 @@ func TestPermuteSliceLeavesRawJSONAlone(t *testing.T) {
 		t.Fatalf("PermuteSlice reordered raw JSON bytes: %#v", got)
 	}
 }
+
+// Column selection leaves the rows where they are, so a divider still marks
+// the same gap afterwards.
+func TestSelectColumnsKeepsDividers(t *testing.T) {
+	tbl := Table{
+		Headers:  []string{"Rank", "Team", "Total"},
+		Rows:     [][]string{{"1", "177", "145"}, {"2", "1073", "132"}},
+		Dividers: map[int]string{0: "cut"},
+	}
+	got, err := tbl.SelectColumns("team")
+	if err != nil {
+		t.Fatalf("SelectColumns: %v", err)
+	}
+	if got.Dividers[0] != "cut" {
+		t.Errorf("dividers = %v, want the cut to survive", got.Dividers)
+	}
+}
+
+// A re-sorted table has no honest place for a line that marked a gap in the
+// original order.
+func TestReorderDropsDividers(t *testing.T) {
+	tbl := Table{
+		Headers:  []string{"Rank", "Team"},
+		Rows:     [][]string{{"1", "177"}, {"2", "1073"}},
+		Dividers: map[int]string{0: "cut"},
+	}
+	if got := tbl.Reorder([]int{1, 0}); got.Dividers != nil {
+		t.Errorf("dividers = %v, want none after a reorder", got.Dividers)
+	}
+}

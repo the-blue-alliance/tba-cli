@@ -1,12 +1,59 @@
 package cmd
 
 import (
+	"errors"
 	"sort"
 	"strconv"
 
+	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
+
+// outputTableWith is outputTable for a table that carries more than headers
+// and rows — today, the dividers a cut line is drawn with. It routes through
+// exactly the same flags, so --sort, --columns and --format behave the same
+// whichever entry point a command uses.
+func outputTableWith(cmd *cobra.Command, data interface{}, table output.Table) error {
+	format, err := resolveFormat(cmd)
+	if err != nil {
+		return err
+	}
+	color, err := colorMode(cmd)
+	if err != nil {
+		return err
+	}
+	w := cmd.OutOrStdout()
+
+	// Sorting runs before column selection so that a table can be ordered by a
+	// column the user chose not to display.
+	sortSpec := settings(cmd).String("sort")
+	var order []int
+	if sortSpec != "" {
+		if order, err = table.SortOrder(sortSpec); err != nil {
+			return err
+		}
+		table = table.Reorder(order)
+	}
+
+	columns := settings(cmd).String("columns")
+	if format == "json" {
+		if columns != "" {
+			return errors.New("--columns applies to tabular formats; use --jq to shape JSON")
+		}
+		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
+	}
+	if columns != "" {
+		if table, err = table.SelectColumns(columns); err != nil {
+			return err
+		}
+	}
+	return output.Render(w, table, output.RenderOptions{
+		Format:    format,
+		NoHeaders: settings(cmd).Bool("no-headers"),
+		Color:     color,
+	})
+}
 
 // formatWLT renders a win-loss-tie record. A nil record — 2015, which had no
 // win/loss at all — renders as an empty cell rather than a misleading "0-0-0".
