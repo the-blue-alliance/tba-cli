@@ -132,6 +132,14 @@ func TestUsageErrorsPrintUsage(t *testing.T) {
 			if stdout != "" {
 				t.Errorf("usage must not go to stdout, got:\n%s", stdout)
 			}
+			// The hint is the call shape and where to find the rest, not the
+			// whole usage block with every global flag in it.
+			if n := len(lines(stderr)); n > 3 {
+				t.Errorf("usage hint is %d lines, want at most 3:\n%s", n, stderr)
+			}
+			if strings.Contains(stderr, "Global Flags:") || strings.Contains(stderr, "--no-cache") {
+				t.Errorf("the flag listing belongs in --help, not in the error:\n%s", stderr)
+			}
 		})
 	}
 }

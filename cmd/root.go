@@ -108,11 +108,24 @@ func Run(ctx context.Context, root *cobra.Command) error {
 		if cmd == nil {
 			cmd = root
 		}
-		w := cmd.ErrOrStderr()
-		fmt.Fprint(w, cmd.UsageString())
-		fmt.Fprintf(w, "Run '%s --help' for usage.\n", cmd.CommandPath())
+		printUsageHint(cmd)
 	}
 	return err
+}
+
+// printUsageHint shows how the command is called and where the rest is.
+//
+// Cobra's full usage block is about twenty-five lines, most of them the global
+// flags, and it pushes the one line that says what went wrong off the top of a
+// small terminal. The call shape is the part that helps in the moment; --help
+// is one keystroke away for everything else.
+func printUsageHint(cmd *cobra.Command) {
+	w := cmd.ErrOrStderr()
+	fmt.Fprintf(w, "Usage:\n  %s\n", cmd.UseLine())
+	if cmd.HasAvailableSubCommands() {
+		fmt.Fprintf(w, "  %s [command]\n", cmd.CommandPath())
+	}
+	fmt.Fprintf(w, "Run '%s --help' for usage.\n", cmd.CommandPath())
 }
 
 // Execute runs the CLI with the process's standard streams.
