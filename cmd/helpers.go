@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -14,7 +13,7 @@ import (
 )
 
 func getBaseURL(cmd *cobra.Command) string {
-	baseURL, _ := cmd.Flags().GetString("base-url")
+	baseURL := settings(cmd).String("base-url")
 	if baseURL == "" {
 		return api.DefaultBaseURL
 	}
@@ -22,18 +21,16 @@ func getBaseURL(cmd *cobra.Command) string {
 }
 
 func newClient(cmd *cobra.Command) (*api.Client, error) {
-	offline, _ := cmd.Flags().GetBool("offline")
-	noCache, _ := cmd.Flags().GetBool("no-cache")
+	s := settings(cmd)
+	offline := s.Bool("offline")
+	noCache := s.Bool("no-cache")
 	if offline && noCache {
 		return nil, clierr.Usage("--offline and --no-cache contradict each other: offline mode has only the cache to serve from")
 	}
 
-	var opts []api.Option
-	if d, err := cmd.Flags().GetDuration("timeout"); err == nil {
-		opts = append(opts, api.WithTimeout(d))
-	}
-	if n, err := cmd.Flags().GetInt("retries"); err == nil {
-		opts = append(opts, api.WithRetries(n))
+	opts := []api.Option{
+		api.WithTimeout(s.Duration("timeout")),
+		api.WithRetries(s.Int("retries")),
 	}
 	opts = append(opts, api.WithOffline(offline), api.WithNotifier(func(note string) {
 		fmt.Fprintln(cmd.ErrOrStderr(), note)
@@ -57,28 +54,32 @@ const validFormats = "auto, table, json, csv, tsv, markdown"
 // json otherwise. --json and --jq select JSON, but combining either with an
 // explicit non-JSON --format is an error rather than a silent override.
 func resolveFormat(cmd *cobra.Command) (string, error) {
-	raw, _ := cmd.Flags().GetString("format")
-	jsonFlag, _ := cmd.Flags().GetBool("json")
-	jqFlag, _ := cmd.Flags().GetString("jq")
+	s := settings(cmd)
+	jsonFlag := s.Bool("json")
+	jqFlag := s.String("jq")
 
-	explicit := ""
-	switch raw {
-	case "", "auto":
-		// Resolved below from the TTY / --json / --jq state.
-	case "table", "json", "csv", "tsv", "markdown":
-		explicit = raw
-	case "md":
-		explicit = "markdown"
-	default:
-		return "", clierr.Usage("invalid --format %q (want: %s)", raw, validFormats)
+	// The value is checked before the terminal rule is applied, so that a
+	// misspelling in the config file is reported rather than quietly ignored
+	// on the invocations that would not have used it anyway.
+	if _, ok := normalizeFormat(s.String("format")); !ok {
+		return "", clierr.Usage("invalid %s %q (want: %s)", s.origin("format"), s.String("format"), validFormats)
 	}
+	raw := s.Format(cmd.OutOrStdout())
+	explicit, _ := normalizeFormat(raw)
 
 	if explicit != "" && explicit != "json" {
+		// Say where the format came from when it was not typed on this command
+		// line, so that "drop --format table" is not advice about a flag the
+		// user never passed.
+		chosen := "--format " + raw
+		if s.Source("format") != sourceFlag {
+			chosen = fmt.Sprintf("--format %s from %s", raw, s.origin("format"))
+		}
 		if jqFlag != "" {
-			return "", clierr.Usage("--jq requires JSON output; drop --format %s or use --format json", raw)
+			return "", clierr.Usage("--jq requires JSON output; drop %s or use --format json", chosen)
 		}
 		if jsonFlag {
-			return "", clierr.Usage("--json requires JSON output; drop --format %s or use --format json", raw)
+			return "", clierr.Usage("--json requires JSON output; drop %s or use --format json", chosen)
 		}
 	}
 	if explicit != "" {
@@ -93,26 +94,40 @@ func resolveFormat(cmd *cobra.Command) (string, error) {
 	return "table", nil
 }
 
+// normalizeFormat maps a --format value to the format it selects, or to "" for
+// the values that mean "decide from the TTY". The second result is false for a
+// value that is not a format at all.
+func normalizeFormat(raw string) (string, bool) {
+	switch raw {
+	case "", "auto":
+		return "", true
+	case "table", "json", "csv", "tsv", "markdown":
+		return raw, true
+	case "md":
+		return "markdown", true
+	default:
+		return "", false
+	}
+}
+
 // colorMode reads the user's color preference. --no-color is a spelling of
 // --color=never and wins, so scripts can set it unconditionally.
 func colorMode(cmd *cobra.Command) (output.ColorMode, error) {
-	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
+	s := settings(cmd)
+	if s.Bool("no-color") {
 		return output.ColorNever, nil
 	}
-	mode, _ := cmd.Flags().GetString("color")
-	return output.ParseColorMode(mode)
+	return output.ParseColorMode(s.String("color"))
 }
 
 func jqExpr(cmd *cobra.Command) string {
-	jqFlag, _ := cmd.Flags().GetString("jq")
-	return jqFlag
+	return settings(cmd).String("jq")
 }
 
 // rawOutput reports whether --raw-output was given: jq string results are
 // printed without their quotes, as jq -r does.
 func rawOutput(cmd *cobra.Command) bool {
-	raw, _ := cmd.Flags().GetBool("raw-output")
-	return raw
+	return settings(cmd).Bool("raw-output")
 }
 
 // outputData routes opaque/key-value output: human renderer for table, JSON otherwise.
@@ -153,7 +168,7 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 
 	// Sorting runs before column selection so that a table can be ordered by a
 	// column the user chose not to display.
-	sortSpec, _ := cmd.Flags().GetString("sort")
+	sortSpec := settings(cmd).String("sort")
 	var order []int
 	if sortSpec != "" {
 		if order, err = table.SortOrder(sortSpec); err != nil {
@@ -162,7 +177,7 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 		table = table.Reorder(order)
 	}
 
-	columns, _ := cmd.Flags().GetString("columns")
+	columns := settings(cmd).String("columns")
 	if format == "json" {
 		if columns != "" {
 			return errors.New("--columns applies to tabular formats; use --jq to shape JSON")
@@ -177,7 +192,7 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 		}
 	}
 
-	noHeaders, _ := cmd.Flags().GetBool("no-headers")
+	noHeaders := settings(cmd).Bool("no-headers")
 	return output.Render(w, table, output.RenderOptions{
 		Format:    format,
 		NoHeaders: noHeaders,
@@ -217,8 +232,4 @@ func validateMatchKey(arg string) error {
 		return clierr.Usage("%q is not a valid match key (expected something like 2024cthar_qm12)", arg)
 	}
 	return nil
-}
-
-func currentYear() int {
-	return time.Now().Year()
 }

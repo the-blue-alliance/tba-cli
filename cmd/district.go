@@ -35,7 +35,10 @@ func newDistrictListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, _ := cmd.Flags().GetInt("year")
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
 			var districts []api.District
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/districts/%d", year), &districts); err != nil {
 				return err
@@ -47,7 +50,7 @@ func newDistrictListCmd() *cobra.Command {
 			return outputTable(cmd, districts, []string{"Key", "Name", "Abbreviation"}, rows)
 		},
 	}
-	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	addYearFlag(c)
 	return c
 }
 

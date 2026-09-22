@@ -41,7 +41,10 @@ func newRawInsightCmd(use, short, resource, example string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			year, _ := cmd.Flags().GetInt("year")
+			year, err := resolveYear(cmd)
+			if err != nil {
+				return err
+			}
 			raw, err := client.GetRaw(cmd.Context(), fmt.Sprintf("/insights/%s/%d", resource, year))
 			if err != nil {
 				return err
@@ -51,6 +54,6 @@ func newRawInsightCmd(use, short, resource, example string) *cobra.Command {
 			})
 		},
 	}
-	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	addYearFlag(c)
 	return c
 }
