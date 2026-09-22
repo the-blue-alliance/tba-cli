@@ -58,7 +58,15 @@ func NewRootCmd() *cobra.Command {
 // the work — a 404, a timeout — prints only its message, because a wall of
 // usage text buries it.
 func Run(ctx context.Context, root *cobra.Command) error {
+	// Watch stdout, so that a reader hanging up mid-command is reported even
+	// though the printing helpers ignore write failures.
+	out := &recordingWriter{w: root.OutOrStdout()}
+	root.SetOut(out)
+
 	cmd, err := root.ExecuteContextC(ctx)
+	if err == nil {
+		err = out.Err()
+	}
 	if err == nil {
 		return nil
 	}
