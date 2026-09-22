@@ -55,6 +55,16 @@ tba event rankings 2024cthar             # how the event is ranking
 
 ## Installation
 
+### Homebrew (macOS)
+
+```
+brew install --cask the-blue-alliance/tap/tba
+```
+
+The cask installs the binary, its man pages and shell completions from the
+release archive. Homebrew casks are macOS only; Linux users take a release
+binary or `go install` below.
+
 ### Download a release
 
 Download a prebuilt binary for your platform from the
@@ -84,10 +94,6 @@ xattr -d com.apple.quarantine ./tba
 ```
 go install github.com/the-blue-alliance/tba-cli/cmd/tba@latest
 ```
-
-A Homebrew cask is prepared in
-[PR #37](https://github.com/the-blue-alliance/tba-cli/pull/37) and will be
-published once the maintainers create the tap repository.
 
 ## Authentication
 
@@ -1270,11 +1276,17 @@ That runs `.github/workflows/release.yml`, which runs GoReleaser with
 `.goreleaser.yml`: it builds every platform with the version, commit and commit
 date stamped into the binary, generates the man pages and completion scripts
 from the command tree, builds the archives and checksums, writes the grouped
-release notes, and announces the release on Slack. The announcement is skipped
-when the `SLACK_WEBHOOK_URL` repository secret is unset — a fork has nothing to
-announce to, and that is not a reason to mark a published release as failed.
-Releases are serialised: two tags pushed together queue up, and a release in
-flight is never cancelled.
+release notes, pushes the Homebrew cask to `the-blue-alliance/homebrew-tap`,
+and announces the release on Slack. The announcement is skipped when the
+`SLACK_WEBHOOK_URL` repository secret is unset — a fork has nothing to announce
+to, and that is not a reason to mark a published release as failed. Releases
+are serialised: two tags pushed together queue up, and a release in flight is
+never cancelled.
+
+The tap needs a second secret, `HOMEBREW_TAP_TOKEN`: a token with write access
+to the tap repository, because the default `GITHUB_TOKEN` cannot push to another
+repository. A prerelease tag (`v1.2.3-rc1`) skips the tap, so only full releases
+reach `brew`.
 
 ## Development
 

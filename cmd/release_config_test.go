@@ -188,3 +188,41 @@ func TestCaskLicenseProblems(t *testing.T) {
 		})
 	}
 }
+
+// --- Homebrew tap (see issue #23) ---
+
+func TestGoreleaserPublishesToTheTBATap(t *testing.T) {
+	cfg := string(repoFile(t, ".goreleaser.yml"))
+	for _, want := range []string{
+		"homebrew_casks:",
+		"owner: the-blue-alliance",
+		"name: homebrew-tap",
+		"branch: main",
+		`token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"`,
+		// A prerelease must not become what `brew install tba` hands out.
+		"skip_upload: auto",
+	} {
+		requireContains(t, cfg, want)
+	}
+}
+
+func TestGoreleaserCaskShipsManpagesAndCompletions(t *testing.T) {
+	cfg := string(repoFile(t, ".goreleaser.yml"))
+	for _, want := range []string{
+		`manpages:`,
+		`"man/*.1"`,
+		"bash: completions/tba.bash",
+		"zsh: completions/tba.zsh",
+		"fish: completions/tba.fish",
+	} {
+		requireContains(t, cfg, want)
+	}
+}
+
+// Homebrew wants a license, but inventing one for a repository that has no
+// LICENSE file would be a lie. If a license is ever added, this test says where
+// to declare it.
+func TestReleaseWorkflowPassesTheTapToken(t *testing.T) {
+	workflow := string(repoFile(t, filepath.Join(".github", "workflows", "release.yml")))
+	requireContains(t, workflow, "HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}")
+}

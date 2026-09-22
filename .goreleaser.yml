@@ -48,6 +48,44 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# The Homebrew tap lives on TBA-owned infrastructure. A prerelease tag stops
+# here (skip_upload: auto), so `brew install tba` only ever gets a real release.
+#
+# This is a cask rather than a formula: goreleaser deprecated `brews` in favour
+# of `homebrew_casks`, which is also what Homebrew now wants for prebuilt
+# binaries. `brew install the-blue-alliance/tap/tba` is the same command either
+# way; casks are macOS-only, so Linux users take the release archive.
+homebrew_casks:
+  - repository:
+      owner: the-blue-alliance
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/the-blue-alliance/tba-cli"
+    description: "Command-line interface for The Blue Alliance API"
+    license: MIT
+    commit_author:
+      name: tba-release-bot
+      email: tba-release-bot@users.noreply.github.com
+    skip_upload: auto
+    binaries:
+      - tba
+    # Shipped in the archive by the docs generator, so brew installs the same
+    # pages and scripts the tarball has.
+    manpages:
+      - "man/*.1"
+    completions:
+      bash: completions/tba.bash
+      zsh: completions/tba.zsh
+      fish: completions/tba.fish
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tba"]
+          end
+
 changelog:
   use: github
   sort: asc
