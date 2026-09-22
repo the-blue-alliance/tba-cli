@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -134,6 +136,24 @@ func TestOfflineWithNoCacheIsAUsageError(t *testing.T) {
 	requireErrorContains(t, err, "--offline and --no-cache")
 	if n := len(requestPaths(t, srv)); n != 0 {
 		t.Errorf("a usage error should not make a request: %v", requestPaths(t, srv))
+	}
+}
+
+// A cache directory that cannot be opened has to say so. Running cacheless
+// after a silent failure makes --offline report "not cached" for everything,
+// which sends the user looking for the wrong problem.
+func TestABrokenCacheDirectoryIsReportedRatherThanIgnored(t *testing.T) {
+	blocked := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("in the way\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TBA_CACHE_DIR", blocked)
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+
+	_, _, err := runCmd(t, srv, "team", "view", "177", "--offline")
+	requireErrorContains(t, err, "opening the response cache")
+	if strings.Contains(err.Error(), "not cached") {
+		t.Errorf("a broken cache dir should not read as a cache miss: %v", err)
 	}
 }
 
