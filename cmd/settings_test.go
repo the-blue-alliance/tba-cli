@@ -457,3 +457,57 @@ func TestAFlagStillBeatsAnUnparseableConfigFileSetting(t *testing.T) {
 	_, stderr, err := runCmd(t, srv, "team", "view", "177", "--timeout", "30s")
 	requireNoError(t, err, stderr)
 }
+
+// `tba config set base-url nonsense` was refused, while TBA_BASE_URL=nonsense
+// and --base-url nonsense went through and came back three layers down as
+// "not authenticated for nonsense" -- a complaint about a key for a mistake in
+// a URL. The URL is judged in the settings layer now, wherever it came from.
+func TestABaseURLThatIsNotAURLIsRefused(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		env  [2]string
+		file string
+		want string
+	}{
+		{name: "flag", args: []string{"--base-url", "nonsense"}},
+		{name: "flag without a host", args: []string{"--base-url", "https://"}},
+		{name: "flag without a scheme", args: []string{"--base-url", "www.thebluealliance.com/api/v3"}},
+		{name: "env", env: [2]string{"TBA_BASE_URL", "nonsense"}, want: "from TBA_BASE_URL"},
+		{name: "config", file: "base-url: nonsense\n", want: "config.yaml"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.file != "" {
+				writeConfig(t, c.file)
+			} else {
+				emptyConfigDir(t)
+			}
+			if c.env[0] != "" {
+				t.Setenv(c.env[0], c.env[1])
+			}
+
+			_, _, err := runCmd(t, nil, append([]string{"team", "view", "177"}, c.args...)...)
+			requireErrorContains(t, err, "base-url wants an http(s) URL")
+			if c.want != "" {
+				requireErrorContains(t, err, c.want)
+			}
+			if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+				t.Errorf("exit code = %d, want %d", got, clierr.ExitUsage)
+			}
+		})
+	}
+}
+
+// The URLs people actually set are left alone, including a local development
+// server on a port.
+func TestAGoodBaseURLIsLeftAlone(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/team/frc177": teamFRC177JSON})
+	_, stderr, err := runCmd(t, srv, "team", "view", "177")
+	requireNoError(t, err, stderr)
+
+	emptyConfigDir(t)
+	t.Setenv("TBA_BASE_URL", srv.URL)
+	_, stderr, err = runCmd(t, nil, "team", "view", "177")
+	requireNoError(t, err, stderr)
+}
