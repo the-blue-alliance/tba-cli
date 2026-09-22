@@ -15,6 +15,7 @@ func TestEventTeamStatuses(t *testing.T) {
 	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Round,Playoff Status\n" +
 		"177,1,10-2-0,Alliance 1,Captain,F,Finals,won\n" +
 		"1073,2,9-3-0,Alliance 1,1,SF,Round 4,eliminated\n" +
+		"230,3,8-4-0,Alliance 2,Captain,F,Finals,finalist\n" +
 		"5507,30,4-8-0,,,,,\n" +
 		"2168,,,Alliance 1,Backup,F,Finals,won\n" +
 		"9999,,,,,,,\n"
@@ -69,7 +70,7 @@ func TestEventTeamStatusesPutUnrankedTeamsLast(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar",
 		"--format", "csv", "--columns", "team", "--no-headers")
 	requireNoError(t, err, "")
-	if out != "177\n1073\n5507\n2168\n9999\n" {
+	if out != "177\n1073\n230\n5507\n2168\n9999\n" {
 		t.Errorf("teams = %q", out)
 	}
 }
@@ -128,5 +129,26 @@ func TestEventTeamStatusesRequestsTheRightPath(t *testing.T) {
 	requireNoError(t, err, "")
 	if got := requestPaths(t, srv); len(got) != 1 || got[0] != "/event/2024cthar/teams/statuses" {
 		t.Errorf("requested %v", got)
+	}
+}
+
+// A team on the alliance that lost the final finished second, not "eliminated"
+// the way a team knocked out in the first round did.
+func TestEventTeamStatusesCallTheLosingFinalistAFinalist(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/teams/statuses": teamStatuses2024ctharJSON,
+	})
+	out, _, err := runCmd(t, srv, "event", "team-statuses", "2024cthar",
+		"--format", "csv", "--columns", "team,playoff level,playoff status", "--no-headers")
+	requireNoError(t, err, "")
+
+	want := "177,F,won\n" +
+		"1073,SF,eliminated\n" +
+		"230,F,finalist\n" +
+		"5507,,\n" +
+		"2168,F,won\n" +
+		"9999,,\n"
+	if out != want {
+		t.Errorf("csv =\n%s\nwant\n%s", out, want)
 	}
 }

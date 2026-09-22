@@ -131,7 +131,7 @@ func teamStatusRow(key string, s *api.TeamEventStatus, withOverall bool) []strin
 	if s.Playoff != nil {
 		row[5] = strings.ToUpper(s.Playoff.Level)
 		row[6] = doubleElimRound(s.Playoff)
-		row[7] = s.Playoff.Status
+		row[7] = playoffStatus(s.Playoff)
 	}
 	if withOverall {
 		row[8] = output.StripHTML(s.OverallStatusStr)
