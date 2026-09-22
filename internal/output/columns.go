@@ -139,6 +139,11 @@ func PermuteSlice(data interface{}, order []int) interface{} {
 	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
 		return data
 	}
+	// A []byte (json.RawMessage) is a slice too, but its elements are bytes of
+	// an encoded document, not rows; shuffling them would corrupt the JSON.
+	if v.Type().Elem().Kind() == reflect.Uint8 {
+		return data
+	}
 	if v.Len() != len(order) {
 		return data
 	}

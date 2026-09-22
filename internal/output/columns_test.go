@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -263,4 +264,12 @@ func mustOrder(t *testing.T, tbl Table, spec string) []int {
 		t.Fatalf("SortOrder(%q): %v", spec, err)
 	}
 	return order
+}
+
+func TestPermuteSliceLeavesRawJSONAlone(t *testing.T) {
+	raw := json.RawMessage(`[1,2]`)
+	got := PermuteSlice(raw, []int{1, 0, 2, 3, 4})
+	if b, ok := got.(json.RawMessage); !ok || string(b) != `[1,2]` {
+		t.Fatalf("PermuteSlice reordered raw JSON bytes: %#v", got)
+	}
 }
