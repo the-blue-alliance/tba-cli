@@ -564,14 +564,49 @@ func TestEventMatchesFor2015(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "matches", "2015ctwat", "--format", "csv")
 	requireNoError(t, err, "")
 
+	// The one match is played, so When counts down to nothing and the column
+	// is left out of the listing altogether.
 	want := []string{
 		"Qual 7", "2015ctwat_qm7",
 		"177, 1071, 2168", "230, 195, 558",
 		"44-44", "tie",
-		localTime(1427464800), "", "scheduled", "Played",
+		localTime(1427464800), "scheduled", "Played",
 	}
 	if got := findRow(t, parseCSV(t, out), "2015ctwat_qm7"); !equalStrings(got, want) {
 		t.Errorf("row =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// Nothing counts down in a listing of matches that are all played, so When is
+// blank the whole way down. A header with nothing under it is not a column.
+func TestEventMatchesDropsTheEmptyWhenColumn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
+	})
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	header := parseCSV(t, out)[0]
+	if contains(header, "When") {
+		t.Errorf("header = %v, want no When column", header)
+	}
+	if !contains(header, "Time") || !contains(header, "Status") {
+		t.Errorf("header = %v, want the columns that do carry something", header)
+	}
+}
+
+// A column that is blank on some rows and not others is data, not emptiness:
+// a played match has nothing to count down to, and that is the answer.
+func TestEventMatchesKeepsWhenForAnUpcomingMatch(t *testing.T) {
+	withNow(t, time.Unix(1711220400-600, 0))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + matchViewUnplayedJSON + "]",
+	})
+	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	if header := parseCSV(t, out)[0]; !contains(header, "When") {
+		t.Errorf("header = %v, want the When column kept", header)
 	}
 }
 

@@ -237,8 +237,12 @@ func TestTeamMatches(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("want header + separator + 2 rows, got %d:\n%s", len(got), out)
 	}
-	// A season's listing leads with the event each match belongs to.
+	// A season's listing leads with the event each match belongs to. When is
+	// empty for a listing of played matches, and such a column is left out.
 	for _, want := range append([]string{"Event"}, matchHeaders...) {
+		if want == "When" {
+			continue
+		}
 		requireContains(t, got[0], want)
 	}
 	if !strings.HasPrefix(got[0], "Event") {

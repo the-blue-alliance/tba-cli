@@ -132,6 +132,11 @@ func TestEventMatches(t *testing.T) {
 
 	got := lines(out)
 	for _, want := range matchHeaders {
+		// Both matches are played, so nothing counts down and When is empty
+		// for the whole listing; a column like that is left out.
+		if want == "When" {
+			continue
+		}
 		requireContains(t, got[0], want)
 	}
 	requireContains(t, got[2], "Qual 1")

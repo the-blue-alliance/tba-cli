@@ -46,17 +46,17 @@ func TestEventTeamStatusesOverallIsOptIn(t *testing.T) {
 	}
 }
 
-// A pre-2023 bracket has no double_elim_round, so the column is empty rather
-// than inventing a round.
-func TestEventTeamStatusesRoundIsBlankWithoutADoubleElimBracket(t *testing.T) {
+// A pre-2023 bracket has no double_elim_round, so no team at the event has a
+// Round; the column is left out rather than printed empty for everybody.
+func TestEventTeamStatusesRoundIsDroppedWithoutADoubleElimBracket(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2019cthar/teams/statuses": teamStatuses2019ctharJSON,
 	})
 	out, _, err := runCmd(t, srv, "event", "team-statuses", "2019cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
-	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Round,Playoff Status\n" +
-		"177,1,10-2-0,Alliance 1,Captain,F,,won\n"
+	want := "Team,Rank,Record,Alliance,Pick,Playoff Level,Playoff Status\n" +
+		"177,1,10-2-0,Alliance 1,Captain,F,won\n"
 	if out != want {
 		t.Errorf("csv =\n%s\nwant\n%s", out, want)
 	}
