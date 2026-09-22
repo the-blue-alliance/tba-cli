@@ -525,7 +525,7 @@ state is Connecticut.
 | `--fields` | Which fields to search, comma-separated: `nickname`, `name`, `location`, `number` (all of them by default). `name` is the full sponsor-and-school name, `location` is city, state/province and country. An unknown value is a usage error listing the valid ones. |
 | `--limit N` | Show at most N matches (default 20); `0` shows every match. |
 | `--year` | The season to search (defaults to the current season). |
-| `--max-pages` | Stop after this many pages of 500 teams (default 30). |
+| `--max-pages` | Stop after this many pages of 500 teams (default 100). |
 
 Results are ranked: an exact nickname first, then a nickname the query starts,
 then a nickname that contains it, then the teams that matched on some other
@@ -1126,10 +1126,10 @@ API error 503 after 4 attempts: {"Error": "temporarily unavailable"}
 
 **Rate limiting.** Requests are paced client-side at 10 per second with a burst of 10, so a paging command such as `team list` stays a polite API citizen.
 
-**Paging.** `team list` and `team search` walk pages of 500 teams. `--max-pages` (default 30) bounds how many they will fetch; when one stops early it says so on stderr:
+**Paging.** `team list` and `team search` walk pages of 500 teams, stopping at the first empty page. `--max-pages` (default 100, enough for team numbers up to 50,000) is the ceiling on that walk rather than what it usually costs; when one stops early it says so on stderr:
 
 ```
-note: stopped after 30 pages; raise --max-pages to fetch more
+note: stopped after 100 pages; raise --max-pages to fetch more
 ```
 
 ## Scripting

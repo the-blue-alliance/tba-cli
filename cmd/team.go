@@ -105,7 +105,7 @@ func newTeamListCmd() *cobra.Command {
 		},
 	}
 	addYearFlag(c)
-	c.Flags().Int("max-pages", 30, "Stop after this many pages of 500 teams")
+	c.Flags().Int("max-pages", defaultMaxPages, "Stop after this many pages of 500 teams; the walk ends at the first empty page anyway")
 	return c
 }
 
