@@ -131,20 +131,18 @@ func LabelDependsOnPlayoffType(m api.Match) bool {
 	return CompLevelOrder(m.CompLevel) == CompLevelOrder(LevelSemiFinal)
 }
 
-// EventOrder ranks a team's events chronologically, so a season's worth of
-// matches can be grouped the way the team actually played them: Waterbury in
-// week 1 before Hartford in week 3, whatever order the API listed them in.
+// SortEvents puts a season's events in the order they are played, earliest
+// start first, in place. It is the order anyone reading a list of events
+// expects, and the API returns them in neither that order nor any other.
 //
 // Events with the same start date, and events whose start_date is missing or
-// malformed, fall back to their key, which keeps the ranking total and
+// malformed, fall back to their key, which keeps the order total and
 // reproducible. The dates are compared as calendar days, so the machine's time
 // zone cannot reorder two events a day apart.
-func EventOrder(events []api.Event) map[string]int {
-	sorted := make([]api.Event, len(events))
-	copy(sorted, events)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		a, aok := ParseDate(sorted[i].StartDate, time.UTC)
-		b, bok := ParseDate(sorted[j].StartDate, time.UTC)
+func SortEvents(events []api.Event) {
+	sort.SliceStable(events, func(i, j int) bool {
+		a, aok := ParseDate(events[i].StartDate, time.UTC)
+		b, bok := ParseDate(events[j].StartDate, time.UTC)
 		if aok != bok {
 			// A dated event is placed before an undated one, which is not a
 			// real season but is a real API answer.
@@ -153,8 +151,20 @@ func EventOrder(events []api.Event) map[string]int {
 		if aok && !a.Equal(b) {
 			return a.Before(b)
 		}
-		return sorted[i].Key < sorted[j].Key
+		return events[i].Key < events[j].Key
 	})
+}
+
+// EventOrder ranks a team's events chronologically, so a season's worth of
+// matches can be grouped the way the team actually played them: Waterbury in
+// week 1 before Hartford in week 3, whatever order the API listed them in.
+//
+// It is SortEvents read as a ranking, so a listing and a grouping of the same
+// season cannot disagree about which event came first.
+func EventOrder(events []api.Event) map[string]int {
+	sorted := make([]api.Event, len(events))
+	copy(sorted, events)
+	SortEvents(sorted)
 
 	order := make(map[string]int, len(sorted))
 	for _, e := range sorted {

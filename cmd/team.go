@@ -131,6 +131,10 @@ func newTeamEventsCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", teamKey(args[0]), year), &events); err != nil {
 				return err
 			}
+			// A season is read as a season: the API lists a team's events by
+			// key, which puts April's district championship ahead of March's
+			// district events.
+			frc.SortEvents(events)
 			rows := make([][]string, len(events))
 			for i, e := range events {
 				rows[i] = []string{e.Key, e.Name, e.StartDate, output.FormatLocation(e.City, e.StateProv, e.Country)}

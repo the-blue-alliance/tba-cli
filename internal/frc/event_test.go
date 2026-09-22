@@ -213,6 +213,27 @@ func season2024Events() []api.Event {
 
 // A season's events are ranked the way the team played them, earliest first,
 // whatever order the API listed them in.
+// A season is sorted the way it is played, whatever order the API listed it
+// in, and an undated event goes last rather than first.
+func TestSortEvents(t *testing.T) {
+	events := []api.Event{
+		{Key: "2024necmp", StartDate: "2024-04-10"},
+		{Key: "2024week0", StartDate: ""},
+		{Key: "2024cthar", StartDate: "2024-03-22"},
+		{Key: "2024ctwat", StartDate: "2024-03-08"},
+	}
+	frc.SortEvents(events)
+
+	want := []string{"2024ctwat", "2024cthar", "2024necmp", "2024week0"}
+	got := make([]string, len(events))
+	for i, e := range events {
+		got[i] = e.Key
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("SortEvents = %v, want %v", got, want)
+	}
+}
+
 func TestEventOrderRanksBySeasonOrder(t *testing.T) {
 	order := frc.EventOrder(season2024Events())
 	want := map[string]int{"2024ctwat": 0, "2024cthar": 1, "2024necmp": 2}

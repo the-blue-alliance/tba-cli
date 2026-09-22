@@ -198,6 +198,22 @@ func TestTeamEvents(t *testing.T) {
 	requireContains(t, got[3], "2024necmp")
 }
 
+// The API lists a team's events by key, which puts 2024necmp -- April's
+// district championship -- ahead of the March district events that qualified
+// the team for it. A season is read as a season.
+func TestTeamEventsListsTheSeasonInOrder(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": teamEvents177In2024JSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "events", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	want := []string{"2024ctwat", "2024cthar", "2024necmp"}
+	if got := csvColumn(t, out, 0); !equalStrings(got, want) {
+		t.Errorf("events = %v, want %v (chronological)", got, want)
+	}
+}
+
 func TestTeamEventsDefaultsToCurrentYear(t *testing.T) {
 	path := fmt.Sprintf("/team/frc177/events/%d", currentYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
