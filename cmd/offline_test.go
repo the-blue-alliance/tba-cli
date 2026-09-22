@@ -156,8 +156,10 @@ func TestOfflineFailsOnAnUncachedPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error for a path that was never fetched")
 	}
-	if clierr.ExitCode(err) != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", clierr.ExitCode(err), clierr.ExitFailure)
+	// "no copy of that here" is the answer a 404 gives, and a script can act
+	// on it the same way; exit 1 said the run itself had gone wrong.
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitNotFound)
 	}
 	requireErrorContains(t, err, "not cached: /team/frc177 (run without --offline to fetch)")
 	if out != "" {

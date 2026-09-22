@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/the-blue-alliance/tba-cli/internal/cache"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // seedCache writes a cache entry for url with a body and an age, so that the
@@ -359,6 +360,11 @@ func TestOfflineFailsOnAnUncachedPath(t *testing.T) {
 	want := "not cached: /team/frc177 (run without --offline to fetch)"
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+	// The thing asked for is not here, which is what a 404 says too, so a
+	// script can treat the two alike.
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitNotFound)
 	}
 	if n := len(rec.all()); n != 0 {
 		t.Errorf("offline made %d requests, want 0", n)

@@ -1054,7 +1054,7 @@ $ tba --offline team view 1073
 Error: not cached: /team/frc1073 (run without --offline to fetch)
 ```
 
-It exits 1. Because offline mode has nothing but the cache to serve from, `--offline --no-cache` is a usage error.
+It exits 5, the same code a `404` gets: what you asked for is not here. Because offline mode has nothing but the cache to serve from, `--offline --no-cache` is a usage error.
 
 ### Network behavior
 
@@ -1134,7 +1134,7 @@ $ tba team search -- -blue
 | 1 | Runtime or network failure (including HTTP 5xx) |
 | 2 | Usage error: a bad flag, a bad argument, an unknown command, a malformed key |
 | 4 | Authentication required: no API key configured, HTTP 401, or nothing to log out of |
-| 5 | Not found: HTTP 404 |
+| 5 | Not found: HTTP 404, or an `--offline` run with nothing cached for that path |
 | 130 | Interrupted (Ctrl-C); nothing is printed |
 | 141 | stdout closed early (for example when the reader of a pipe exits first); nothing is printed |
 
