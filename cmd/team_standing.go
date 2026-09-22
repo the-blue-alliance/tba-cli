@@ -47,7 +47,7 @@ func newTeamStandingCmd() *cobra.Command {
 					return err
 				}
 				if !choice.found {
-					return printNoResult(cmd, noEventNote(team, choice.year, now))
+					return printNoResult(cmd, noEventNote(team, choice.year, now, choice.hadEvents))
 				}
 				eventKey = choice.event.Key
 			}

@@ -224,7 +224,9 @@ func TestTeamStandingWithNoCurrentEvent(t *testing.T) {
 	})
 	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "--year", "2024", "--format", "table")
 	requireNoError(t, err, errOut)
-	if want := "note: no current or upcoming event for team 177 in 2024\n"; errOut != want {
+	want := "note: no current or upcoming event for team 177 in 2024; " +
+		"see 'tba team events 177 --year 2024'\n"
+	if errOut != want {
 		t.Errorf("stderr = %q, want %q", errOut, want)
 	}
 	if out != "" {
