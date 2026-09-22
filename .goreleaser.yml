@@ -1,5 +1,15 @@
 version: 2
 
+# Man pages and completion scripts are generated from the command tree itself,
+# so they can never drift from the flags the binary actually has. They are
+# written outside dist/, which goreleaser insists on owning.
+before:
+  hooks:
+    # --date takes the man page header off the commit rather than the clock,
+    # so rebuilding a tag produces the same archives.
+    - go run ./cmd/tba docs man --dir manpages --date {{ .CommitDate }}
+    - go run ./cmd/tba docs completions --dir completions
+
 builds:
   - main: ./cmd/tba
     binary: tba
@@ -27,6 +37,12 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - README.md
+      - src: manpages/*
+        dst: man
+      - src: completions/*
+        dst: completions
 
 checksum:
   name_template: "checksums.txt"
