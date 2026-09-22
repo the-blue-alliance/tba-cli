@@ -89,8 +89,15 @@ func TestReleaseWorkflowSerialisesReleases(t *testing.T) {
 	if !ok {
 		t.Fatalf("concurrency = %v, want a mapping", workflow["concurrency"])
 	}
-	if group, _ := concurrency["group"].(string); group == "" {
+	// The group has to be the same string for every tag. A group keyed on
+	// github.ref only serialises a tag against itself, which cannot happen,
+	// so two tags pushed together released in parallel over one repository.
+	group, _ := concurrency["group"].(string)
+	if group == "" {
 		t.Error("concurrency has no group")
+	}
+	if strings.Contains(group, "${{") {
+		t.Errorf("concurrency group = %q; it must not vary per tag, or two releases run at once", group)
 	}
 	if cancel, _ := concurrency["cancel-in-progress"].(bool); cancel {
 		t.Error("cancel-in-progress is true; a release that has published artifacts must be allowed to finish")
