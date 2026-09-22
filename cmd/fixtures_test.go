@@ -486,10 +486,12 @@ const awards2024ctharJSON = `[
   }
 ]`
 
+// The strongest team at the event is not the lowest-numbered one, and two
+// teams share an OPR, so the ordering and its tiebreak are both visible.
 const oprs2024ctharJSON = `{
-  "oprs": {"frc177": 55.4321, "frc1073": 41.1234, "frc5507": 30.5},
-  "dprs": {"frc177": 20.1111, "frc1073": 25.6666, "frc5507": 28.25},
-  "ccwms": {"frc177": 35.3210, "frc1073": 15.4568, "frc5507": 2.25}
+  "oprs": {"frc177": 55.4321, "frc1073": 41.1234, "frc5507": 30.5, "frc230": 61.2, "frc1071": 41.1234},
+  "dprs": {"frc177": 20.1111, "frc1073": 25.6666, "frc5507": 28.25, "frc230": 18.75, "frc1071": 24.0},
+  "ccwms": {"frc177": 35.3210, "frc1073": 15.4568, "frc5507": 2.25, "frc230": 42.45, "frc1071": 17.1234}
 }`
 
 const districtPoints2024ctharJSON = `{

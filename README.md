@@ -361,7 +361,7 @@ A column is named by its header, matched case-insensitively and ignoring spaces,
 tba district events 2024ne --format csv --columns key,start_date
 tba event rankings 2024necmp --columns 1,2 --no-headers
 tba team list --year 2024 --sort number
-tba event oprs 2024cthar --sort=-opr
+tba event oprs 2024cthar --sort team
 ```
 
 `--sort` is stable, so rows that compare equal keep the order the API returned them in, and it is numeric-aware: two cells that both parse as numbers compare as numbers, so team `177` sorts before `1073`. Sorting happens before `--columns`, so you can sort by a column you do not display.
@@ -832,7 +832,7 @@ key,label,alliance,autoPoints,autoSpeakerNoteCount,endGameHarmonyPoints,...,tota
 
 The columns are the union of every key seen anywhere in the event, sorted (with array indices compared as numbers, so a grid reads 1, 2, ... 10 rather than 1, 10, 2), and a key an alliance does not have is blank rather than zero. The game changes every season, so the columns do too. This dataset is skipped under `--to json` with a note on stderr: the JSON `matches` file already carries every breakdown verbatim, and a second copy under another name would only be something to keep in step.
 
-**Reproducibility.** Two exports of the same data produce byte-identical files. Nothing written carries a timestamp or a version string, every listing has a fixed order (matches and score breakdowns in play order, teams by number, rankings by rank, oprs by team, awards by award type then team), lines end with LF on every platform, and files arrive with mode `0644`.
+**Reproducibility.** Two exports of the same data produce byte-identical files. Nothing written carries a timestamp or a version string, every listing has a fixed order (matches and score breakdowns in play order, teams by number, rankings by rank, oprs by OPR, awards by award type then team), lines end with LF on every platform, and files arrive with mode `0644`.
 
 **Nothing half-done.** Every file is written to a temporary file in the target directory, and the whole set is renamed into place only once all of them have been fetched. A failure part way through — a 500 on the seventh dataset, or a rename the filesystem refuses on the third file — leaves the directory exactly as it was: files already renamed are taken back out, and under `--force` the files that were replaced are put back. An existing file is never overwritten without `--force`, and the clash is found before the first request, and again immediately before the renames, so a file that appeared while the export was fetching is refused rather than silently replaced. Every conflicting path is listed at once:
 
@@ -1017,7 +1017,7 @@ identical archives.
 | `tba event alliances <key>` | Show playoff alliances |
 | `tba event team-statuses <key>` | Show where every team at an event stands (`--overall`) |
 | `tba event awards <key>` | Show event awards |
-| `tba event oprs <key>` | Show OPR/DPR/CCWM |
+| `tba event oprs <key>` | Show OPR/DPR/CCWM, highest OPR first |
 | `tba event district-points <key>` | Show district points (`--tiebreakers`) |
 | `tba event predictions <key>` | Show match predictions (`--rankings`, `--stats`) |
 | `tba event insights <key>` | Show event insights (`--level qual\|playoff`) |

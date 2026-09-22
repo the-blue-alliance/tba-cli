@@ -176,17 +176,33 @@ func TestEventAwards(t *testing.T) {
 	}
 }
 
-func TestEventOPRsAreSortedByTeamNumber(t *testing.T) {
+// An OPR table is read to find the strongest teams, so it is ordered by OPR.
+// Two teams on the same OPR keep team-number order, which makes the output the
+// same every run.
+func TestEventOPRsAreSortedByOPR(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
 	out, _, err := runCmd(t, srv, "event", "oprs", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
 	want := "Team,OPR,DPR,CCWM\n" +
+		"230,61.20,18.75,42.45\n" +
 		"177,55.43,20.11,35.32\n" +
+		"1071,41.12,24.00,17.12\n" +
 		"1073,41.12,25.67,15.46\n" +
 		"5507,30.50,28.25,2.25\n"
 	if out != want {
 		t.Errorf("csv =\n%q\nwant\n%q", out, want)
+	}
+}
+
+// --sort is still the way to ask for any other order.
+func TestEventOPRsSortByTeam(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	out, _, err := runCmd(t, srv, "event", "oprs", "2024cthar",
+		"--format", "csv", "--sort", "team", "--columns", "team", "--no-headers")
+	requireNoError(t, err, "")
+	if out != "177\n230\n1071\n1073\n5507\n" {
+		t.Errorf("teams = %q", out)
 	}
 }
 
