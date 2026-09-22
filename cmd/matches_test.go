@@ -20,11 +20,11 @@ func localTime(epoch int64) string {
 
 // localDateTime is localTime for a listing that spans more than one day, which
 // carries the date as well — and the year too when the match did not happen in
-// the year the clock is in, so that these expectations do not go stale as the
+// the year now is in, so that these expectations do not go stale as the
 // seasons the fixtures are from recede.
-func localDateTime(epoch int64) string {
+func localDateTime(epoch int64, now time.Time) string {
 	at := time.Unix(epoch, 0).In(time.Local)
-	if at.Year() != nowFunc().In(time.Local).Year() {
+	if at.Year() != now.In(time.Local).Year() {
 		return at.Format(frc.YearTimeLayout)
 	}
 	return at.Format(frc.DatedTimeLayout)
@@ -73,7 +73,7 @@ func TestEventMatchesColumns(t *testing.T) {
 		"Qual 12", "2024cthar_qm12",
 		"177, 1073, 5507", "230, 1071, 4055*",
 		"88-61", "red",
-		localDateTime(1711130820), "", "actual", "Played",
+		localDateTime(1711130820, time.Now()), "", "actual", "Played",
 	}
 	if got := findRow(t, records, "2024cthar_qm12"); !equalStrings(got, want) {
 		t.Errorf("qm12 row =\n%v\nwant\n%v", got, want)
@@ -83,16 +83,15 @@ func TestEventMatchesColumns(t *testing.T) {
 // An unplayed match scores -1/-1; the score column stays blank and the status
 // says so. Its time is the queue's prediction, not a result.
 func TestEventMatchesLeavesAnUnplayedScoreBlank(t *testing.T) {
-	withNow(t, time.Unix(1711122000-1080, 0))
 	srv := eventMatchesServer(t)
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	out, _, err := runCmdAt(t, srv, time.Unix(1711122000-1080, 0), "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
 	want := []string{
 		"Qual 2", "2024cthar_qm2",
 		"558, 3467, 2168", "195, 1124, 6153",
 		"", "",
-		localDateTime(1711122000), "in 18m", "predicted", "Scheduled",
+		localDateTime(1711122000, time.Unix(1711122000-1080, 0)), "in 18m", "predicted", "Scheduled",
 	}
 	if got := findRow(t, parseCSV(t, out), "2024cthar_qm2"); !equalStrings(got, want) {
 		t.Errorf("unplayed row =\n%v\nwant\n%v", got, want)
@@ -441,7 +440,7 @@ func TestEventMatchesTimeSourceIsADroppableColumn(t *testing.T) {
 	if !equalStrings(records[0], []string{"Match", "Time"}) {
 		t.Errorf("header = %v", records[0])
 	}
-	if records[1][1] != localDateTime(1711122000) {
+	if records[1][1] != localDateTime(1711122000, time.Now()) {
 		t.Errorf("time = %q", records[1][1])
 	}
 }
@@ -629,7 +628,7 @@ func TestEventMatchesFor2015(t *testing.T) {
 		"Qual 7", "2015ctwat_qm7",
 		"177, 1071, 2168", "230, 195, 558",
 		"44-44", "tie",
-		localDateTime(1427464800), "", "scheduled", "Played",
+		localDateTime(1427464800, time.Now()), "", "scheduled", "Played",
 	}
 	if got := findRow(t, parseCSV(t, out), "2015ctwat_qm7"); !equalStrings(got, want) {
 		t.Errorf("row =\n%v\nwant\n%v", got, want)
@@ -680,11 +679,10 @@ func TestEventMatchesCSVKeepsTheEmptyWhenColumn(t *testing.T) {
 // A column that is blank on some rows and not others is data, not emptiness:
 // a played match has nothing to count down to, and that is the answer.
 func TestEventMatchesKeepsWhenForAnUpcomingMatch(t *testing.T) {
-	withNow(t, time.Unix(1711220400-600, 0))
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + matchViewUnplayedJSON + "]",
 	})
-	out, errOut, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	out, errOut, err := runCmdAt(t, srv, time.Unix(1711220400-600, 0), "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, errOut)
 
 	if header := parseCSV(t, out)[0]; !contains(header, "When") {
@@ -972,11 +970,10 @@ func equalStrings(a, b []string) bool {
 // Today's competition needs no date on every row: the weekday and the clock
 // are what a team in the pits reads, and they know what day it is.
 func TestEventMatchesOmitsTheDateForTodaysMatches(t *testing.T) {
-	withNow(t, time.Unix(1711120920, 0))
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
 	})
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	out, _, err := runCmdAt(t, srv, time.Unix(1711120920, 0), "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
 	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localTime(1711120920) {
@@ -987,15 +984,14 @@ func TestEventMatchesOmitsTheDateForTodaysMatches(t *testing.T) {
 // The same listing read later is a listing of history, and "Fri 11:22" names
 // one of the season's Fridays without saying which.
 func TestEventMatchesAddsTheDateOnceTheDayIsPast(t *testing.T) {
-	withNow(t, time.Unix(1711120920+30*24*3600, 0))
 	srv := newFakeTBA(t, map[string]any{
 		"/event/2024cthar/matches": "[" + match2024ctharQM1JSON + "," + match2024ctharQM2JSON + "]",
 	})
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	out, _, err := runCmdAt(t, srv, time.Unix(1711120920+30*24*3600, 0), "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
-	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localDateTime(1711120920) {
-		t.Errorf("time = %q, want %q", got, localDateTime(1711120920))
+	if got := findRow(t, parseCSV(t, out), "2024cthar_qm1")[6]; got != localDateTime(1711120920, time.Unix(1711120920+30*24*3600, 0)) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1711120920, time.Unix(1711120920+30*24*3600, 0)))
 	}
 }
 
@@ -1007,8 +1003,8 @@ func TestEventMatchesAddsTheDateAcrossDays(t *testing.T) {
 	requireNoError(t, err, "")
 
 	row := findRow(t, parseCSV(t, out), "2024cthar_f1m2")
-	if got := row[6]; got != localDateTime(1711307040) {
-		t.Errorf("time = %q, want %q", got, localDateTime(1711307040))
+	if got := row[6]; got != localDateTime(1711307040, time.Now()) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1711307040, time.Now()))
 	}
 }
 
@@ -1016,9 +1012,8 @@ func TestEventMatchesAddsTheDateAcrossDays(t *testing.T) {
 // 11:40" says nothing about which season it was, which is the first thing
 // anybody asks about an old match.
 func TestEventMatchesAddTheYearForAnOlderSeason(t *testing.T) {
-	withNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))
 	srv := eventMatchesServer(t)
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	out, _, err := runCmdAt(t, srv, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local), "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
 	want := time.Unix(1711122000, 0).In(time.Local).Format(frc.YearTimeLayout)
@@ -1029,9 +1024,8 @@ func TestEventMatchesAddTheYearForAnOlderSeason(t *testing.T) {
 
 // A listing inside the season keeps the shorter form.
 func TestEventMatchesLeaveTheYearOffThisSeason(t *testing.T) {
-	withNow(t, time.Date(2024, 5, 1, 12, 0, 0, 0, time.Local))
 	srv := eventMatchesServer(t)
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	out, _, err := runCmdAt(t, srv, time.Date(2024, 5, 1, 12, 0, 0, 0, time.Local), "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
 	want := time.Unix(1711122000, 0).In(time.Local).Format(frc.DatedTimeLayout)
@@ -1050,17 +1044,16 @@ func TestTeamMatchesSeasonTimesCarryTheDate(t *testing.T) {
 	requireNoError(t, err, "")
 
 	// Column 7 is Time, one to the right of the season listing's Event column.
-	if got := findRow2(t, parseCSV(t, out), "2024ctwat_qm5")[7]; got != localDateTime(1709913780) {
-		t.Errorf("time = %q, want %q", got, localDateTime(1709913780))
+	if got := findRow2(t, parseCSV(t, out), "2024ctwat_qm5")[7]; got != localDateTime(1709913780, time.Now()) {
+		t.Errorf("time = %q, want %q", got, localDateTime(1709913780, time.Now()))
 	}
 }
 
 // The countdown answers "when", which only a match still to come has: a played
 // one has a score instead, and a relative time on it would change every run.
 func TestEventMatchesWhenCountsDownUnplayedMatchesOnly(t *testing.T) {
-	withNow(t, time.Unix(1711122000-7200, 0))
 	srv := eventMatchesServer(t)
-	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--format", "csv")
+	out, _, err := runCmdAt(t, srv, time.Unix(1711122000-7200, 0), "event", "matches", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
 	records := parseCSV(t, out)

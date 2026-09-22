@@ -18,6 +18,14 @@ import (
 // per call so that flag state is never shared between invocations, which keeps
 // tests independent of each other.
 func NewRootCmd() *cobra.Command {
+	return newRootCmdWithClock(systemClock())
+}
+
+// newRootCmdWithClock builds the tree against a given clock, which is how a
+// test pins "now" without a package-level variable for two tests to fight
+// over. The clock is hung on the context in PersistentPreRunE, so every
+// command reaches it the same way it reaches the settings.
+func newRootCmdWithClock(clk clock) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "tba",
 		Short: "The Blue Alliance CLI",
@@ -38,6 +46,10 @@ func NewRootCmd() *cobra.Command {
 		// Flags are checked once, before any command does work, so that a
 		// contradictory --format is reported without first hitting the API.
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			// The clock goes on first, so that resolving the settings — which
+			// works out the default --year, and that means asking what season
+			// it is — already has one.
+			cmd.SetContext(withClock(cmd.Context(), clk))
 			// Resolve flags, environment and config file into one view before
 			// anything reads a setting, then check the ones whose value can be
 			// wrong, so that a bad --format is reported without first hitting

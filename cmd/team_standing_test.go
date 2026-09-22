@@ -205,12 +205,11 @@ func TestTeamStandingAcceptsTheSameEventTwice(t *testing.T) {
 // With no event at all, the question is about wherever the team is now — the
 // same answer `team next` works out.
 func TestTeamStandingAutoDetectsTheCurrentEvent(t *testing.T) {
-	withNow(t, time.Date(2024, 3, 23, 9, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/events/2024":            teamEvents177In2024JSON,
 		"/team/frc177/event/2024cthar/status": teamStatus177At2024ctharJSON,
 	})
-	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "--year", "2024", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Date(2024, 3, 23, 9, 0, 0, 0, time.Local), "team", "standing", "177", "--year", "2024", "--format", "table")
 	requireNoError(t, err, errOut)
 	requireContains(t, out, "Event:          2024cthar")
 }
@@ -218,11 +217,10 @@ func TestTeamStandingAutoDetectsTheCurrentEvent(t *testing.T) {
 // Out of season there is no event to stand at, which is an answer rather than
 // a failure, exactly as it is for `team next`.
 func TestTeamStandingWithNoCurrentEvent(t *testing.T) {
-	withNow(t, time.Date(2024, 7, 1, 12, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/events/2024": teamEvents177In2024JSON,
 	})
-	out, errOut, err := runCmd(t, srv, "team", "standing", "177", "--year", "2024", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Date(2024, 7, 1, 12, 0, 0, 0, time.Local), "team", "standing", "177", "--year", "2024", "--format", "table")
 	requireNoError(t, err, errOut)
 	want := "note: no current or upcoming event for team 177 in 2024; " +
 		"see 'tba team events 177 --year 2024'\n"

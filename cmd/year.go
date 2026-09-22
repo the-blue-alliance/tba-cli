@@ -39,14 +39,15 @@ const firstFRCSeason = 1992
 // limiter, outside the pacing the rest of the command is doing.
 func resolveYear(cmd *cobra.Command, client ...*api.Client) (int, error) {
 	s := settings(cmd)
+	clk := clockOf(cmd)
 	if s.Source("year") != sourceDefault {
-		return validateSeason(s.Int("year"), s.origin("year"))
+		return validateSeason(clk.now(), s.Int("year"), s.origin("year"))
 	}
 	var lent *api.Client
 	if len(client) > 0 {
 		lent = client[0]
 	}
-	return currentSeason(cmd, lent)
+	return currentSeason(cmd, lent, clk)
 }
 
 // validateSeason rejects a year that cannot name an FRC season.
@@ -57,8 +58,8 @@ func resolveYear(cmd *cobra.Command, client ...*api.Client) (int, error) {
 // number that was meant to be something else, or an event key that lost its
 // letters — all of which are better reported than turned into a request for a
 // season that does not exist.
-func validateSeason(year int, origin string) (int, error) {
-	latest := currentYear() + 1
+func validateSeason(now time.Time, year int, origin string) (int, error) {
+	latest := currentYear(now) + 1
 	if year < firstFRCSeason || year > latest {
 		return 0, clierr.Usage("%s %d is not an FRC season (%d-%d)", origin, year, firstFRCSeason, latest)
 	}
@@ -67,10 +68,12 @@ func validateSeason(year int, origin string) (int, error) {
 
 // currentSeason asks the API which season is on, remembering the answer for a
 // day so that the default --year costs one extra request at most per day.
-func currentSeason(cmd *cobra.Command, client *api.Client) (int, error) {
+func currentSeason(cmd *cobra.Command, client *api.Client, clk clock) (int, error) {
 	noCache := settings(cmd).Bool("no-cache")
 
-	store, err := season.New()
+	// The cache is given the same clock, so a pinned "now" decides both which
+	// season is current and whether the remembered one has gone stale.
+	store, err := season.New(clk.now)
 	if err != nil {
 		store = nil
 	}
@@ -89,7 +92,7 @@ func currentSeason(cmd *cobra.Command, client *api.Client) (int, error) {
 		}
 		return year, nil
 	}
-	return currentYear(), nil
+	return currentYear(clk.now()), nil
 }
 
 // fetchCurrentSeason reads current_season from /status. It returns 0 for a
@@ -130,8 +133,8 @@ func fetchCurrentSeason(cmd *cobra.Command, client *api.Client) (int, error) {
 	return status.CurrentSeason, nil
 }
 
-// currentYear is the calendar year, which is the season's name outside of
+// currentYear is now's calendar year, which is the season's name outside of
 // kickoff season.
-func currentYear() int {
-	return time.Now().Year()
+func currentYear(now time.Time) int {
+	return now.Year()
 }

@@ -168,7 +168,7 @@ func TestTeamListMarkdown(t *testing.T) {
 
 // Regression test: --year has a default, so omitting it must work.
 func TestTeamListDefaultsToCurrentYear(t *testing.T) {
-	year := currentYear()
+	year := thisYear()
 	srv := newFakeTBA(t, map[string]any{
 		fmt.Sprintf("/teams/%d/0", year): "[" + teamFRC177JSON + "]",
 		fmt.Sprintf("/teams/%d/1", year): "[]",
@@ -215,7 +215,7 @@ func TestTeamEventsListsTheSeasonInOrder(t *testing.T) {
 }
 
 func TestTeamEventsDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/team/frc177/events/%d", currentYear())
+	path := fmt.Sprintf("/team/frc177/events/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "events", "177")
 	requireNoError(t, err, "")
@@ -258,7 +258,7 @@ func TestTeamMatches(t *testing.T) {
 
 // Regression test: `team matches` used to fail without an explicit --year.
 func TestTeamMatchesDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/team/frc177/matches/%d", currentYear())
+	path := fmt.Sprintf("/team/frc177/matches/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "matches", "177")
 	requireNoError(t, err, "")
@@ -321,7 +321,7 @@ func TestTeamMedia(t *testing.T) {
 
 // Regression test: `team media` used to fail without an explicit --year.
 func TestTeamMediaDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/team/frc177/media/%d", currentYear())
+	path := fmt.Sprintf("/team/frc177/media/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "media", "177")
 	requireNoError(t, err, "")

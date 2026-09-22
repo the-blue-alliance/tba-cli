@@ -225,7 +225,7 @@ func newEventMatchesCmd() *cobra.Command {
 			// The event is fetched second and only for its playoff_type, which
 			// decides how playoff matches are named.
 			playoffType := eventPlayoffType(cmd, client, args[0])
-			return renderMatches(cmd, matches, constantPlayoffType(playoffType), args[0])
+			return renderMatches(cmd, matches, constantPlayoffType(playoffType), args[0], nowOf(cmd))
 		},
 	}
 	addMatchTableFlags(c)

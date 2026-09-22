@@ -84,7 +84,7 @@ func TestEventList(t *testing.T) {
 
 // Regression test: `event list` used to fail without an explicit --year.
 func TestEventListDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/events/%d", currentYear())
+	path := fmt.Sprintf("/events/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "event", "list")
 	requireNoError(t, err, "")

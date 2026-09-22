@@ -220,7 +220,7 @@ match table.`,
 				if err := client.Get(cmd.Context(), path, &matches); err != nil {
 					return err
 				}
-				return renderMatches(cmd, matches, constantPlayoffType(eventPlayoffType(cmd, client, eventKey)), eventKey)
+				return renderMatches(cmd, matches, constantPlayoffType(eventPlayoffType(cmd, client, eventKey)), eventKey, nowOf(cmd))
 			}
 
 			year, err := resolveYear(cmd, client)
@@ -235,7 +235,7 @@ match table.`,
 			// different playoff brackets; the labels then fall back to a guess
 			// from each match's own season.
 			scope := fmt.Sprintf("team %s in %d", output.TeamNumberFromKey(team), year)
-			return renderSeasonMatches(cmd, matches, constantPlayoffType(nil), teamEventOrder(cmd, client, team, year), scope)
+			return renderSeasonMatches(cmd, matches, constantPlayoffType(nil), teamEventOrder(cmd, client, team, year), scope, nowOf(cmd))
 		},
 	}
 	addYearFlag(c)

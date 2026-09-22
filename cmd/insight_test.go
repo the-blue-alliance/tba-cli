@@ -192,7 +192,7 @@ func TestInsightLeaderboardsOfAnEmptySeason(t *testing.T) {
 
 // Regression test: `insight leaderboards` used to fail without --year.
 func TestInsightLeaderboardsDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/insights/leaderboards/%d", currentYear())
+	path := fmt.Sprintf("/insights/leaderboards/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "insight", "leaderboards")
 	requireNoError(t, err, "")
@@ -273,7 +273,7 @@ func TestInsightNotablesBoardFiltersJSON(t *testing.T) {
 
 // Regression test: `insight notables` used to fail without --year.
 func TestInsightNotablesDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/insights/notables/%d", currentYear())
+	path := fmt.Sprintf("/insights/notables/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "insight", "notables")
 	requireNoError(t, err, "")

@@ -31,7 +31,7 @@ func TestDistrictListTable(t *testing.T) {
 
 // Regression test: `district list` used to fail without an explicit --year.
 func TestDistrictListDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/districts/%d", currentYear())
+	path := fmt.Sprintf("/districts/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "district", "list")
 	requireNoError(t, err, "")

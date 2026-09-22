@@ -41,7 +41,7 @@ func newTeamStandingCmd() *cobra.Command {
 			if eventKey == "" {
 				// No event named: the question is about wherever the team is
 				// now, which is what `team next` asks too.
-				now := nowFunc()
+				now := nowOf(cmd)
 				choice, err := resolveTeamEvent(cmd, client, team, "", now)
 				if err != nil {
 					return err
