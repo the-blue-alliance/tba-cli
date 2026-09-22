@@ -76,6 +76,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newDocsCmd())
 	rootCmd.AddCommand(newOpenCmd())
+	rootCmd.AddCommand(newConfigCmd())
 
 	// Argument completion is wired onto the finished tree; see completion.go.
 	attachCompletions(rootCmd)
