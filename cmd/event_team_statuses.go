@@ -52,9 +52,14 @@ an Overall column.`,
 			withOverall, _ := cmd.Flags().GetBool("overall")
 			// 2015 had no win/loss and no bracket rounds, so Record and Round
 			// are blank for every team at such an event. A column nobody has
-			// anything in is not a column. `event export` keeps them, since a
-			// file's header is a schema rather than a view.
-			table := eventTeamStatusesTableWith(statuses, withOverall).DropEmptyColumns()
+			// anything in is not a column on screen. csv, tsv and the files
+			// `event export` writes keep them, since a file's header is a
+			// schema rather than a view.
+			format, err := resolveFormat(cmd)
+			if err != nil {
+				return err
+			}
+			table := dropEmptyColumnsFor(format, eventTeamStatusesTableWith(statuses, withOverall))
 			// The parsed map, so --jq still sees the shape the API returns.
 			// It is not a slice, so --sort reorders the table only.
 			return outputTable(cmd, statuses, table.Headers, table.Rows)

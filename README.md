@@ -235,11 +235,14 @@ played, whose score is the answer. `Time Source` says where the time came from:
 estimate, `scheduled` for the published schedule. Drop any of them with
 `--columns`.
 
-A column no row in the listing has anything in is left out rather than printed
-empty: a listing of an event that finished years ago has nothing to count down
-to, so it has no `When` column at all. `event watch` is the exception and keeps
-every column, since its widths are fixed by the first poll and a column dropped
-then could not come back when a later poll filled it in.
+A column no row in the listing has anything in is left out of `table` and
+`markdown` rather than printed empty: a listing of an event that finished years
+ago has nothing to count down to, so it has no `When` column at all. `csv` and
+`tsv` keep every column, because what they produce is a file, and a file's
+header is a schema: which columns you get cannot depend on which event you
+asked about. `event watch` keeps every column too, since its widths are fixed by
+the first poll and a column dropped then could not come back when a later poll
+filled it in.
 
 **Filters.**
 
@@ -334,10 +337,12 @@ tba event rankings 2024cthar --sort='-total ranking points'
 Team names come from a second request. If that one fails the ranking table is
 printed anyway, and `--format json` skips the request altogether.
 
-A column no team at the event has anything in is not printed: 2015 had no
-win/loss record at all, so its table has no `Record` column rather than a blank
-stripe down it. The column is gone rather than hidden, so `--columns record`
-there is the usual unknown-column error listing what the table does have.
+A column no team at the event has anything in is not printed in `table` or
+`markdown`: 2015 had no win/loss record at all, so its table has no `Record`
+column rather than a blank stripe down it. The column is gone rather than
+hidden, so `--columns record` there is the usual unknown-column error listing
+what the table does have. `csv` and `tsv` keep it — empty, and in the same
+place it is for every other season.
 
 `event alliances` shows `Alliance | Captain | Pick 1 | Pick 2 | Backup | Status |
 Level | Record | Declines`. Backup reads "1234 in for 5678" when the API says who
@@ -352,8 +357,9 @@ own word.
 Status`. Teams are listed by rank with the unranked last, Pick names the slot
 (`Captain`, `1`, `2`, `Backup`), and Round is the double-elimination bracket
 round the team went out in. A column no team at the event has anything in is
-left out, so a 2015 event — a season with no win-loss record and no bracket
-rounds — has neither a `Record` nor a `Round` column.
+left out of `table` and `markdown`, so a 2015 event — a season with no win-loss
+record and no bracket rounds — has neither a `Record` nor a `Round` column on
+screen; `csv` and `tsv` keep both, empty.
 
 TBA also writes a summary sentence about each team, which is around 250
 characters of prose. It is always in the JSON, as `overall_status_str`;
