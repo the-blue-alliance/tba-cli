@@ -467,7 +467,14 @@ func newEventOPRsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "oprs <key>",
 		Short: "Show event OPRs",
+		Long: `Show the contributions TBA calculates for each team at an event.
+
+OPR is offensive power rating, DPR defensive power rating and CCWM calculated
+contribution to winning margin. The table is ordered by OPR, highest first,
+since that is the question the command is asked; --sort reorders it by any
+column, and ties keep team-number order.`,
 		Example: `  tba event oprs 2024cthar
+  tba event oprs 2024cthar --sort team
   tba event oprs 2024cthar --format csv`,
 		Args: exactArgs(1, "an event key (e.g. tba event oprs 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -489,20 +496,21 @@ func newEventOPRsCmd() *cobra.Command {
 }
 
 // eventOPRsTable renders the calculated contributions, one row per team,
-// ordered by team number.
+// highest OPR first.
+//
+// Team-number order was the wrong default: nobody asks for an event's OPRs to
+// find out what team 177 scored, they ask to see who the strongest teams were.
+// Ties fall back to team number so the order is the same every run, and
+// --sort is there for anyone who wants it another way.
 func eventOPRsTable(oprs api.EventOPRs) output.Table {
 	teamKeys := make([]string, 0, len(oprs.OPRs))
 	for team := range oprs.OPRs {
 		teamKeys = append(teamKeys, team)
 	}
 	// Map iteration order is random; sort so the output is stable.
-	sort.Slice(teamKeys, func(i, j int) bool {
-		a, errA := strconv.Atoi(output.TeamNumberFromKey(teamKeys[i]))
-		b, errB := strconv.Atoi(output.TeamNumberFromKey(teamKeys[j]))
-		if errA == nil && errB == nil {
-			return a < b
-		}
-		return teamKeys[i] < teamKeys[j]
+	sortTeamKeys(teamKeys)
+	sort.SliceStable(teamKeys, func(i, j int) bool {
+		return oprs.OPRs[teamKeys[i]] > oprs.OPRs[teamKeys[j]]
 	})
 	var rows [][]string
 	for _, team := range teamKeys {
