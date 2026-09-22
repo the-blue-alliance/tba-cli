@@ -193,6 +193,10 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			// Ctrl-C landed mid-request. That is not a poll that failed, it is
 			// the user leaving: report it so the exit code says 130.
 			return err
+		case err != nil && opts.offline:
+			// There is no next interval to retry at: the cache has already
+			// said everything it has to say.
+			return err
 		case err != nil:
 			failures++
 			if failures >= watchFailureLimit {
