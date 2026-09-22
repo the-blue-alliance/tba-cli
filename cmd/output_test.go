@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // districtsCmd is the smallest command that returns a stable multi-row table,
@@ -235,6 +237,29 @@ func TestUnknownSortColumnIsAnError(t *testing.T) {
 	err = districtsCmdErr(t, "--json", "--sort", "nickname")
 	if !strings.Contains(err.Error(), "unknown column") {
 		t.Errorf("error = %v", err)
+	}
+}
+
+// A bad --columns or --sort is a mistake in how the command was invoked, so it
+// has to exit 2 like any other flag error rather than 1.
+func TestBadPresentationFlagsExitTwo(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"unknown column", []string{"--format", "csv", "--columns", "Nope"}},
+		{"column index out of range", []string{"--format", "csv", "--columns", "9"}},
+		{"unknown sort column", []string{"--format", "csv", "--sort", "Nope"}},
+		{"unknown sort column with json", []string{"--json", "--sort", "Nope"}},
+		{"empty sort column", []string{"--format", "csv", "--sort", "-"}},
+		{"columns with json", []string{"--json", "--columns", "key"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+			args := append([]string{"district", "list", "--year", "2024"}, tc.args...)
+			_ = requireExitCode(t, clierr.ExitUsage, srv, args...)
+		})
 	}
 }
 

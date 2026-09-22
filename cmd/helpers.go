@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -168,11 +167,13 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 
 	// Sorting runs before column selection so that a table can be ordered by a
 	// column the user chose not to display.
+	// A bad --sort or --columns is a mistake in the invocation, not a failure
+	// of the work, so it exits 2 like any other flag error.
 	sortSpec := settings(cmd).String("sort")
 	var order []int
 	if sortSpec != "" {
 		if order, err = table.SortOrder(sortSpec); err != nil {
-			return err
+			return clierr.Wrap(clierr.KindUsage, err)
 		}
 		table = table.Reorder(order)
 	}
@@ -180,7 +181,7 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	columns := settings(cmd).String("columns")
 	if format == "json" {
 		if columns != "" {
-			return errors.New("--columns applies to tabular formats; use --jq to shape JSON")
+			return clierr.Usage("--columns applies to tabular formats; use --jq to shape JSON")
 		}
 		// --sort is about the order of the result, not its shape, so it also
 		// reorders the JSON array the table was built from.
@@ -188,7 +189,7 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	}
 	if columns != "" {
 		if table, err = table.SelectColumns(columns); err != nil {
-			return err
+			return clierr.Wrap(clierr.KindUsage, err)
 		}
 	}
 
