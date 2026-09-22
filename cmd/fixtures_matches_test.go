@@ -1,0 +1,289 @@
+package cmd
+
+// Match fixtures for the match listings and `match view`. They use the real
+// field names and shapes returned by The Blue Alliance API v3.
+
+// A 2024 district event's matches, deliberately not in playing order so that
+// the listings have something to sort. 2024cthar ran a double-elimination
+// bracket (playoff_type 10), so its semifinal sets hold one match each.
+//
+// Between them these cover every case a listing has to render: a played match,
+// an unplayed one, a tie, a surrogate, a disqualification, a playoff set and a
+// finals series.
+const matches2024ctharJSON = `[
+  {
+    "key": "2024cthar_f1m2",
+    "comp_level": "f",
+    "set_number": 1,
+    "match_number": 2,
+    "event_key": "2024cthar",
+    "time": 1711306800,
+    "predicted_time": 1711306800,
+    "actual_time": 1711307040,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 131, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 127, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": {"red": {"totalPoints": 131}, "blue": {"totalPoints": 127}},
+    "videos": []
+  },
+  {
+    "key": "2024cthar_qm12",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 12,
+    "event_key": "2024cthar",
+    "time": 1711130400,
+    "predicted_time": 1711130700,
+    "actual_time": 1711130820,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 88, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
+    },
+    "score_breakdown": {"red": {"totalPoints": 88}, "blue": {"totalPoints": 61}},
+    "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}]
+  },
+  {
+    "key": "2024cthar_sf13m1",
+    "comp_level": "sf",
+    "set_number": 13,
+    "match_number": 1,
+    "event_key": "2024cthar",
+    "time": 1711299600,
+    "predicted_time": 1711299600,
+    "actual_time": 1711299780,
+    "winning_alliance": "blue",
+    "alliances": {
+      "red": {"score": 102, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 118, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024cthar_qm2",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 2,
+    "event_key": "2024cthar",
+    "time": 1711121400,
+    "predicted_time": 1711122000,
+    "actual_time": null,
+    "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc558", "frc3467", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024cthar_qm7",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 7,
+    "event_key": "2024cthar",
+    "time": 1711126800,
+    "predicted_time": 1711126800,
+    "actual_time": 1711126920,
+    "winning_alliance": "",
+    "alliances": {
+      "red": {"score": 44, "team_keys": ["frc1071", "frc4055", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024cthar_qm3",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 3,
+    "event_key": "2024cthar",
+    "time": 1711123200,
+    "predicted_time": 1711123200,
+    "actual_time": 1711123380,
+    "winning_alliance": "blue",
+    "alliances": {
+      "red": {"score": 31, "team_keys": ["frc177", "frc3467", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": ["frc2168"]},
+      "blue": {"score": 77, "team_keys": ["frc1073", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  }
+]`
+
+// The subset of 2024cthar's matches that team 177 played in.
+const teamMatches177At2024ctharJSON = `[
+  {
+    "key": "2024cthar_qm12",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 12,
+    "event_key": "2024cthar",
+    "time": 1711130400,
+    "predicted_time": 1711130700,
+    "actual_time": 1711130820,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 88, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024cthar_sf13m1",
+    "comp_level": "sf",
+    "set_number": 13,
+    "match_number": 1,
+    "event_key": "2024cthar",
+    "time": 1711299600,
+    "predicted_time": 1711299600,
+    "actual_time": null,
+    "winning_alliance": "",
+    "alliances": {
+      "red": {"score": -1, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": -1, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  }
+]`
+
+// A 2019 event, from the era of best-of-three bracket sets: its playoff
+// matches are named "QF 4-3" rather than "QF 4".
+const event2019ctwatJSON = `{
+  "key": "2019ctwat",
+  "name": "NE District Waterbury Event",
+  "event_code": "ctwat",
+  "event_type": 1,
+  "city": "Waterbury",
+  "state_prov": "CT",
+  "country": "USA",
+  "start_date": "2019-03-15",
+  "end_date": "2019-03-17",
+  "year": 2019,
+  "short_name": "Waterbury",
+  "event_type_string": "District",
+  "week": 2,
+  "address": "1 Waterbury Ln, Waterbury, CT 06702, USA",
+  "location_name": "Waterbury Arena",
+  "webcasts": [],
+  "playoff_type": 0
+}`
+
+const matches2019ctwatJSON = `[
+  {
+    "key": "2019ctwat_qf1m1",
+    "comp_level": "qf",
+    "set_number": 1,
+    "match_number": 1,
+    "event_key": "2019ctwat",
+    "time": 1552849800,
+    "predicted_time": 1552849800,
+    "actual_time": 1552849980,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 60, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 48, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2019ctwat_qf4m3",
+    "comp_level": "qf",
+    "set_number": 4,
+    "match_number": 3,
+    "event_key": "2019ctwat",
+    "time": 1552853400,
+    "predicted_time": 1552853400,
+    "actual_time": 1552853580,
+    "winning_alliance": "blue",
+    "alliances": {
+      "red": {"score": 55, "team_keys": ["frc1071", "frc4055", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 62, "team_keys": ["frc3467", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2019ctwat_sf1m2",
+    "comp_level": "sf",
+    "set_number": 1,
+    "match_number": 2,
+    "event_key": "2019ctwat",
+    "time": 1552856400,
+    "predicted_time": 1552856400,
+    "actual_time": 1552856640,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 71, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2019ctwat_f1m1",
+    "comp_level": "f",
+    "set_number": 1,
+    "match_number": 1,
+    "event_key": "2019ctwat",
+    "time": 1552860000,
+    "predicted_time": 1552860000,
+    "actual_time": 1552860180,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 82, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 79, "team_keys": ["frc3467", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  }
+]`
+
+// A 2021 remote event (event_type 7). The remote season ran no head-to-head
+// matches at all, so every listing has to survive an empty result.
+const event2021ctwatJSON = `{
+  "key": "2021ctwat",
+  "name": "New England FIRST Remote Event",
+  "event_code": "ctwat",
+  "event_type": 7,
+  "city": "Hartford",
+  "state_prov": "CT",
+  "country": "USA",
+  "start_date": "2021-03-20",
+  "end_date": "2021-03-21",
+  "year": 2021,
+  "short_name": "New England Remote",
+  "event_type_string": "Remote",
+  "week": 2,
+  "address": null,
+  "location_name": null,
+  "webcasts": [],
+  "playoff_type": null
+}`
+
+// A 2015 qualification match. That season scored both alliances the same in a
+// coopertition match and reported no winner, and it predates predicted times.
+const match2015ctwatQM7JSON = `{
+  "key": "2015ctwat_qm7",
+  "comp_level": "qm",
+  "set_number": 1,
+  "match_number": 7,
+  "event_key": "2015ctwat",
+  "time": 1427464800,
+  "predicted_time": null,
+  "actual_time": null,
+  "winning_alliance": "",
+  "alliances": {
+    "red": {"score": 44, "team_keys": ["frc177", "frc1071", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
+  "score_breakdown": null,
+  "videos": []
+}`

@@ -179,10 +179,13 @@ func newEventTeamsCmd() *cobra.Command {
 }
 
 func newEventMatchesCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "matches <key>",
 		Short: "List matches at event",
-		Example: `  tba event matches 2024cthar --format csv
+		Example: `  tba event matches 2024cthar
+  tba event matches 2024cthar --team 177 --upcoming
+  tba event matches 2024cthar --level playoff
+  tba event matches 2024cthar --format csv
   tba event matches 2024cthar --jq '.[].key' -r`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -197,20 +200,14 @@ func newEventMatchesCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/matches", args[0]), &matches); err != nil {
 				return err
 			}
-			rows := make([][]string, len(matches))
-			for i, m := range matches {
-				blueScore, redScore := "", ""
-				if a, ok := m.Alliances["blue"]; ok {
-					blueScore = strconv.Itoa(a.Score)
-				}
-				if a, ok := m.Alliances["red"]; ok {
-					redScore = strconv.Itoa(a.Score)
-				}
-				rows[i] = []string{m.Key, m.CompLevel, redScore, blueScore, m.WinningAlliance}
-			}
-			return outputTable(cmd, matches, []string{"Key", "Level", "Red", "Blue", "Winner"}, rows)
+			// The event is fetched second and only for its playoff_type, which
+			// decides how playoff matches are named.
+			playoffType := eventPlayoffType(cmd, client, args[0])
+			return renderMatches(cmd, matches, constantPlayoffType(playoffType))
 		},
 	}
+	addMatchTableFlags(c)
+	return c
 }
 
 func newEventRankingsCmd() *cobra.Command {

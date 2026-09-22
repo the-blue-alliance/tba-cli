@@ -183,29 +183,47 @@ func newTeamMatchesCmd() *cobra.Command {
 		Use:   "matches <number>",
 		Short: "List team matches for a year",
 		Example: `  tba team matches 177 --year 2024
-  tba team matches frc177 --year 2024 --format tsv`,
+  tba team matches frc177 --year 2024 --format tsv
+  tba team matches 177 --event 2024cthar
+  tba team matches 177 --event 2024cthar --upcoming`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
-			if err != nil {
-				return err
-			}
+
+			eventKey, _ := cmd.Flags().GetString("event")
 			var matches []api.Match
-			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year), &matches); err != nil {
-				return err
+			// Without --event the listing spans a whole season, whose events
+			// may have run different playoff brackets; the labels then fall
+			// back to a guess from each match's own season.
+			playoffTypeFor := constantPlayoffType(nil)
+			if eventKey != "" {
+				if err := validateEventKey(eventKey); err != nil {
+					return err
+				}
+				path := fmt.Sprintf("/team/%s/event/%s/matches", teamKey(args[0]), eventKey)
+				if err := client.Get(cmd.Context(), path, &matches); err != nil {
+					return err
+				}
+				playoffTypeFor = constantPlayoffType(eventPlayoffType(cmd, client, eventKey))
+			} else {
+				year, err := resolveYear(cmd)
+				if err != nil {
+					return err
+				}
+				path := fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year)
+				if err := client.Get(cmd.Context(), path, &matches); err != nil {
+					return err
+				}
 			}
-			rows := make([][]string, len(matches))
-			for i, m := range matches {
-				rows[i] = []string{m.Key, m.CompLevel, m.WinningAlliance}
-			}
-			return outputTable(cmd, matches, []string{"Key", "Level", "Winner"}, rows)
+			return renderMatches(cmd, matches, playoffTypeFor)
 		},
 	}
 	addYearFlag(c)
+	c.Flags().String("event", "", "Restrict to one event, by key (e.g. 2024cthar); overrides --year")
+	addMatchTableFlags(c)
 	return c
 }
 

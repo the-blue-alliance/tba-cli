@@ -219,12 +219,12 @@ func TestTeamMatches(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("want header + separator + 2 rows, got %d:\n%s", len(got), out)
 	}
-	if got[0] != "Key            Level  Winner" {
+	if got[0] != "Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status" {
 		t.Errorf("header = %q", got[0])
 	}
-	if got[2] != "2024cthar_qm1  qm     red   " {
-		t.Errorf("row = %q", got[2])
-	}
+	requireContains(t, got[2], "Qual 1")
+	requireContains(t, got[2], "2024cthar_qm1")
+	requireContains(t, got[2], "red")
 	requireContains(t, got[3], "2024cthar_qm2")
 	requireContains(t, got[3], "blue")
 }
