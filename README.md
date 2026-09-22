@@ -366,7 +366,9 @@ tba event oprs 2024cthar --sort=-opr
 
 `--sort` is stable, so rows that compare equal keep the order the API returned them in, and it is numeric-aware: two cells that both parse as numbers compare as numbers, so team `177` sorts before `1073`. Sorting happens before `--columns`, so you can sort by a column you do not display.
 
-`--sort` also reorders the array in `--format json`, keeping the JSON and the table in the same order. `--columns` does not apply to JSON — use `--jq` to shape it.
+`--sort` also reorders the array in `--format json`, keeping the JSON and the table in the same order. Where the JSON is not that array — an object keyed by team, or a document with the rows nested inside — there is no row order to apply, and `--sort` says so (exit 2) rather than printing an unsorted answer; use `--jq` to sort those. `--columns` does not apply to JSON — use `--jq` to shape it.
+
+A bad `--columns` or `--sort` value is a usage error (exit 2).
 
 `--no-headers` drops the header row from `table`, `csv` and `tsv`, and both the header and its separator from `markdown`. In `table` output the dashed separator goes too, and columns are sized from the data alone.
 
@@ -378,7 +380,7 @@ tba event oprs 2024cthar --sort=-opr
 | `--color always` | Color even when piped, e.g. into `less -R` |
 | `--color never`, `--no-color` | Never color |
 
-In `auto` mode color is off unless stdout is a terminal. It is also off when [`NO_COLOR`](https://no-color.org) is set to any non-empty value, or when `TERM=dumb`. Setting `CLICOLOR_FORCE` to anything but `0` turns color back on for a pipe. `--color always` overrides the environment; `--color never` and `--no-color` override everything.
+In `auto` mode color is off unless stdout is a terminal. It is also off when [`NO_COLOR`](https://no-color.org) is set to any non-empty value, or when `TERM=dumb`. Setting `CLICOLOR_FORCE` to anything but `0` turns color back on for a pipe. `--color always` overrides the environment; `--color never` and `--no-color` override everything. `no-color` wins over `color` whichever layer either came from, so a script can set it unconditionally.
 
 Only presentation is colored: the `table` header row, and the alliance cells of a match listing. `csv`, `tsv`, `markdown` and `json` never carry escape sequences, whatever `--color` says, so piping stays safe.
 
@@ -854,11 +856,21 @@ $ tba district list --year 2024 --jq '.[].key' -r
 2024fim
 ```
 
-**Arguments.** Team arguments accept either spelling: `tba team view 177` and `tba team view frc177` are the same command. Event and match keys are checked before any request goes out, so a typo comes back as a usage error rather than a 404:
+**Arguments.** Team arguments accept either spelling: `tba team view 177` and `tba team view frc177` are the same command. Team numbers, event keys and match keys are all checked before any request goes out, so a typo comes back as a usage error rather than a 404:
 
 ```
 $ tba event view cthar2024
 Error: "cthar2024" is not a valid event key (expected something like 2024cthar)
+
+$ tba team view 17x7
+Error: "17x7" is not a team number (expected something like 177 or frc177)
+```
+
+A missing argument names what is missing:
+
+```
+$ tba event matches
+Error: event matches needs an event key (e.g. tba event matches 2024cthar)
 ```
 
 ## Exit codes
@@ -868,12 +880,13 @@ Error: "cthar2024" is not a valid event key (expected something like 2024cthar)
 | 0 | Success |
 | 1 | Runtime or network failure (including HTTP 5xx) |
 | 2 | Usage error: a bad flag, a bad argument, an unknown command, a malformed key |
-| 4 | Authentication required: no API key configured, or HTTP 401 |
+| 4 | Authentication required: no API key configured, HTTP 401, or nothing to log out of |
 | 5 | Not found: HTTP 404 |
-| 130 | Interrupted (Ctrl-C) |
+| 130 | Interrupted (Ctrl-C); nothing is printed |
 | 141 | stdout closed early (for example when the reader of a pipe exits first); nothing is printed |
 
-Usage errors (exit 2) print the usage block; every other failure prints only its message.
+Usage errors (exit 2) print the `Usage:` line and where to find the full help;
+every other failure prints only its message.
 
 ```
 if ! tba auth status >/dev/null; then
