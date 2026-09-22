@@ -614,6 +614,23 @@ const leaderboards2024JSON = `[
   }
 ]`
 
+// A leaderboard whose first row is a big tie: 14 teams share the top value,
+// which is what the real blue banner board looks like (about 450 teams) and
+// what the Key cell has to survive.
+const leaderboardsBigTie2024JSON = `[
+  {
+    "name": "typed_leaderboard_blue_banners",
+    "year": 2024,
+    "data": {
+      "key_type": "team",
+      "rankings": [
+        {"value": 6, "keys": ["frc177", "frc254", "frc1114", "frc118", "frc2056", "frc971", "frc1678", "frc2767", "frc1323", "frc180", "frc33", "frc67", "frc217", "frc2168"]},
+        {"value": 5, "keys": ["frc1073", "frc230"]}
+      ]
+    }
+  }
+]`
+
 const notables2024JSON = `[
   {
     "name": "notables_hall_of_fame",

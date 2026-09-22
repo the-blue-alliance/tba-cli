@@ -660,7 +660,10 @@ the API sent under `--format json`.
 another. Teams tied on a value share a rank and are listed in a single cell, and
 a board about teams shows bare team numbers while a board about events keeps its
 event keys. `--limit` caps how many rows each board contributes, at 10 by
-default, so a whole season stays readable; `--limit 0` shows all of them.
+default, so a whole season stays readable; `--limit 0` shows all of them. A big
+board ties hundreds of teams on one value — Blue Banners ties about 450 of them
+— so the Key cell shows the first ten keys and `… +N more`; `--expand` prints
+every one of them, and JSON always carries them all.
 `insight notables` is `Notable | Team | Context`, where Context is whatever the
 board says earned the entry.
 
@@ -671,6 +674,7 @@ since they change from year to year.
 
 ```
 tba insight leaderboards --year 2024 --board "Blue Banners"
+tba insight leaderboards --year 2024 --board "Blue Banners" --expand
 tba insight leaderboards --year 2024 --limit 0 --format csv
 tba insight notables --year 2024 --board "Hall Of Fame"
 ```
@@ -1007,7 +1011,7 @@ identical archives.
 | `tba district events <key>` | List district events |
 | `tba district teams <key>` | List district teams |
 | `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--detail`) |
-| `tba insight leaderboards` | Show leaderboards (`--board`, `--limit N`) |
+| `tba insight leaderboards` | Show leaderboards (`--board`, `--limit N`, `--expand`) |
 | `tba insight notables` | Show notable insights (`--board`) |
 | `tba open <target>` | Open a team, event or match on thebluealliance.com |
 | `tba config list` | Show every setting with its value and source |
