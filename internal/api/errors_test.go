@@ -40,9 +40,33 @@ func TestTruncateErrorBodyDoesNotSplitRunes(t *testing.T) {
 	}
 }
 
-func TestNotFoundMessageUnwrapsTheAPIsErrorField(t *testing.T) {
-	body := []byte(`{"Error":"event key: 2024chtar does not exist"}`)
-	if got, want := notFoundMessage(body), "not found: event key: 2024chtar does not exist"; got != want {
+// The API's sentence already says the thing is not there, so repeating it in
+// a prefix — `Error: not found: event key: ... does not exist` — said it three
+// ways and buried the key in the middle.
+func TestNotFoundMessageDropsAPrefixTheAPIAlreadySaid(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"does not exist", `{"Error":"event key: 2024chtar does not exist"}`, "event key: 2024chtar does not exist"},
+		{"not found", `{"Error":"team not found"}`, "team not found"},
+		{"capitalised", `{"Error":"Event Key: 2024chtar Does Not Exist"}`, "Event Key: 2024chtar Does Not Exist"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := notFoundMessage([]byte(tc.body)); got != tc.want {
+				t.Errorf("notFoundMessage(%q) = %q, want %q", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// A sentence that does not say it still needs the prefix, or a 404 reads as a
+// statement of fact about something that is there.
+func TestNotFoundMessageKeepsThePrefixWhenTheAPIOmitsIt(t *testing.T) {
+	body := []byte(`{"Error":"no data for that key"}`)
+	if got, want := notFoundMessage(body), "not found: no data for that key"; got != want {
 		t.Errorf("notFoundMessage = %q, want %q", got, want)
 	}
 }

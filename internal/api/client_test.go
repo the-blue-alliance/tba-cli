@@ -468,8 +468,9 @@ func TestNon2xxIncludesTheStatusCodeAndBody(t *testing.T) {
 		t.Fatal("want an error for a 404")
 	}
 	// A 404 says what is missing in the API's own words, without the JSON
-	// wrapper around it; see TestNotFoundMessage* in errors_test.go.
-	if got, want := err.Error(), "not found: team not found"; got != want {
+	// wrapper around it and without a "not found:" prefix in front of a
+	// sentence that already says so; see TestNotFoundMessage* in errors_test.go.
+	if got, want := err.Error(), "team not found"; got != want {
 		t.Errorf("error = %q, want %q", got, want)
 	}
 }

@@ -18,16 +18,31 @@ const maxErrorBodyBytes = 200
 // makes the reader parse braces to find it. Anything else — an HTML error page
 // from a proxy, an empty body — keeps the old shape, because then the status
 // code is the most useful thing left.
+//
+// The "not found: " prefix is dropped when the API's own sentence already
+// says as much. `Error: not found: event key: 2024zzzz does not exist` said
+// it three times over, and the one part the reader needs — the key — was the
+// hardest of the three to find.
 func notFoundMessage(body []byte) string {
 	var payload struct {
 		Error string `json:"Error"`
 	}
 	if err := json.Unmarshal(body, &payload); err == nil {
 		if detail := strings.TrimSpace(payload.Error); detail != "" {
+			if saysNotFound(detail) {
+				return truncateErrorBody(detail)
+			}
 			return "not found: " + truncateErrorBody(detail)
 		}
 	}
 	return "API error 404: " + truncateErrorBody(string(body))
+}
+
+// saysNotFound reports whether a sentence already carries the news, in any of
+// the wordings the API uses for it.
+func saysNotFound(detail string) bool {
+	lower := strings.ToLower(detail)
+	return strings.Contains(lower, "does not exist") || strings.Contains(lower, "not found")
 }
 
 // truncateErrorBody shortens s to maxErrorBodyBytes, marking the cut with an
