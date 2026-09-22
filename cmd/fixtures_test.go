@@ -392,6 +392,39 @@ const teamStatuses2024ctharJSON = `{
   "frc9999": null
 }`
 
+// A pre-2023 event: the playoff status has no double_elim_round at all.
+const teamStatuses2019ctharJSON = `{
+  "frc177": {
+    "qual": {
+      "num_teams": 40,
+      "status": "completed",
+      "ranking": {
+        "team_key": "frc177",
+        "rank": 1,
+        "record": {"wins": 10, "losses": 2, "ties": 0},
+        "qual_average": null,
+        "matches_played": 12,
+        "dq": 0,
+        "sort_orders": [2.5]
+      },
+      "sort_order_info": [{"name": "Ranking Score", "precision": 2}]
+    },
+    "alliance": {"name": "Alliance 1", "number": 1, "pick": 0, "backup": null},
+    "playoff": {
+      "level": "f",
+      "current_level_record": {"wins": 2, "losses": 0, "ties": 0},
+      "record": {"wins": 5, "losses": 2, "ties": 0},
+      "status": "won",
+      "playoff_average": 0.0
+    },
+    "alliance_status_str": "<b>Captain</b> of <b>Alliance 1</b>",
+    "playoff_status_str": "<b>Won</b> the event",
+    "overall_status_str": "Team 177 <b>won the event</b>.",
+    "next_match_key": null,
+    "last_match_key": "2019cthar_f1m2"
+  }
+}`
+
 const awards2024ctharJSON = `[
   {
     "name": "District Event Winner",

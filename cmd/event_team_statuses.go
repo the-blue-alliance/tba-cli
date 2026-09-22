@@ -12,18 +12,26 @@ import (
 )
 
 func newEventTeamStatusesCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "team-statuses <key>",
 		Short: "Show where every team at an event stands",
 		Long: `Show one row per team at an event: qualification rank and record, the
-alliance that picked them and in which slot, how far they got in the playoffs,
-and TBA's own one-line summary.
+alliance that picked them and in which slot, and how far they got in the
+playoffs.
 
-Teams are listed by rank, with teams that have no rank yet last. Overall is
-TBA's overall_status_str with its markup removed.`,
+Teams are listed by rank, with teams that have no rank yet last. Round is the
+bracket round a double-elimination playoff ended in, and is blank for the
+seasons and events that have none.
+
+TBA also writes a sentence about each team -- "Team 177 was Rank 1 with a
+record of 10-2-0 in quals, competed in the playoffs as the Captain of Alliance
+1, and won the event" -- which is 250 characters of prose in a cell. It is
+always in the JSON, as overall_status_str; --overall adds it to the table as
+an Overall column.`,
 		Example: `  tba event team-statuses 2024cthar
   tba event team-statuses 2024cthar --format csv
-  tba event team-statuses 2024cthar --columns team,rank,record,overall`,
+  tba event team-statuses 2024cthar --overall
+  tba event team-statuses 2024cthar --columns team,rank,record,round`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
@@ -40,17 +48,27 @@ TBA's overall_status_str with its markup removed.`,
 				return err
 			}
 
-			table := eventTeamStatusesTable(statuses)
+			withOverall, _ := cmd.Flags().GetBool("overall")
+			table := eventTeamStatusesTableWith(statuses, withOverall)
 			// The parsed map, so --jq still sees the shape the API returns.
 			// It is not a slice, so --sort reorders the table only.
 			return outputTable(cmd, statuses, table.Headers, table.Rows)
 		},
 	}
+	c.Flags().Bool("overall", false, "Add TBA's one-sentence summary of each team as an Overall column")
+	return c
 }
 
-// eventTeamStatusesTable renders one row per team at an event, by rank, with
-// the teams that have no rank yet last.
+// eventTeamStatusesTable renders the table without TBA's prose summary, which
+// is what every caller but the command itself wants.
 func eventTeamStatusesTable(statuses map[string]*api.TeamEventStatus) output.Table {
+	return eventTeamStatusesTableWith(statuses, false)
+}
+
+// eventTeamStatusesTableWith renders one row per team at an event, by rank,
+// with the teams that have no rank yet last. withOverall is --overall: it adds
+// TBA's prose summary, which is a paragraph in a cell and off by default.
+func eventTeamStatusesTableWith(statuses map[string]*api.TeamEventStatus, withOverall bool) output.Table {
 	teams := make([]string, 0, len(statuses))
 	for key := range statuses {
 		teams = append(teams, key)
@@ -67,10 +85,13 @@ func eventTeamStatusesTable(statuses map[string]*api.TeamEventStatus) output.Tab
 		return aOK && a < b
 	})
 
-	headers := []string{"Team", "Rank", "Record", "Alliance", "Pick", "Playoff Level", "Playoff Status", "Overall"}
+	headers := []string{"Team", "Rank", "Record", "Alliance", "Pick", "Playoff Level", "Round", "Playoff Status"}
+	if withOverall {
+		headers = append(headers, "Overall")
+	}
 	rows := make([][]string, len(teams))
 	for i, key := range teams {
-		rows[i] = teamStatusRow(key, statuses[key])
+		rows[i] = teamStatusRow(key, statuses[key], withOverall)
 	}
 	return output.Table{Headers: headers, Rows: rows}
 }
@@ -86,8 +107,11 @@ func qualRank(s *api.TeamEventStatus) (int, bool) {
 // teamStatusRow renders one team's row. Every part of a status is optional, so
 // a team that has not played, was not picked, or is simply absent from the
 // feed still gets a row with its number in it.
-func teamStatusRow(key string, s *api.TeamEventStatus) []string {
+func teamStatusRow(key string, s *api.TeamEventStatus, withOverall bool) []string {
 	row := []string{output.TeamNumberFromKey(key), "", "", "", "", "", "", ""}
+	if withOverall {
+		row = append(row, "")
+	}
 	if s == nil {
 		return row
 	}
@@ -106,10 +130,23 @@ func teamStatusRow(key string, s *api.TeamEventStatus) []string {
 	}
 	if s.Playoff != nil {
 		row[5] = strings.ToUpper(s.Playoff.Level)
-		row[6] = s.Playoff.Status
+		row[6] = doubleElimRound(s.Playoff)
+		row[7] = s.Playoff.Status
 	}
-	row[7] = output.StripHTML(s.OverallStatusStr)
+	if withOverall {
+		row[8] = output.StripHTML(s.OverallStatusStr)
+	}
 	return row
+}
+
+// doubleElimRound names the bracket round a double-elimination playoff run
+// ended in ("Round 4", "Finals"). Only 2023 and later send it, so an older
+// event -- or an alliance that never played -- leaves the cell empty.
+func doubleElimRound(s *api.AllianceStatus) string {
+	if s == nil || s.DoubleElimRound == nil {
+		return ""
+	}
+	return *s.DoubleElimRound
 }
 
 // formatAlliancePick names an alliance slot: TBA numbers the captain 0 and the

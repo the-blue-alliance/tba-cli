@@ -416,13 +416,19 @@ the backup replaced, Level is the playoff round the alliance reached (`QF`, `SF`
 `F`) and Record is its playoff win-loss-tie.
 
 `event team-statuses` is the event-wide view of where each team stands:
-`Team | Rank | Record | Alliance | Pick | Playoff Level | Playoff Status |
-Overall`. Teams are listed by rank with the unranked last, Pick names the slot
-(`Captain`, `1`, `2`, `Backup`), and Overall is TBA's own summary sentence with
-its HTML markup removed.
+`Team | Rank | Record | Alliance | Pick | Playoff Level | Round | Playoff
+Status`. Teams are listed by rank with the unranked last, Pick names the slot
+(`Captain`, `1`, `2`, `Backup`), and Round is the double-elimination bracket
+round the team went out in, blank for the seasons that have none.
+
+TBA also writes a summary sentence about each team, which is around 250
+characters of prose. It is always in the JSON, as `overall_status_str`;
+`--overall` adds it to the table as an `Overall` column with its HTML markup
+removed.
 
 ```
-tba event team-statuses 2024cthar --columns team,rank,record,overall
+tba event team-statuses 2024cthar --columns team,rank,record,round
+tba event team-statuses 2024cthar --overall
 ```
 
 ### District points
@@ -1006,7 +1012,7 @@ identical archives.
 | `tba event rankings <key>` | Show event rankings |
 | `tba event watch <key>` | Follow an event live (`--interval`, `--for`, `--max-polls`, `--rankings`, `--team`) |
 | `tba event alliances <key>` | Show playoff alliances |
-| `tba event team-statuses <key>` | Show where every team at an event stands |
+| `tba event team-statuses <key>` | Show where every team at an event stands (`--overall`) |
 | `tba event awards <key>` | Show event awards |
 | `tba event oprs <key>` | Show OPR/DPR/CCWM |
 | `tba event district-points <key>` | Show district points (`--tiebreakers`) |
