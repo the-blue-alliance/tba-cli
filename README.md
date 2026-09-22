@@ -796,6 +796,8 @@ Column widths are fixed by that first table, so the rows below it stay in line.
 
 `--team 177` narrows the whole feed to one team's matches. `--rankings` adds the standings, printed after the matches on the first poll and again whenever a rank or a record moves. A match counts as changed when it is newly played, when a score or a winner changes, when its predicted time moves by a minute or more, or when it appears in the schedule for the first time; `actual_time` being restamped after the fact is not news.
 
+Watching an event that is already over stops at the first poll: once every match has been played and the event's last day is past, there is nothing left to see, and `note: 2024cthar ended 2024-03-24; nothing left to watch` says so before the command exits 0.
+
 Why the watch stopped goes to stderr, and stopping is not a failure:
 
 ```
