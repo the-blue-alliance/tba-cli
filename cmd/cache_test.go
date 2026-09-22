@@ -14,9 +14,9 @@ func TestCacheInfoOnAnEmptyCache(t *testing.T) {
 	out, _, err := runCmd(t, nil, "cache", "info", "--format", "table")
 	requireNoError(t, err, "")
 
-	requireContains(t, out, "Directory: "+dir)
-	requireContains(t, out, "Entries:   0")
-	requireContains(t, out, "Size:      0 B")
+	requireContains(t, out, "Directory:    "+dir)
+	requireContains(t, out, "Entries:      0")
+	requireContains(t, out, "Size:         0 B")
 }
 
 func TestCacheInfoJSON(t *testing.T) {
@@ -69,8 +69,8 @@ func TestCacheInfoCountsEntriesWrittenByRequests(t *testing.T) {
 
 	out, _, err := runCmd(t, nil, "cache", "info", "--format", "table")
 	requireNoError(t, err, "")
-	requireContains(t, out, "Entries:   1")
-	if strings.Contains(out, "Size:      0 B") {
+	requireContains(t, out, "Entries:      1")
+	if strings.Contains(out, "Size:         0 B") {
 		t.Errorf("cached entry should have a non-zero size:\n%s", out)
 	}
 }
@@ -168,7 +168,7 @@ func TestCacheRevalidatesWithIfNoneMatch(t *testing.T) {
 
 func TestCacheSubcommandsAreRegistered(t *testing.T) {
 	got := subcommandNames(t, "cache")
-	for _, want := range []string{"info", "clear"} {
+	for _, want := range []string{"info", "list", "prune", "clear"} {
 		if !contains(got, want) {
 			t.Errorf("cache %s is not registered (have %v)", want, got)
 		}
