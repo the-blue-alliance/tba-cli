@@ -13,9 +13,8 @@ import (
 
 func newEventTeamStatusesCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "team-statuses <key>",
-		Aliases: []string{"team-status"},
-		Short:   "Show where every team at an event stands",
+		Use:   "team-statuses <key>",
+		Short: "Show where every team at an event stands",
 		Long: `Show one row per team at an event: qualification rank and record, the
 alliance that picked them and in which slot, how far they got in the playoffs,
 and TBA's own one-line summary.
