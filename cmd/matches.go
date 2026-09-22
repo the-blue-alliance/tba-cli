@@ -21,6 +21,16 @@ import (
 // who does not care can drop the source with --columns.
 var matchHeaders = []string{"Match", "Key", "Red", "Blue", "Score (R-B)", "Winner", "Time", "Time Source", "Status"}
 
+// eventColumn names the extra first column a season-wide `team matches`
+// listing carries. It holds the event key rather than the event's name, which
+// is far too wide to sit in front of every row.
+const eventColumn = "Event"
+
+// headersWithEvent is matchHeaders behind the Event column.
+func headersWithEvent() []string {
+	return append([]string{eventColumn}, matchHeaders...)
+}
+
 // addMatchTableFlags adds the filters that every match listing accepts.
 func addMatchTableFlags(c *cobra.Command) {
 	c.Flags().String("team", "", "Only matches this team played in (e.g. 177 or frc177)")
@@ -31,7 +41,7 @@ func addMatchTableFlags(c *cobra.Command) {
 // validMatchLevels lists every accepted --level value, in help-text order.
 const validMatchLevels = "qm, playoff, ef, qf, sf, f"
 
-// renderMatches filters, orders and prints a match listing.
+// renderMatches filters, orders and prints a match listing for one event.
 //
 // playoffTypeFor supplies the bracket format a match's labels depend on. It is
 // a function rather than a value because `team matches` for a whole season
@@ -41,20 +51,50 @@ func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(
 	if err != nil {
 		return err
 	}
+	orderMatches(cmd, matches)
+	return printMatchTable(cmd, matches, playoffTypeFor)
+}
 
-	// An upcoming listing answers "what is next", so it is ordered by the
-	// clock; everything else is ordered the way the event plays.
+// renderSeasonMatches prints a listing that spans a whole season. A team plays
+// several events in a year, and the same match numbers come round at each of
+// them, so sorting the season as one list interleaves events: Qual 46 at
+// Hartford, then Qual 46 at the district championship, then Qual 50 back at
+// Hartford. Instead each event's matches are kept together, in the order the
+// team played the events, and an Event column says which is which.
+//
+// order ranks the event keys (see frc.EventOrder). A nil or partial order —
+// the team's event list could not be fetched — still groups the listing, by
+// event key.
+func renderSeasonMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, order map[string]int) error {
+	matches, err := filterMatches(cmd, matches)
+	if err != nil {
+		return err
+	}
+	orderMatches(cmd, matches)
+	frc.GroupByEvent(matches, order)
+	return printMatchListing(cmd, matches, playoffTypeFor, true)
+}
+
+// orderMatches applies the order a listing is read in. An upcoming listing
+// answers "what is next", so it is ordered by the clock; everything else is
+// ordered the way the event plays.
+func orderMatches(cmd *cobra.Command, matches []api.Match) {
 	if upcoming, _ := cmd.Flags().GetBool("upcoming"); upcoming {
 		frc.SortByTime(matches)
 	} else {
 		frc.SortMatches(matches)
 	}
-	return printMatchTable(cmd, matches, playoffTypeFor)
 }
 
 // printMatchTable renders matches in the order given. Callers that have
 // already chosen an order — the next-match listing, say — use it directly.
 func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int) error {
+	return printMatchListing(cmd, matches, playoffTypeFor, false)
+}
+
+// printMatchListing renders the shared match table, optionally with the Event
+// column a season-wide listing needs.
+func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, withEvent bool) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -64,9 +104,16 @@ func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor fun
 		return err
 	}
 
+	headers := matchHeaders
 	rows, marked := matchTableRows(matches, playoffTypeFor, color)
+	if withEvent {
+		headers = headersWithEvent()
+		for i := range rows {
+			rows[i] = append([]string{matches[i].EventKey}, rows[i]...)
+		}
+	}
 
-	if err := outputTable(cmd, matches, matchHeaders, rows); err != nil {
+	if err := outputTable(cmd, matches, headers, rows); err != nil {
 		return err
 	}
 	// The legend explains the marks in the table above it, so it is only worth

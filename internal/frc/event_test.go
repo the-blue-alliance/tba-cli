@@ -1,6 +1,7 @@
 package frc_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -198,5 +199,94 @@ func unplayedAlliances() map[string]api.Alliance {
 	return map[string]api.Alliance{
 		"red":  {Score: -1, TeamKeys: []string{"frc177"}},
 		"blue": {Score: -1, TeamKeys: []string{"frc230"}},
+	}
+}
+
+// Team 177's 2024 events, in the arbitrary order the API answers with.
+func season2024Events() []api.Event {
+	return []api.Event{
+		{Key: "2024necmp", Name: "New England FIRST District Championship", StartDate: "2024-04-10", EndDate: "2024-04-13"},
+		{Key: "2024cthar", Name: "NE District Hartford Event", StartDate: "2024-03-22", EndDate: "2024-03-24"},
+		{Key: "2024ctwat", Name: "NE District Waterbury Event", StartDate: "2024-03-08", EndDate: "2024-03-10"},
+	}
+}
+
+// A season's events are ranked the way the team played them, earliest first,
+// whatever order the API listed them in.
+func TestEventOrderRanksBySeasonOrder(t *testing.T) {
+	order := frc.EventOrder(season2024Events())
+	want := map[string]int{"2024ctwat": 0, "2024cthar": 1, "2024necmp": 2}
+	for key, rank := range want {
+		if got := order[key]; got != rank {
+			t.Errorf("EventOrder[%s] = %d, want %d", key, got, rank)
+		}
+	}
+	if len(order) != len(want) {
+		t.Errorf("EventOrder = %v, want %d entries", order, len(want))
+	}
+}
+
+// Two events on the same day, and an event with no start date at all, still
+// get a total order: the key breaks the tie, and the undated one goes last.
+func TestEventOrderIsTotal(t *testing.T) {
+	order := frc.EventOrder([]api.Event{
+		{Key: "2024week0", StartDate: ""},
+		{Key: "2024mibel", StartDate: "2024-03-08"},
+		{Key: "2024miket", StartDate: "2024-03-08"},
+	})
+	want := map[string]int{"2024mibel": 0, "2024miket": 1, "2024week0": 2}
+	for key, rank := range want {
+		if got := order[key]; got != rank {
+			t.Errorf("EventOrder[%s] = %d, want %d", key, got, rank)
+		}
+	}
+}
+
+// Matches are regrouped by event without disturbing the order within one:
+// Waterbury's Qual 5 and Qual 46 stay in that order, and both come before
+// Hartford's, which started two weeks later.
+func TestGroupByEvent(t *testing.T) {
+	matches := []api.Match{
+		{Key: "2024ctwat_qm5", EventKey: "2024ctwat", CompLevel: "qm", SetNumber: 1, MatchNumber: 5},
+		{Key: "2024cthar_qm12", EventKey: "2024cthar", CompLevel: "qm", SetNumber: 1, MatchNumber: 12},
+		{Key: "2024cthar_qm46", EventKey: "2024cthar", CompLevel: "qm", SetNumber: 1, MatchNumber: 46},
+		{Key: "2024ctwat_qm46", EventKey: "2024ctwat", CompLevel: "qm", SetNumber: 1, MatchNumber: 46},
+	}
+	frc.GroupByEvent(matches, frc.EventOrder(season2024Events()))
+
+	want := []string{"2024ctwat_qm5", "2024ctwat_qm46", "2024cthar_qm12", "2024cthar_qm46"}
+	if got := keysOf(matches); !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupByEvent = %v, want %v", got, want)
+	}
+}
+
+// Without an order — the team's event list could not be fetched — the matches
+// are still grouped, by event key, rather than interleaved.
+func TestGroupByEventWithoutAnOrder(t *testing.T) {
+	matches := []api.Match{
+		{Key: "2024cthar_qm46", EventKey: "2024cthar", CompLevel: "qm", SetNumber: 1, MatchNumber: 46},
+		{Key: "2024ctwat_qm5", EventKey: "2024ctwat", CompLevel: "qm", SetNumber: 1, MatchNumber: 5},
+		{Key: "2024cthar_qm12", EventKey: "2024cthar", CompLevel: "qm", SetNumber: 1, MatchNumber: 12},
+	}
+	frc.GroupByEvent(matches, nil)
+
+	want := []string{"2024cthar_qm46", "2024cthar_qm12", "2024ctwat_qm5"}
+	if got := keysOf(matches); !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupByEvent = %v, want %v", got, want)
+	}
+}
+
+// An event the order does not know is not dropped or shuffled into the middle:
+// it follows every event that is known.
+func TestGroupByEventPutsUnknownEventsLast(t *testing.T) {
+	matches := []api.Match{
+		{Key: "2024onoff_qm1", EventKey: "2024onoff", CompLevel: "qm", SetNumber: 1, MatchNumber: 1},
+		{Key: "2024cthar_qm1", EventKey: "2024cthar", CompLevel: "qm", SetNumber: 1, MatchNumber: 1},
+	}
+	frc.GroupByEvent(matches, frc.EventOrder(season2024Events()))
+
+	want := []string{"2024cthar_qm1", "2024onoff_qm1"}
+	if got := keysOf(matches); !reflect.DeepEqual(got, want) {
+		t.Errorf("GroupByEvent = %v, want %v", got, want)
 	}
 }

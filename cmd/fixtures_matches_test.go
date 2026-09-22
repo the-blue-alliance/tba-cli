@@ -369,3 +369,79 @@ const match2015ctwatQM7JSON = `{
   "score_breakdown": null,
   "videos": []
 }`
+
+// A team's whole 2024 season, as /team/frc177/matches/2024 returns it: two
+// district events whose qualification numbers collide, in the arbitrary order
+// the API answers with. Sorting this as one list interleaves the events —
+// Qual 46 at Waterbury next to Qual 46 at Hartford — which is what grouping by
+// event exists to prevent.
+const teamMatches177Season2024JSON = `[
+  {
+    "key": "2024cthar_qm46",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 46,
+    "event_key": "2024cthar",
+    "time": 1711211400,
+    "predicted_time": 1711211400,
+    "actual_time": 1711211580,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 94, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 70, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024ctwat_qm46",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 46,
+    "event_key": "2024ctwat",
+    "time": 1709996400,
+    "predicted_time": 1709996400,
+    "actual_time": 1709996640,
+    "winning_alliance": "blue",
+    "alliances": {
+      "red": {"score": 61, "team_keys": ["frc1071", "frc4055", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 83, "team_keys": ["frc177", "frc1124", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024cthar_qm12",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 12,
+    "event_key": "2024cthar",
+    "time": 1711130400,
+    "predicted_time": 1711130700,
+    "actual_time": 1711130820,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 88, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  },
+  {
+    "key": "2024ctwat_qm5",
+    "comp_level": "qm",
+    "set_number": 1,
+    "match_number": 5,
+    "event_key": "2024ctwat",
+    "time": 1709913600,
+    "predicted_time": 1709913600,
+    "actual_time": 1709913780,
+    "winning_alliance": "red",
+    "alliances": {
+      "red": {"score": 70, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+      "blue": {"score": 54, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+    },
+    "score_breakdown": null,
+    "videos": []
+  }
+]`
