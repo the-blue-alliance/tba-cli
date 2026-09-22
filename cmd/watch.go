@@ -165,7 +165,11 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sink, err := newWatchSink(cmd, opts, client)
+	// The event is fetched once, before the loop and best-effort: its bracket
+	// format is what names the playoff matches, and its end date is what says
+	// there is nothing left to watch.
+	event, _ := fetchEvent(cmd, client, opts.eventKey)
+	sink, err := newWatchSink(cmd, opts, event.PlayoffType)
 	if err != nil {
 		return err
 	}
@@ -208,6 +212,13 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			if err := state.emit(sink, poll, nowFunc(), matches, rankings); err != nil {
 				return err
 			}
+			// An event that is over is not going to change again. Polling it
+			// for the rest of --for costs a shared API a request a minute to
+			// be told the same thing every time.
+			if watchIsOver(event, matches, nowFunc()) {
+				fmt.Fprintf(errw, "note: %s ended %s; nothing left to watch\n", opts.eventKey, event.EndDate)
+				return nil
+			}
 		}
 
 		switch {
@@ -237,6 +248,18 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			return stopFor()
 		}
 	}
+}
+
+// watchIsOver reports whether there is anything left to see: an event whose
+// last day is past and whose matches have all been played.
+//
+// Both halves are needed. A day with every match played so far is the ordinary
+// lunch break, and an event whose dates have passed can still be waiting on a
+// scoring correction, which is exactly what someone watching is watching for.
+// An event that could not be fetched has no end date, so a watch of it runs
+// its full course rather than stopping on a guess.
+func watchIsOver(event api.Event, matches []api.Match, now time.Time) bool {
+	return frc.Ended(event, now) && len(frc.Unplayed(matches)) == 0
 }
 
 // watchPoll fetches one round. Both requests have to succeed for the round to
@@ -422,7 +445,10 @@ func sameRecord(a, b *api.WLTRecord) bool {
 	return *a == *b
 }
 
-func newWatchSink(cmd *cobra.Command, opts watchOptions, client *api.Client) (watchSink, error) {
+// newWatchSink builds the renderer for one watch. playoffType comes from the
+// event the caller already fetched; nil leaves the playoff labels to guess
+// from the season.
+func newWatchSink(cmd *cobra.Command, opts watchOptions, playoffType *int) (watchSink, error) {
 	if opts.format == "json" {
 		return newWatchJSONSink(cmd)
 	}
@@ -435,13 +461,11 @@ func newWatchSink(cmd *cobra.Command, opts watchOptions, client *api.Client) (wa
 		return nil, err
 	}
 	return &watchTableSink{
-		out:   cmd.OutOrStdout(),
-		errw:  cmd.ErrOrStderr(),
-		color: color,
-		mode:  mode,
-		// The event is fetched once, only for the bracket format its playoff
-		// match labels depend on; a failure leaves the labels to guess.
-		playoffType: eventPlayoffType(cmd, client, opts.eventKey),
+		out:         cmd.OutOrStdout(),
+		errw:        cmd.ErrOrStderr(),
+		color:       color,
+		mode:        mode,
+		playoffType: playoffType,
 	}, nil
 }
 

@@ -860,3 +860,102 @@ func TestEventWatchOmitsTheLegendWithoutMarks(t *testing.T) {
 		t.Errorf("stderr = %q, want no legend", errOut)
 	}
 }
+
+// --- an event that is over ---------------------------------------------
+
+// watchAllPlayed is the event finished: every match has a result.
+func watchAllPlayed() []api.Match {
+	return []api.Match{
+		watchQual(1, watchRed, watchBlue, 88, 61, "red", 1711130400),
+		watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000),
+		watchQual(3, watchRed, watchOther2, 70, 54, "red", 1711131600),
+	}
+}
+
+// 2024cthar ended on the Sunday. Watching it on the Tuesday, there is nothing
+// to wait for, and polling a shared API once a minute for two hours to be told
+// so is nobody's idea of a good time.
+func TestEventWatchStopsOnAFinishedEvent(t *testing.T) {
+	clock := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
+
+	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	requireNoError(t, err, errOut)
+
+	if want := "note: 2024cthar ended 2024-03-24; nothing left to watch\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+	// The table is still printed: the answer to "what happened" is the point.
+	requireContains(t, out, "2024cthar_qm1")
+	if n := pollCount(t, srv); n != 1 {
+		t.Errorf("polls = %d, want 1", n)
+	}
+	if waits := clock.sleptFor(); len(waits) != 0 {
+		t.Errorf("waited %v, want no waiting at all", waits)
+	}
+}
+
+// During the event there is everything to watch, even with every match so far
+// played: that is what a lunch break looks like.
+func TestEventWatchKeepsWatchingDuringTheEvent(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 23, 12, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+		"--format", "table", "--max-polls", "2")
+	requireNoError(t, err, errOut)
+
+	if strings.Contains(errOut, "nothing left to watch") {
+		t.Errorf("stderr = %q, want the watch to have run its course", errOut)
+	}
+	if n := pollCount(t, srv); n != 2 {
+		t.Errorf("polls = %d, want 2", n)
+	}
+}
+
+// After the event but with a match still unplayed, the schedule is not the
+// whole story — a scoring correction is exactly what someone is waiting for.
+func TestEventWatchKeepsWatchingAnEndedEventWithAnUnplayedMatch(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+		"--format", "table", "--max-polls", "2")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "nothing left to watch") {
+		t.Errorf("stderr = %q, want the watch to have continued", errOut)
+	}
+}
+
+// Without the event there is no end date, so there is nothing to conclude and
+// the watch runs its course.
+func TestEventWatchKeepsWatchingWithoutTheEvent(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{watchMatchesPath: watchAllPlayed()})
+
+	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+		"--format", "table", "--max-polls", "2")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "nothing left to watch") {
+		t.Errorf("stderr = %q, want no conclusion without an end date", errOut)
+	}
+}
+
+// The stream form stops too, and its last line is still a snapshot rather than
+// an error.
+func TestEventWatchStopsOnAFinishedEventInJSON(t *testing.T) {
+	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	srv := watchServer(t)
+	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
+
+	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey)
+	requireNoError(t, err, errOut)
+	requireContains(t, errOut, "nothing left to watch")
+
+	got := jsonLines(t, out)
+	if len(got) != 1 || got[0]["type"] != "snapshot" {
+		t.Errorf("want one snapshot line, got:\n%s", out)
+	}
+}
