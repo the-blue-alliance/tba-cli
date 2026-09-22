@@ -14,6 +14,23 @@ Download a prebuilt binary for your platform from the [Releases](https://github.
 go install github.com/the-blue-alliance/tba-cli/cmd/tba@latest
 ```
 
+## Versioning
+
+`tba` is pre-1.0. Command names, flags and table columns may change between
+minor versions, so pin a version in anything that has to keep working
+unattended. JSON field names come from the API and change with it, not with us.
+
+```
+tba version                 # tba 1.2.3 (abc1234, built 2024-05-01T12:00:00Z, go1.27.0, darwin/arm64)
+tba version --format json   # {"version":"1.2.3","commit":"abc1234",...}
+tba --version               # the same line
+```
+
+Release binaries have their version, commit and build date stamped in. A binary
+built from source reports what Go recorded about the build instead: the module
+version for `go install ...@v1.2.3`, otherwise `dev` plus the commit it was
+built from (suffixed `-dirty` if the tree had uncommitted changes).
+
 ## Authentication
 
 Get an API key from your [TBA Account page](https://www.thebluealliance.com/account), then:
@@ -265,6 +282,7 @@ Releases are cut by pushing a `v*` tag, which runs GoReleaser
 | `tba auth status` | Show authentication status |
 | `tba auth logout` | Remove stored API key |
 | `tba status` | Show API status |
+| `tba version` | Show the version and build metadata |
 | `tba team view <number>` | View team info |
 | `tba team list` | List all teams (defaults to the current year) |
 | `tba team events <number>` | List team events |
