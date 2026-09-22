@@ -120,17 +120,17 @@ func TestDistrictRankingsPreDCMP(t *testing.T) {
 	})
 	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne",
 		"--pre-dcmp", "--cutoff", "1", "--format", "table",
-		"--columns", "rank,team,dcmp,total,pre-dcmp")
+		"--columns", "rank,season rank,team,dcmp,total,pre-dcmp")
 	requireNoError(t, err, "")
 
 	got := lines(out)
 	want := []string{
-		"Rank  Team  DCMP  Total  Pre-DCMP",
-		"----  ----  ----  -----  --------",
-		"2     177   45    145    100",
+		"Rank  Season Rank  Team  DCMP  Total  Pre-DCMP",
+		"----  -----------  ----  ----  -----  --------",
+		"1     2            177   45    145    100",
 		"--- top 1 by pre-DCMP total ---",
-		"1     1073  68    150    82",
-		"3     5507        78     78",
+		"2     1            1073  68    150    82",
+		"3     3            5507        78     78",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d lines, want %d:\n%s", len(got), len(want), out)
@@ -138,6 +138,61 @@ func TestDistrictRankingsPreDCMP(t *testing.T) {
 	for i := range want {
 		if strings.TrimRight(got[i], " ") != want[i] {
 			t.Errorf("line %d = %q, want %q", i, strings.TrimRight(got[i], " "), want[i])
+		}
+	}
+}
+
+// A rank beside a cut line has to be the rank the cut was made on. The
+// published one counts the district championship, so under --pre-dcmp it ran
+// 2, 3, 11, 5 down a table ordered by something else entirely.
+func TestDistrictRankingsPreDCMPRenumbersRank(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--pre-dcmp", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	records := parseCSV(t, out)
+	if records[0][0] != "Rank" || records[0][1] != "Season Rank" {
+		t.Fatalf("header = %v, want Rank then Season Rank", records[0])
+	}
+	if got := csvColumn(t, out, 0); !equalStrings(got, []string{"1", "2", "3"}) {
+		t.Errorf("Rank = %v, want the pre-DCMP order counted off", got)
+	}
+	if got := csvColumn(t, out, 1); !equalStrings(got, []string{"2", "1", "3"}) {
+		t.Errorf("Season Rank = %v, want the API's own ranks", got)
+	}
+}
+
+// Season Rank is a --pre-dcmp column: without it the one Rank is the API's.
+func TestDistrictRankingsSeasonRankIsOptIn(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--format", "csv")
+	requireNoError(t, err, errOut)
+	if strings.Contains(out, "Season Rank") {
+		t.Errorf("Season Rank appeared unasked:\n%s", out)
+	}
+	if got := csvColumn(t, out, 0); !equalStrings(got, []string{"1", "2", "3"}) {
+		t.Errorf("Rank = %v, want the API's own ranks", got)
+	}
+}
+
+// The renumbering is presentation: the JSON stays the API's own answer, ranks
+// and all, in the order the command chose.
+func TestDistrictRankingsPreDCMPLeavesTheJSONRanksAlone(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/rankings": districtRankingsDCMPFlip2024neJSON,
+	})
+	out, errOut, err := runCmd(t, srv, "district", "rankings", "2024ne", "--pre-dcmp", "--json")
+	requireNoError(t, err, errOut)
+
+	arr := decodeJSON(t, out).([]any)
+	want := []float64{2, 1, 3}
+	for i, rank := range want {
+		if got := arr[i].(map[string]any)["rank"]; got != rank {
+			t.Errorf("rank %d = %v, want %v", i, got, rank)
 		}
 	}
 }
