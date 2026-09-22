@@ -43,7 +43,7 @@ func newTeamNextCmd() *cobra.Command {
 			if !choice.found {
 				// Out of season a team is simply not going anywhere. That is
 				// an answer, not a failure.
-				return printNoResult(cmd, noEventNote(team, choice.year, now))
+				return printNoResult(cmd, noEventNote(team, choice.year, now, choice.hadEvents))
 			}
 			event := choice.event
 
@@ -117,6 +117,11 @@ type teamEventChoice struct {
 	event api.Event
 	found bool
 	year  int
+	// hadEvents says whether the team was signed up for anything at all that
+	// season, which is what tells "the season is over for them" from "this
+	// team is not in the season at all". It is read off the event list the
+	// search already fetched, so it costs nothing.
+	hadEvents bool
 }
 
 // resolveTeamEvent works out which event the question is about: the one named
@@ -148,7 +153,7 @@ func resolveTeamEvent(cmd *cobra.Command, client *api.Client, team, eventKey str
 		return teamEventChoice{year: year}, err
 	}
 	event, ok := frc.CurrentOrNextEvent(events, now)
-	return teamEventChoice{event: event, found: ok, year: year}, nil
+	return teamEventChoice{event: event, found: ok, year: year, hadEvents: len(events) > 0}, nil
 }
 
 // lastCompetitionMonth is the last month of a season worth waiting out. After
@@ -156,15 +161,26 @@ func resolveTeamEvent(cmd *cobra.Command, client *api.Client, team, eventKey str
 // than done for the year, so the answer points at the next one.
 const lastCompetitionMonth = time.August
 
-// noEventNote explains a season with nothing left in it, and in the offseason
-// points at the season that does have something.
-func noEventNote(team string, year int, now time.Time) string {
-	note := fmt.Sprintf("no current or upcoming event for team %s in %d",
-		output.TeamNumberFromKey(team), year)
+// noEventNote explains a season with nothing left in it, and points somewhere
+// that has an answer.
+//
+// hadEvents is whether the team was at anything that season, from the event
+// list the search already fetched. It decides both halves of the advice. A
+// team that competed has a season worth listing, so the note ends with the
+// command that lists it — "try --year 2027" on its own was a dead end, since
+// the next season's schedule does not exist yet and answers with nothing more
+// to go on. A team with no events in the season searched is not in the season
+// at all, and neither suggestion would lead anywhere, so neither is made.
+func noEventNote(team string, year int, now time.Time, hadEvents bool) string {
+	number := output.TeamNumberFromKey(team)
+	note := fmt.Sprintf("no current or upcoming event for team %s in %d", number, year)
+	if !hadEvents {
+		return note
+	}
 	if now.Month() > lastCompetitionMonth && year <= now.Year() {
 		note += fmt.Sprintf("; try --year %d", now.Year()+1)
 	}
-	return note
+	return note + fmt.Sprintf("; see 'tba team events %s --year %d'", number, year)
 }
 
 // noMatchNote explains an event with no match left to play. An event that is

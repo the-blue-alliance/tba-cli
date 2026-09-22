@@ -96,7 +96,9 @@ func TestTeamNextWithNoCurrentOrUpcomingEvent(t *testing.T) {
 	out, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
 	requireNoError(t, err, errOut)
 
-	if want := "note: no current or upcoming event for team 177 in 2024\n"; errOut != want {
+	want := "note: no current or upcoming event for team 177 in 2024; " +
+		"see 'tba team events 177 --year 2024'\n"
+	if errOut != want {
 		t.Errorf("stderr = %q, want %q", errOut, want)
 	}
 	if out != "" {
@@ -119,7 +121,8 @@ func TestTeamNextWithNoEventPrintsNullInJSON(t *testing.T) {
 }
 
 // Asked in the autumn, the season being searched is over, so the answer points
-// at the one that is not.
+// at the one that is not -- and, because the next season has no schedule yet,
+// at the season that does have something to show.
 func TestTeamNextInTheOffseasonSuggestsTheNextSeason(t *testing.T) {
 	withNow(t, time.Date(2024, 9, 15, 12, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{
@@ -127,23 +130,40 @@ func TestTeamNextInTheOffseasonSuggestsTheNextSeason(t *testing.T) {
 	})
 	_, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
 	requireNoError(t, err, errOut)
-	if want := "note: no current or upcoming event for team 177 in 2024; try --year 2025\n"; errOut != want {
+	want := "note: no current or upcoming event for team 177 in 2024; try --year 2025; " +
+		"see 'tba team events 177 --year 2024'\n"
+	if errOut != want {
 		t.Errorf("stderr = %q, want %q", errOut, want)
 	}
 }
 
-// In July the season is over but the next one has no schedule either, so there
-// is nothing useful to point at.
-func TestTeamNextInJulySuggestsNothing(t *testing.T) {
+// A season the team was never in is not a season to suggest listing, and the
+// next one is a guess rather than a hint, so neither is offered.
+func TestTeamNextInASeasonTheTeamSatOutSuggestsNothing(t *testing.T) {
+	withNow(t, time.Date(2024, 9, 15, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": "[]",
+	})
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no current or upcoming event for team 177 in 2024\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// In July the next season has no schedule either, so it is not suggested; the
+// season just played still is.
+func TestTeamNextInJulySuggestsNoOtherSeason(t *testing.T) {
 	withNow(t, time.Date(2024, 7, 1, 12, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/events/2024": teamEvents177In2024JSON,
 	})
 	_, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
 	requireNoError(t, err, errOut)
-	if strings.Contains(errOut, "--year") {
+	if strings.Contains(errOut, "try --year") {
 		t.Errorf("stderr = %q, want no suggestion mid-year", errOut)
 	}
+	requireContains(t, errOut, "see 'tba team events 177 --year 2024'")
 }
 
 // Between events, the next one the team is going to is the answer.
