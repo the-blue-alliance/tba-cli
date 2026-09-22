@@ -234,7 +234,8 @@ match table.`,
 	}
 	addYearFlag(c)
 	c.Flags().String("event", "", "Restrict to one event, by key (e.g. 2024cthar); overrides --year")
-	addMatchTableFlags(c)
+	// No --team here: the argument already names the team.
+	addMatchFilterFlags(c)
 	return c
 }
 

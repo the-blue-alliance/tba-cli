@@ -36,9 +36,18 @@ func headersWithEvent() []string {
 	return append([]string{eventColumn}, matchHeaders...)
 }
 
-// addMatchTableFlags adds the filters that every match listing accepts.
+// addMatchTableFlags adds every filter a match listing accepts, for the
+// listings that are about an event and can therefore be narrowed to a team.
 func addMatchTableFlags(c *cobra.Command) {
+	addMatchFilterFlags(c)
 	c.Flags().String("team", "", "Only matches this team played in (e.g. 177 or frc177)")
+}
+
+// addMatchFilterFlags adds the filters that make sense on any listing,
+// including one that is already about a single team. `team matches 177` names
+// its team in the argument, so a --team of its own could only disagree with
+// it — and quietly printed an empty table when it did.
+func addMatchFilterFlags(c *cobra.Command) {
 	c.Flags().String("level", "", "Only this competition level: "+validMatchLevels)
 	c.Flags().Bool("upcoming", false, "Only matches that have not been played, soonest first")
 }
@@ -216,7 +225,9 @@ func colorizeAlliance(s string, color bool) string {
 	}
 }
 
-// filterMatches applies --team, --level and --upcoming.
+// filterMatches applies --level, --upcoming and, where the command has it,
+// --team. A command without the flag reads an empty value and filters by
+// level and playing state alone.
 func filterMatches(cmd *cobra.Command, matches []api.Match) ([]api.Match, error) {
 	team, _ := cmd.Flags().GetString("team")
 	level, _ := cmd.Flags().GetString("level")
