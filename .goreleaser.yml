@@ -5,6 +5,14 @@ builds:
     binary: tba
     env:
       - CGO_ENABLED=0
+    # Build from the commit timestamp rather than the wall clock, so two builds
+    # of the same tag produce byte-identical binaries.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/the-blue-alliance/tba-cli/internal/version.Version={{ .Version }}
+      - -X github.com/the-blue-alliance/tba-cli/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/the-blue-alliance/tba-cli/internal/version.Date={{ .CommitDate }}
     goos:
       - linux
       - darwin
@@ -24,7 +32,34 @@ checksum:
   name_template: "checksums.txt"
 
 changelog:
+  use: github
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\(.+\))??!?:.+$'
+      order: 2
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^chore\(deps\)'
+      - '^ci'
+      - '^test'
+      - '^Merge branch'
+      - '^Merge pull request'
+
+release:
+  footer: |
+    ---
+
+    **Installation.** See the [install instructions](https://github.com/the-blue-alliance/tba-cli#installation).
+    Run `tba version` to check what you have.
 
 announce:
   slack:
