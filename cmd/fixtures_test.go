@@ -527,13 +527,49 @@ const teamDistricts177JSON = `[
   {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024}
 ]`
 
+// A season's leaderboards as the API sends them: a board about teams whose
+// second place is a tie, a board with more rows than `--limit` shows by
+// default, and a board keyed by event rather than by team.
 const leaderboards2024JSON = `[
   {
     "name": "typed_leaderboard_blue_banners",
     "year": 2024,
     "data": {
       "key_type": "team",
-      "rankings": [{"value": 6, "keys": ["frc177"]}, {"value": 5, "keys": ["frc1073"]}]
+      "rankings": [
+        {"value": 6, "keys": ["frc177"]},
+        {"value": 5, "keys": ["frc1073", "frc230"]},
+        {"value": 4, "keys": ["frc5507"]}
+      ]
+    }
+  },
+  {
+    "name": "typed_leaderboard_most_matches_played",
+    "year": 2024,
+    "data": {
+      "key_type": "team",
+      "rankings": [
+        {"value": 92, "keys": ["frc254"]},
+        {"value": 91, "keys": ["frc1114"]},
+        {"value": 90, "keys": ["frc118"]},
+        {"value": 89, "keys": ["frc2056"]},
+        {"value": 88, "keys": ["frc971"]},
+        {"value": 87, "keys": ["frc1678"]},
+        {"value": 86, "keys": ["frc2767"]},
+        {"value": 85, "keys": ["frc1323"]},
+        {"value": 84, "keys": ["frc180"]},
+        {"value": 83, "keys": ["frc33"]},
+        {"value": 82, "keys": ["frc67"]},
+        {"value": 81, "keys": ["frc217"]}
+      ]
+    }
+  },
+  {
+    "name": "typed_leaderboard_highest_median_score_by_event",
+    "year": 2024,
+    "data": {
+      "key_type": "event",
+      "rankings": [{"value": 112.5, "keys": ["2024necmp"]}, {"value": 98, "keys": ["2024cthar"]}]
     }
   }
 ]`
@@ -543,6 +579,16 @@ const notables2024JSON = `[
     "name": "notables_hall_of_fame",
     "year": 2024,
     "data": {"entries": [{"team_key": "frc177", "context": ["2007ct"]}]}
+  },
+  {
+    "name": "notables_world_champions",
+    "year": 2024,
+    "data": {
+      "entries": [
+        {"team_key": "frc254", "context": ["2024cmptx", "2018cmptx"]},
+        {"team_key": "frc1323", "context": ["2024cmptx"]}
+      ]
+    }
   }
 ]`
 
