@@ -215,6 +215,68 @@ $ tba event matches 2024cthar --jq '.[].key' --format csv
 Error: --jq requires JSON output; drop --format csv or use --format json
 ```
 
+### Standings tables
+
+`event rankings` starts with `Rank | Team | Name | Record | Played | DQ` and then
+adds one column per ranking sort order the season defines, each at the precision
+the API declares, followed by any extra statistics. The columns therefore change
+from season to season: 2024 ends with `Ranking Score`, `Avg Coop`, `Avg Match`,
+`Avg Auto`, `Avg Stage` and `Total Ranking Points`, while 2015 has `Qual Avg`,
+`Auto`, `Container` and friends. They are ordinary columns, so `--columns` and
+`--sort` can name them:
+
+```
+tba event rankings 2024cthar --columns team,name,"ranking score"
+tba event rankings 2024cthar --sort='-total ranking points'
+```
+
+Team names come from a second request. If that one fails the Name column is
+left blank rather than failing the ranking table, and `--format json` skips it
+altogether. Seasons without a win/loss record (2015) show an empty Record.
+
+`event alliances` shows `Alliance | Captain | Pick 1 | Pick 2 | Backup | Status |
+Level | Record | Declines`. Backup reads "1234 in for 5678" when the API says who
+the backup replaced, Level is the playoff round the alliance reached (`QF`, `SF`,
+`F`) and Record is its playoff win-loss-tie.
+
+`event team-statuses` is the event-wide view of where each team stands:
+`Team | Rank | Record | Alliance | Pick | Playoff Level | Playoff Status |
+Overall`. Teams are listed by rank with the unranked last, Pick names the slot
+(`Captain`, `1`, `2`, `Backup`), and Overall is TBA's own summary sentence with
+its HTML markup removed.
+
+```
+tba event team-statuses 2024cthar --columns team,rank,record,overall
+```
+
+### District points
+
+`event district-points` lists `Team | Qual | Alliance | Award | Elim | Total`,
+highest total first with ties broken by team number. `--tiebreakers` adds the
+team's highest qualification scores and its number of qualification wins.
+
+`district rankings` shows a whole district season: `Rank | Team | Rookie Bonus |
+Event 1 | Event 2 | DCMP | Total`. Event 1 and Event 2 are the qualifying events
+in the order they were played, and DCMP is the district championship, blank for a
+team that has not been to one. `--detail` breaks each qualifying event into its
+`E1 Qual`, `E1 Alliance`, `E1 Award` and `E1 Elim` points.
+
+`--cutoff N` draws a `--- DCMP cutoff (top N) ---` line after rank N, so the
+championship cut is visible at a glance. It is presentation, so it appears only
+in `table` and `markdown` output; `csv`, `tsv` and `json` are unchanged. It also
+needs the rows to be in rank order, so combining it with `--sort` prints a note
+on stderr and draws no line.
+
+```
+tba district rankings 2024ne --cutoff 80
+tba district rankings 2024ne --detail --format csv > ne-2024.csv
+```
+
+`event district-points` and `event team-statuses` answer with an object keyed by
+team rather than an array, so `--sort` reorders their tables while `--format
+json` keeps the shape the API sent — use `--jq` to reshape that. `district
+rankings` is an array, so `--sort` reorders its JSON too.
+
 ## Scripting
 
 `tba` is meant to be piped into other tools.
@@ -334,16 +396,17 @@ identical archives.
 | `tba event matches <key>` | List event matches |
 | `tba event rankings <key>` | Show event rankings |
 | `tba event alliances <key>` | Show playoff alliances |
+| `tba event team-statuses <key>` | Show where every team at an event stands |
 | `tba event awards <key>` | Show event awards |
 | `tba event oprs <key>` | Show OPR/DPR/CCWM |
-| `tba event district-points <key>` | Show district points |
+| `tba event district-points <key>` | Show district points (`--tiebreakers`) |
 | `tba event predictions <key>` | Show predictions |
 | `tba event insights <key>` | Show event insights |
 | `tba match view <key>` | View match details |
 | `tba district list` | List districts (defaults to the current year) |
 | `tba district events <key>` | List district events |
 | `tba district teams <key>` | List district teams |
-| `tba district rankings <key>` | Show district rankings |
+| `tba district rankings <key>` | Show district rankings (`--cutoff N`, `--detail`) |
 | `tba insight leaderboards` | Show leaderboards |
 | `tba insight notables` | Show notable insights |
 
