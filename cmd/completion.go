@@ -38,7 +38,7 @@ func cachedEntries() []cache.Entry {
 	if err != nil {
 		return nil
 	}
-	entries, err := c.List()
+	entries, err := c.Entries()
 	if err != nil {
 		return nil
 	}
