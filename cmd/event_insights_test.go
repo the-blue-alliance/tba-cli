@@ -35,10 +35,10 @@ func TestEventPredictionsTable(t *testing.T) {
 		// A 0-0 prediction is no prediction: no winner, no confidence.
 		`Qual 11,2024cthar_qm11,"5507, 1071, 1124","230, 2168, 3467",0,0,,`,
 		`SF 1,2024cthar_sf1m1,"177, 1073, 5507","3467, 6153, 2168",101.5,99.9,Red,50.88%`,
-		`SF 3,2024cthar_sf3m1,"230, 195, 1071","558, 1124, 4055",95,110.2,Blue,66%`,
+		`SF 3,2024cthar_sf3m1,"230, 195, 1071","558, 1124, 4055",95,110.2,Blue,66.00%`,
 		// The match list does not carry the final, so it is labelled from its
 		// key and has no teams to show.
-		"Final 1,2024cthar_f1m1,,,121,118.4,Red,52%",
+		"Final 1,2024cthar_f1m1,,,121,118.4,Red,52.00%",
 	}
 	got := lines(out)
 	if len(got) != len(want) {
@@ -49,6 +49,24 @@ func TestEventPredictionsTable(t *testing.T) {
 			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
 		}
 	}
+}
+
+// A column of percentages is read by comparing them, so they all carry two
+// decimals: "66%" next to "51.04%" made the reader count digits.
+func TestEventPredictionsConfidenceKeepsTwoDecimals(t *testing.T) {
+	out, errOut, err := runCmd(t, predictionsServer(t), "event", "predictions", "2024cthar",
+		"--format", "csv", "--no-headers", "--columns", "confidence")
+	requireNoError(t, err, errOut)
+
+	for _, got := range lines(out) {
+		if got == "" {
+			continue // the 0-0 match, which has no confidence at all
+		}
+		if !strings.HasSuffix(got, "%") || len(got) < 4 || got[len(got)-4] != '.' {
+			t.Errorf("confidence = %q, want two decimals before the %%", got)
+		}
+	}
+	requireContains(t, out, "66.00%")
 }
 
 // A model that cannot separate the two alliances has not predicted a winner.

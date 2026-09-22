@@ -240,11 +240,15 @@ func allianceLabel(alliance string) string {
 
 // formatConfidence renders a probability as a percentage. A prediction without
 // one stays blank, which is not the same as a confidence of zero.
+//
+// The decimals are fixed at two rather than trimmed, so that a column of them
+// lines up: "50%" beside "51.38%" made the reader count digits to compare two
+// numbers that are a percentage point apart.
 func formatConfidence(prob *float64) string {
 	if prob == nil {
 		return ""
 	}
-	return formatNumber(*prob*100) + "%"
+	return strconv.FormatFloat(*prob*100, 'f', 2, 64) + "%"
 }
 
 // rankingPredictionTable lists the predicted finish for each team, best first.
