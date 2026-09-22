@@ -163,15 +163,17 @@ func RemoveAPIKey(baseURL string) error {
 
 	v := viper.New()
 	v.SetConfigFile(authFile)
+	// Having nothing to log out of is the same state `auth status` reports,
+	// so it is reported the same way: exit 4, not a generic failure.
 	if err := v.ReadInConfig(); err != nil {
-		return fmt.Errorf("not authenticated")
+		return clierr.Auth("not authenticated")
 	}
 
 	migrateLegacyKey(v)
 
 	keys := v.GetStringMapString("keys")
 	if _, ok := keys[baseURL]; !ok {
-		return fmt.Errorf("not authenticated for %s", baseURL)
+		return clierr.Auth("not authenticated for %s", baseURL)
 	}
 	delete(keys, baseURL)
 	v.Set("keys", keys)

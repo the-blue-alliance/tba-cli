@@ -304,10 +304,26 @@ func TestAuthLogoutWhenNotAuthenticatedFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("logging out with nothing stored should fail")
 	}
-	if got := clierr.ExitCode(err); got != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", got, clierr.ExitFailure)
+	// The same state `auth status` reports, so the same exit code.
+	if got := clierr.ExitCode(err); got != clierr.ExitAuth {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitAuth)
 	}
 	requireErrorContains(t, err, "not authenticated")
+}
+
+func TestAuthLogoutForAnUnknownBaseURLExitsFour(t *testing.T) {
+	authEnv(t)
+	srv := authServer(t)
+	_, _, err := runCmd(t, srv, "auth", "login", "--key", "abcd1234")
+	requireNoError(t, err, "")
+
+	_, _, err = runCmd(t, nil, "auth", "logout", "--base-url", "http://elsewhere.example/api/v3")
+	if err == nil {
+		t.Fatal("logging out of a URL with no key should fail")
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitAuth {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitAuth)
+	}
 }
 
 func TestMaskKey(t *testing.T) {
