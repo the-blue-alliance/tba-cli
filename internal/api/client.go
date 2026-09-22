@@ -169,13 +169,8 @@ func NewClient(baseURL string, opts ...Option) (*Client, error) {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	key, err := config.GetAPIKey(baseURL)
-	if err != nil {
-		return nil, err
-	}
 	c := &Client{
 		http:       &http.Client{},
-		apiKey:     key,
 		baseURL:    baseURL,
 		useCache:   true,
 		userAgent:  userAgent,
@@ -196,8 +191,21 @@ func NewClient(baseURL string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("opening the response cache: %w", err)
 	}
 	c.cache = cc
+	// The options are applied before the key is looked up, because --offline
+	// decides whether there needs to be one.
 	for _, opt := range opts {
 		opt(c)
+	}
+	// Reading one's own cache is not a request to anyone, so it needs no
+	// credentials: `tba --offline event rankings 2024cthar` used to exit 4
+	// "not authenticated" over a warm cache on a machine with no key, which
+	// is the one situation where offline is most worth having.
+	if !c.offline {
+		key, err := config.GetAPIKey(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		c.apiKey = key
 	}
 	return c, nil
 }
