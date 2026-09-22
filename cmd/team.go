@@ -40,7 +40,7 @@ func newTeamViewCmd() *cobra.Command {
 				return err
 			}
 			var team api.Team
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/team/%s", teamKey(args[0])), &team); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s", teamKey(args[0])), &team); err != nil {
 				return err
 			}
 			return outputData(cmd, team, func() {
@@ -72,7 +72,7 @@ func newTeamListCmd() *cobra.Command {
 			for page := 0; ; page++ {
 				var teams []api.Team
 				path := fmt.Sprintf("/teams/%d/%d", year, page)
-				if err := client.GetContext(cmd.Context(), path, &teams); err != nil {
+				if err := client.Get(cmd.Context(), path, &teams); err != nil {
 					return err
 				}
 				if len(teams) == 0 {
@@ -109,7 +109,7 @@ func newTeamEventsCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var events []api.Event
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", teamKey(args[0]), year), &events); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", teamKey(args[0]), year), &events); err != nil {
 				return err
 			}
 			rows := make([][]string, len(events))
@@ -137,7 +137,7 @@ func newTeamMatchesCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var matches []api.Match
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year), &matches); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year), &matches); err != nil {
 				return err
 			}
 			rows := make([][]string, len(matches))
@@ -169,7 +169,7 @@ func newTeamAwardsCmd() *cobra.Command {
 				path = fmt.Sprintf("/team/%s/awards/%d", teamKey(args[0]), year)
 			}
 			var awards []api.Award
-			if err := client.GetContext(cmd.Context(), path, &awards); err != nil {
+			if err := client.Get(cmd.Context(), path, &awards); err != nil {
 				return err
 			}
 			rows := make([][]string, len(awards))
@@ -197,7 +197,7 @@ func newTeamMediaCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var media []api.Media
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/team/%s/media/%d", teamKey(args[0]), year), &media); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/media/%d", teamKey(args[0]), year), &media); err != nil {
 				return err
 			}
 			rows := make([][]string, len(media))
@@ -224,7 +224,7 @@ func newTeamRobotsCmd() *cobra.Command {
 				return err
 			}
 			var robots []api.Robot
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/team/%s/robots", teamKey(args[0])), &robots); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/robots", teamKey(args[0])), &robots); err != nil {
 				return err
 			}
 			rows := make([][]string, len(robots))
@@ -249,7 +249,7 @@ func newTeamDistrictsCmd() *cobra.Command {
 				return err
 			}
 			var districts []api.District
-			if err := client.GetContext(cmd.Context(), fmt.Sprintf("/team/%s/districts", teamKey(args[0])), &districts); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/districts", teamKey(args[0])), &districts); err != nil {
 				return err
 			}
 			rows := make([][]string, len(districts))
