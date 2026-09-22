@@ -3,31 +3,42 @@ package output
 import (
 	"encoding/csv"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
 
-func IsTTY() bool {
-	fi, err := os.Stdout.Stat()
+// IsTTY reports whether w is a terminal. It returns true only when w is an
+// *os.File backed by a character device.
+func IsTTY(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
 	if err != nil {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func PrintKeyValue(pairs ...string) {
-	maxKey := 0
+// PrintKeyValue writes alternating key/value pairs with the values aligned.
+// The label column is sized to the longest "key:" including the colon, so
+// every value starts in the same column.
+func PrintKeyValue(w io.Writer, pairs ...string) {
+	width := 0
 	for i := 0; i < len(pairs)-1; i += 2 {
-		if len(pairs[i]) > maxKey {
-			maxKey = len(pairs[i])
+		if n := len(pairs[i]) + 1; n > width {
+			width = n
 		}
 	}
 	for i := 0; i < len(pairs)-1; i += 2 {
-		fmt.Printf("%-*s  %s\n", maxKey, pairs[i]+":", pairs[i+1])
+		fmt.Fprintf(w, "%-*s  %s\n", width, pairs[i]+":", pairs[i+1])
 	}
 }
 
-func PrintTable(headers []string, rows [][]string) {
+// PrintTable writes an aligned text table with a dashed separator row.
+func PrintTable(w io.Writer, headers []string, rows [][]string) {
 	// Calculate column widths
 	widths := make([]int, len(headers))
 	for i, h := range headers {
@@ -44,77 +55,81 @@ func PrintTable(headers []string, rows [][]string) {
 	// Print header
 	for i, h := range headers {
 		if i > 0 {
-			fmt.Print("  ")
+			fmt.Fprint(w, "  ")
 		}
-		fmt.Printf("%-*s", widths[i], h)
+		fmt.Fprintf(w, "%-*s", widths[i], h)
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	// Print separator
-	for i, w := range widths {
+	for i, width := range widths {
 		if i > 0 {
-			fmt.Print("  ")
+			fmt.Fprint(w, "  ")
 		}
-		fmt.Print(strings.Repeat("-", w))
+		fmt.Fprint(w, strings.Repeat("-", width))
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 
 	// Print rows
 	for _, row := range rows {
 		for i, cell := range row {
 			if i > 0 {
-				fmt.Print("  ")
+				fmt.Fprint(w, "  ")
 			}
 			if i < len(widths) {
-				fmt.Printf("%-*s", widths[i], cell)
+				fmt.Fprintf(w, "%-*s", widths[i], cell)
 			} else {
-				fmt.Print(cell)
+				fmt.Fprint(w, cell)
 			}
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 }
 
-func PrintDelimited(headers []string, rows [][]string, delim rune) error {
-	w := csv.NewWriter(os.Stdout)
-	w.Comma = delim
-	if err := w.Write(headers); err != nil {
+// PrintDelimited writes headers and rows as delimiter-separated values.
+func PrintDelimited(w io.Writer, headers []string, rows [][]string, delim rune) error {
+	cw := csv.NewWriter(w)
+	cw.Comma = delim
+	if err := cw.Write(headers); err != nil {
 		return err
 	}
-	if err := w.WriteAll(rows); err != nil {
+	if err := cw.WriteAll(rows); err != nil {
 		return err
 	}
-	w.Flush()
-	return w.Error()
+	cw.Flush()
+	return cw.Error()
 }
 
-func PrintMarkdownTable(headers []string, rows [][]string) {
+// PrintMarkdownTable writes a GitHub-flavored markdown table.
+func PrintMarkdownTable(w io.Writer, headers []string, rows [][]string) {
 	escape := func(s string) string {
 		return strings.ReplaceAll(strings.ReplaceAll(s, "|", "\\|"), "\n", " ")
 	}
-	fmt.Print("|")
+	fmt.Fprint(w, "|")
 	for _, h := range headers {
-		fmt.Printf(" %s |", escape(h))
+		fmt.Fprintf(w, " %s |", escape(h))
 	}
-	fmt.Println()
-	fmt.Print("|")
+	fmt.Fprintln(w)
+	fmt.Fprint(w, "|")
 	for range headers {
-		fmt.Print(" --- |")
+		fmt.Fprint(w, " --- |")
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 	for _, row := range rows {
-		fmt.Print("|")
+		fmt.Fprint(w, "|")
 		for _, cell := range row {
-			fmt.Printf(" %s |", escape(cell))
+			fmt.Fprintf(w, " %s |", escape(cell))
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 }
 
+// TeamNumberFromKey turns "frc177" into "177".
 func TeamNumberFromKey(key string) string {
 	return strings.TrimPrefix(key, "frc")
 }
 
+// FormatLocation joins the non-empty location parts with ", ".
 func FormatLocation(city, stateProv, country string) string {
 	parts := []string{}
 	if city != "" {

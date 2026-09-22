@@ -1,0 +1,21 @@
+version: "2"
+
+linters:
+  # The standard set is errcheck, govet, ineffassign, staticcheck and unused.
+  default: standard
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+  exclusions:
+    presets:
+      # Ignore unchecked errors from Close/Flush/Fprint-style calls, which is
+      # the usual Go convention for best-effort output.
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt

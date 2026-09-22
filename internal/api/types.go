@@ -15,24 +15,24 @@ type Team struct {
 }
 
 type Event struct {
-	Key           string   `json:"key"`
-	Name          string   `json:"name"`
-	EventCode     string   `json:"event_code"`
-	EventType     int      `json:"event_type"`
-	City          string   `json:"city"`
-	StateProv     string   `json:"state_prov"`
-	Country       string   `json:"country"`
-	StartDate     string   `json:"start_date"`
-	EndDate       string   `json:"end_date"`
-	Year          int      `json:"year"`
-	ShortName     string   `json:"short_name"`
-	EventTypeStr  string   `json:"event_type_string"`
-	Week          *int     `json:"week"`
-	Address       string   `json:"address"`
-	LocationName  string   `json:"location_name"`
-	Webcasts      []Webcast `json:"webcasts"`
-	PlayoffType   *int     `json:"playoff_type"`
-	District      *District `json:"district"`
+	Key          string    `json:"key"`
+	Name         string    `json:"name"`
+	EventCode    string    `json:"event_code"`
+	EventType    int       `json:"event_type"`
+	City         string    `json:"city"`
+	StateProv    string    `json:"state_prov"`
+	Country      string    `json:"country"`
+	StartDate    string    `json:"start_date"`
+	EndDate      string    `json:"end_date"`
+	Year         int       `json:"year"`
+	ShortName    string    `json:"short_name"`
+	EventTypeStr string    `json:"event_type_string"`
+	Week         *int      `json:"week"`
+	Address      string    `json:"address"`
+	LocationName string    `json:"location_name"`
+	Webcasts     []Webcast `json:"webcasts"`
+	PlayoffType  *int      `json:"playoff_type"`
+	District     *District `json:"district"`
 }
 
 type Webcast struct {
@@ -41,25 +41,25 @@ type Webcast struct {
 }
 
 type Match struct {
-	Key           string                 `json:"key"`
-	CompLevel     string                 `json:"comp_level"`
-	SetNumber     int                    `json:"set_number"`
-	MatchNumber   int                    `json:"match_number"`
-	EventKey      string                 `json:"event_key"`
-	Time          *int64                 `json:"time"`
-	PredictedTime *int64                 `json:"predicted_time"`
-	ActualTime    *int64                 `json:"actual_time"`
-	Alliances     map[string]Alliance    `json:"alliances"`
-	WinningAlliance string              `json:"winning_alliance"`
-	ScoreBreakdown map[string]interface{} `json:"score_breakdown"`
-	Videos        []Video                `json:"videos"`
+	Key             string                 `json:"key"`
+	CompLevel       string                 `json:"comp_level"`
+	SetNumber       int                    `json:"set_number"`
+	MatchNumber     int                    `json:"match_number"`
+	EventKey        string                 `json:"event_key"`
+	Time            *int64                 `json:"time"`
+	PredictedTime   *int64                 `json:"predicted_time"`
+	ActualTime      *int64                 `json:"actual_time"`
+	Alliances       map[string]Alliance    `json:"alliances"`
+	WinningAlliance string                 `json:"winning_alliance"`
+	ScoreBreakdown  map[string]interface{} `json:"score_breakdown"`
+	Videos          []Video                `json:"videos"`
 }
 
 type Alliance struct {
-	Score     int      `json:"score"`
-	TeamKeys  []string `json:"team_keys"`
+	Score             int      `json:"score"`
+	TeamKeys          []string `json:"team_keys"`
 	SurrogateTeamKeys []string `json:"surrogate_team_keys"`
-	DQTeamKeys []string `json:"dq_team_keys"`
+	DQTeamKeys        []string `json:"dq_team_keys"`
 }
 
 type Video struct {
@@ -75,13 +75,13 @@ type District struct {
 }
 
 type Ranking struct {
-	TeamKey      string      `json:"team_key"`
-	Rank         int         `json:"rank"`
-	Record       *WLTRecord  `json:"record"`
-	QualAverage  *float64    `json:"qual_average"`
+	TeamKey       string     `json:"team_key"`
+	Rank          int        `json:"rank"`
+	Record        *WLTRecord `json:"record"`
+	QualAverage   *float64   `json:"qual_average"`
 	MatchesPlayed int        `json:"matches_played"`
-	DQ           int         `json:"dq"`
-	SortOrders   []float64   `json:"sort_orders"`
+	DQ            int        `json:"dq"`
+	SortOrders    []float64  `json:"sort_orders"`
 }
 
 type WLTRecord struct {
@@ -91,7 +91,7 @@ type WLTRecord struct {
 }
 
 type EventRankings struct {
-	Rankings   []Ranking       `json:"rankings"`
+	Rankings      []Ranking       `json:"rankings"`
 	SortOrderInfo []SortOrderInfo `json:"sort_order_info"`
 }
 
@@ -101,23 +101,23 @@ type SortOrderInfo struct {
 }
 
 type EventAlliance struct {
-	Name   *string          `json:"name"`
-	Picks  []string         `json:"picks"`
-	Status *AllianceStatus  `json:"status"`
-	Declines []string       `json:"declines"`
+	Name     *string         `json:"name"`
+	Picks    []string        `json:"picks"`
+	Status   *AllianceStatus `json:"status"`
+	Declines []string        `json:"declines"`
 }
 
 type AllianceStatus struct {
-	Status string `json:"status"`
-	Level  string `json:"level"`
+	Status string     `json:"status"`
+	Level  string     `json:"level"`
 	Record *WLTRecord `json:"record"`
 }
 
 type Award struct {
-	Name      string         `json:"name"`
-	AwardType int            `json:"award_type"`
-	EventKey  string         `json:"event_key"`
-	Year      int            `json:"year"`
+	Name       string           `json:"name"`
+	AwardType  int              `json:"award_type"`
+	EventKey   string           `json:"event_key"`
+	Year       int              `json:"year"`
 	Recipients []AwardRecipient `json:"recipient_list"`
 }
 
@@ -127,11 +127,11 @@ type AwardRecipient struct {
 }
 
 type Media struct {
-	Type      string `json:"type"`
-	ForeignKey string `json:"foreign_key"`
-	Details   map[string]interface{} `json:"details"`
-	DirectURL string `json:"direct_url"`
-	ViewURL   string `json:"view_url"`
+	Type       string                 `json:"type"`
+	ForeignKey string                 `json:"foreign_key"`
+	Details    map[string]interface{} `json:"details"`
+	DirectURL  string                 `json:"direct_url"`
+	ViewURL    string                 `json:"view_url"`
 }
 
 type Robot struct {
@@ -142,10 +142,10 @@ type Robot struct {
 }
 
 type DistrictRanking struct {
-	TeamKey    string `json:"team_key"`
-	Rank       int    `json:"rank"`
-	PointTotal int    `json:"point_total"`
-	RookieBonus int   `json:"rookie_bonus"`
+	TeamKey     string `json:"team_key"`
+	Rank        int    `json:"rank"`
+	PointTotal  int    `json:"point_total"`
+	RookieBonus int    `json:"rookie_bonus"`
 }
 
 type EventOPRs struct {
@@ -155,10 +155,10 @@ type EventOPRs struct {
 }
 
 type APIStatus struct {
-	CurrentSeason    int    `json:"current_season"`
-	MaxSeason        int    `json:"max_season"`
-	IsDatafeedDown   bool   `json:"is_datafeed_down"`
-	ContBuildEnabled bool   `json:"contbuild_enabled"`
+	CurrentSeason    int         `json:"current_season"`
+	MaxSeason        int         `json:"max_season"`
+	IsDatafeedDown   bool        `json:"is_datafeed_down"`
+	ContBuildEnabled bool        `json:"contbuild_enabled"`
 	AndroidSettings  interface{} `json:"android"`
 	IOSSettings      interface{} `json:"ios"`
 }
