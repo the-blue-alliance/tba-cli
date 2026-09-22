@@ -40,7 +40,7 @@ const (
 }`
 	searchTeam4000JSON = `{
   "key": "frc4000", "team_number": 4000, "nickname": "Steel Hawks",
-  "name": "Bobcat Industries & Windsor High School",
+  "name": "Bobcat Industries & The Windsor Regional High School Booster Club",
   "city": "Windsor", "state_prov": "Connecticut", "country": "USA", "rookie_year": 2011
 }`
 	searchTeam517JSON = `{
@@ -63,6 +63,20 @@ func searchRoutes() map[string]any {
 func newSearchServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return newFakeTBA(t, searchRoutes())
+}
+
+// otherNotes drops the "fetching the season's team list" line, which every run
+// against a fresh cache directory prints and which the notes below are not
+// about. The note has tests of its own.
+func otherNotes(stderr string) string {
+	var kept []string
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.HasPrefix(line, "note: fetching the ") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }
 
 // searchNumbers runs a search as CSV and returns the team numbers in order.
@@ -128,10 +142,10 @@ func TestTeamSearchColumns(t *testing.T) {
 	out, errOut, err := runCmd(t, srv, "team", "search", "bobcat", "--year", "2024", "--format", "csv", "--limit", "1")
 	requireNoError(t, err, errOut)
 	rows := lines(out)
-	if rows[0] != "Number,Name,Location,Rookie" {
+	if rows[0] != "Number,Name,Location,Rookie,Matched" {
 		t.Errorf("header = %q", rows[0])
 	}
-	if rows[1] != "9999,Bobcat,\"Ames, Iowa, USA\",2018" {
+	if rows[1] != "9999,Bobcat,\"Ames, Iowa, USA\",2018,nickname: Bobcat" {
 		t.Errorf("row = %q", rows[1])
 	}
 }
@@ -185,7 +199,7 @@ func TestTeamSearchLimitTruncatesAndSaysSo(t *testing.T) {
 	if !ok || len(arr) != 2 {
 		t.Fatalf("want 2 teams on stdout, got %s", out)
 	}
-	if errOut != "note: showing 2 of 5 matches; use --limit 0 for all\n" {
+	if otherNotes(errOut) != "note: showing 2 of 5 matches; use --limit 0 for all\n" {
 		t.Errorf("stderr = %q", errOut)
 	}
 	if strings.Contains(out, "note:") {
@@ -201,8 +215,8 @@ func TestTeamSearchLimitZeroShowsEverything(t *testing.T) {
 	if len(arr) != 5 {
 		t.Errorf("want all 5 matches, got %d", len(arr))
 	}
-	if errOut != "" {
-		t.Errorf("stderr = %q, want empty", errOut)
+	if otherNotes(errOut) != "" {
+		t.Errorf("stderr = %q, want nothing but the fetch note", errOut)
 	}
 }
 
@@ -210,8 +224,8 @@ func TestTeamSearchSaysNothingWhenNothingIsTruncated(t *testing.T) {
 	srv := newSearchServer(t)
 	_, errOut, err := runCmd(t, srv, "team", "search", "bobcat", "--year", "2024")
 	requireNoError(t, err, errOut)
-	if errOut != "" {
-		t.Errorf("stderr = %q, want empty when the default limit is not reached", errOut)
+	if otherNotes(errOut) != "" {
+		t.Errorf("stderr = %q, want nothing when the default limit is not reached", errOut)
 	}
 }
 
@@ -225,7 +239,7 @@ func TestTeamSearchWithNoMatchesExitsZero(t *testing.T) {
 	if strings.TrimSpace(out) != "[]" {
 		t.Errorf("stdout = %q, want an empty JSON array", out)
 	}
-	if errOut != "note: no teams match \"nosuchteam\"\n" {
+	if otherNotes(errOut) != "note: no teams match \"nosuchteam\"\n" {
 		t.Errorf("stderr = %q", errOut)
 	}
 }
@@ -350,5 +364,105 @@ func TestTeamSearchSupportsColumnsAndSort(t *testing.T) {
 	want := []string{"Number,Rookie", "177,1995", "50,1997", "4000,2011", "5000,2013", "9999,2018"}
 	if strings.Join(lines(out), "|") != strings.Join(want, "|") {
 		t.Errorf("output = %q, want %q", lines(out), want)
+	}
+}
+
+// A team can match on its full name, which no other column shows, so a search
+// for "bobcat" looks like it answered with strangers. Matched says where the
+// query landed and what it says there.
+func TestTeamSearchExplainsWhyEachTeamMatched(t *testing.T) {
+	srv := newSearchServer(t)
+	out, errOut, err := runCmd(t, srv, "team", "search", "bobcat", "--year", "2024",
+		"--format", "csv", "--columns", "number,matched", "--no-headers")
+	requireNoError(t, err, errOut)
+
+	want := []string{
+		"9999,nickname: Bobcat",
+		"50,nickname: Bobcat Racers",
+		"177,nickname: Bobcat Robotics",
+		"5000,nickname: Red Bobcats",
+		// The one whose nickname says nothing about bobcats, and the long
+		// name it did match on, cut to fit.
+		`4000,name: Bobcat Industries & The Windsor Regional High School…`,
+	}
+	got := lines(out)
+	if len(got) != len(want) {
+		t.Fatalf("got %d rows, want %d:\n%s", len(got), len(want), out)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+	for _, row := range got {
+		if n := len([]rune(strings.SplitN(row, ",", 2)[1])); n > 60 {
+			t.Errorf("Matched cell is %d characters: %q", n, row)
+		}
+	}
+}
+
+// A word that lands in the location is credited to the location.
+func TestTeamSearchExplainsALocationMatch(t *testing.T) {
+	srv := newSearchServer(t)
+	out, errOut, err := runCmd(t, srv, "team", "search", "montana", "--year", "2024",
+		"--format", "csv", "--columns", "number,matched", "--no-headers")
+	requireNoError(t, err, errOut)
+	if got := lines(out)[0]; got != `50,"location: Bozeman, Montana, USA"` {
+		t.Errorf("row = %q", got)
+	}
+}
+
+// The field that accounts for the most of the query is the one credited, so a
+// nickname hit is never explained by a sponsor.
+func TestTeamSearchCreditsTheFieldThatExplainsTheMostWords(t *testing.T) {
+	srv := newSearchServer(t)
+	out, errOut, err := runCmd(t, srv, "team", "search", "bobcat", "robotics", "--year", "2024",
+		"--format", "csv", "--columns", "number,matched", "--no-headers")
+	requireNoError(t, err, errOut)
+	if got := lines(out)[0]; got != "177,nickname: Bobcat Robotics" {
+		t.Errorf("row = %q", got)
+	}
+}
+
+// The first search of a season is twenty requests and a wait, so it says so
+// before the wait. A season already on disk is quick and says nothing.
+func TestTeamSearchNotesTheFirstWalkOfASeason(t *testing.T) {
+	t.Setenv("TBA_CACHE_DIR", t.TempDir())
+	srv := newSearchServer(t)
+
+	_, errOut, err := runCmd(t, srv, "team", "search", "bobcat", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+	requireContains(t, errOut, "note: fetching the 2024 team list (about 20 pages, cached for next time)")
+
+	_, errOut, err = runCmd(t, srv, "team", "search", "bobcat", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "fetching the 2024 team list") {
+		t.Errorf("the note came back for a cached season: %q", errOut)
+	}
+}
+
+// A season whose pages are only half cached is still a fetch.
+func TestTeamSearchNotesAPartiallyCachedSeason(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TBA_CACHE_DIR", dir)
+	srv := newSearchServer(t)
+
+	// One page short of the walk: --max-pages 1 caches page 0 and nothing else.
+	_, errOut, err := runCmd(t, srv, "team", "search", "bobcat", "--year", "2024",
+		"--max-pages", "1", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	_, errOut, err = runCmd(t, srv, "team", "search", "bobcat", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+	requireContains(t, errOut, "note: fetching the 2024 team list")
+}
+
+// The note is about the wait, so a run that cannot fetch at all is silent.
+func TestTeamSearchOfflineDoesNotAnnounceAFetch(t *testing.T) {
+	t.Setenv("TBA_CACHE_DIR", t.TempDir())
+	srv := newSearchServer(t)
+	_, errOut, _ := runCmd(t, srv, "team", "search", "bobcat", "--year", "2024", "--offline")
+	if strings.Contains(errOut, "fetching the 2024 team list") {
+		t.Errorf("offline announced a fetch it will never make: %q", errOut)
 	}
 }

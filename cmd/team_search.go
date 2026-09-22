@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/cache"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
@@ -34,6 +36,59 @@ func fetchTeamPages(cmd *cobra.Command, client *api.Client, year, maxPages int) 
 		}
 		teams = append(teams, pageTeams...)
 	}
+}
+
+// searchTeamPages is fetchTeamPages with a warning first when the season's
+// pages are not already on disk. A first search of a season is twenty requests
+// and several seconds, and silence for that long reads as a hang; a later one
+// is twenty conditional requests and is quick, so the note appears once per
+// season and then stops.
+func searchTeamPages(cmd *cobra.Command, client *api.Client, year, maxPages int) ([]api.Team, int, error) {
+	if teamPagesNeedFetching(cmd, year, maxPages) {
+		fmt.Fprintf(cmd.ErrOrStderr(),
+			"note: fetching the %d team list (about 20 pages, cached for next time)\n", year)
+	}
+	return fetchTeamPages(cmd, client, year, maxPages)
+}
+
+// teamPagesNeedFetching reports whether walking the season will go to the
+// network for at least one page.
+//
+// It reads the cache directly rather than counting requests, because the note
+// is only worth anything before the wait rather than after it. An unreadable
+// cache says nothing either way, so it says nothing.
+func teamPagesNeedFetching(cmd *cobra.Command, year, maxPages int) bool {
+	s := settings(cmd)
+	if s.Bool("offline") {
+		// Offline never fetches: either the pages are there or the walk fails.
+		return false
+	}
+	if s.Bool("no-cache") {
+		return true
+	}
+	c, err := cache.New()
+	if err != nil {
+		return false
+	}
+	baseURL := getBaseURL(cmd)
+	for page := 0; maxPages <= 0 || page < maxPages; page++ {
+		entry := c.Get(fmt.Sprintf("%s/teams/%d/%d", baseURL, year, page))
+		if entry == nil {
+			return true
+		}
+		if isEmptyJSONArray(entry.Body) {
+			// The walk stops at the first empty page, so everything it will
+			// ask for is already here.
+			return false
+		}
+	}
+	return false
+}
+
+// isEmptyJSONArray reports whether a cached body is the empty page that ends a
+// paged walk.
+func isEmptyJSONArray(body json.RawMessage) bool {
+	return strings.TrimSpace(string(body)) == "[]"
 }
 
 // searchFieldNames lists the searchable fields, in the order they are shown in
@@ -87,30 +142,89 @@ func isDigits(s string) bool {
 	return true
 }
 
-// teamMatchesWord reports whether one lower-cased query word appears in any of
-// the searched fields.
+// searchFieldValue reads one searchable field of a team, as it is shown to the
+// person searching.
+func searchFieldValue(t api.Team, field string) string {
+	switch field {
+	case "nickname":
+		return t.Nickname
+	case "name":
+		return t.Name
+	case "location":
+		return output.FormatLocation(t.City, t.StateProv, t.Country)
+	case "number":
+		return strconv.Itoa(t.TeamNumber)
+	}
+	return ""
+}
+
+// fieldMatchesWord reports whether one lower-cased query word lands in one
+// field.
 //
 // Text fields match on substring, because people remember a fragment of a name
 // far more often than the whole of it. The team number instead matches only on
 // a prefix: "17" is how someone starts typing 177 or 1768, but a substring
 // match would also drag in 517 and 1170, which nobody meant.
+func fieldMatchesWord(t api.Team, field, word string) bool {
+	if field == "number" {
+		return isDigits(word) && strings.HasPrefix(strconv.Itoa(t.TeamNumber), word)
+	}
+	return strings.Contains(strings.ToLower(searchFieldValue(t, field)), word)
+}
+
+// teamMatchesWord reports whether one lower-cased query word appears in any of
+// the searched fields.
 func teamMatchesWord(t api.Team, word string, fields map[string]bool) bool {
-	if fields["nickname"] && strings.Contains(strings.ToLower(t.Nickname), word) {
-		return true
-	}
-	if fields["name"] && strings.Contains(strings.ToLower(t.Name), word) {
-		return true
-	}
-	if fields["location"] {
-		location := output.FormatLocation(t.City, t.StateProv, t.Country)
-		if strings.Contains(strings.ToLower(location), word) {
+	for _, field := range searchFieldNames {
+		if fields[field] && fieldMatchesWord(t, field, word) {
 			return true
 		}
 	}
-	if fields["number"] && isDigits(word) && strings.HasPrefix(strconv.Itoa(t.TeamNumber), word) {
-		return true
-	}
 	return false
+}
+
+// maxMatchedWidth caps the Matched cell. A sponsor name can run to a couple of
+// hundred characters, and the cell only has to show that the hit was real.
+const maxMatchedWidth = 60
+
+// explainMatch says why a team is in the results, as "field: text".
+//
+// A search for "bobcat" answers with teams whose nickname says nothing of the
+// sort, because it matched the full name the table does not show -- 2724 is
+// "Bobcat Robotics Booster Club" under a nickname of "Berkeley"... and without
+// this column the result reads as a bug. The field credited is the one that
+// accounts for the most words of the query, and the earliest such field wins,
+// so a nickname hit is never explained by a sponsor.
+func explainMatch(t api.Team, query string, fields map[string]bool) string {
+	words := strings.Fields(query)
+	best, bestScore := "", 0
+	for _, field := range searchFieldNames {
+		if !fields[field] {
+			continue
+		}
+		score := 0
+		for _, w := range words {
+			if fieldMatchesWord(t, field, w) {
+				score++
+			}
+		}
+		if score > bestScore {
+			best, bestScore = field, score
+		}
+	}
+	if bestScore == 0 {
+		return ""
+	}
+	return truncateCell(best+": "+searchFieldValue(t, best), maxMatchedWidth)
+}
+
+// truncateCell shortens a cell to max characters, marking that it was cut.
+func truncateCell(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max || max < 1 {
+		return s
+	}
+	return strings.TrimRight(string(runes[:max-1]), " ") + "\u2026"
 }
 
 // teamMatchesQuery requires every word of the query to land somewhere. The
@@ -189,7 +303,9 @@ words all have to match, though they may match different fields.
 
 Results are ordered by how well they match: an exact nickname first, then a
 nickname the query starts, then a nickname that contains it, then the teams
-that matched on some other field, with team number breaking ties.
+that matched on some other field, with team number breaking ties. Matched says
+which field the query landed in and what it says there, since a team often
+matches on its full sponsor name, which no other column shows.
 
 The search runs over the season's team list, which is about 20 pages of 500
 teams. The first search of a season fetches them all; later searches revalidate
@@ -229,7 +345,7 @@ because it would repeat that walk for every season.`,
 				return err
 			}
 			maxPages, _ := cmd.Flags().GetInt("max-pages")
-			teams, cappedAt, err := fetchTeamPages(cmd, client, year, maxPages)
+			teams, cappedAt, err := searchTeamPages(cmd, client, year, maxPages)
 			if err != nil {
 				return err
 			}
@@ -242,7 +358,7 @@ because it would repeat that walk for every season.`,
 				matches = matches[:limit]
 			}
 
-			if err := printTeamSearch(cmd, format, matches); err != nil {
+			if err := printTeamSearch(cmd, format, matches, strings.ToLower(query), fields); err != nil {
 				return err
 			}
 
@@ -283,7 +399,7 @@ func rookieYear(year int) string {
 // than a lone header row: a search that found nothing has no data to show, and
 // the explanation belongs on stderr. JSON still prints its empty array, so a
 // script can keep parsing stdout unconditionally.
-func printTeamSearch(cmd *cobra.Command, format string, matches []api.Team) error {
+func printTeamSearch(cmd *cobra.Command, format string, matches []api.Team, query string, fields map[string]bool) error {
 	if len(matches) == 0 {
 		if format == "json" {
 			return output.PrintJSONWithFilter(cmd.OutOrStdout(), matches, jqExpr(cmd), rawOutput(cmd))
@@ -297,7 +413,8 @@ func printTeamSearch(cmd *cobra.Command, format string, matches []api.Team) erro
 			t.Nickname,
 			output.FormatLocation(t.City, t.StateProv, t.Country),
 			rookieYear(t.RookieYear),
+			explainMatch(t, query, fields),
 		}
 	}
-	return outputTable(cmd, matches, []string{"Number", "Name", "Location", "Rookie"}, rows)
+	return outputTable(cmd, matches, []string{"Number", "Name", "Location", "Rookie", "Matched"}, rows)
 }
