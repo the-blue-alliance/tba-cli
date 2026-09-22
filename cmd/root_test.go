@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
@@ -182,8 +183,13 @@ func TestAPIErrorIsSurfaced(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error for an unknown path")
 	}
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("error should mention the status code: %v", err)
+	// A 404 is reported in words rather than by its status code; what matters
+	// is that the failure reaches the caller and says what was missing.
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should say what was not found: %v", err)
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitNotFound)
 	}
 }
 

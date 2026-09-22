@@ -78,7 +78,11 @@ func TestExitCodeFourOnHTTP401(t *testing.T) {
 func TestExitCodeFiveOnHTTP404(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
 	err := requireExitCode(t, clierr.ExitNotFound, srv, "team", "view", "99999")
-	requireErrorContains(t, err, "404")
+	// The API's own sentence, not the JSON document it arrived in.
+	requireErrorContains(t, err, "not found: /team/frc99999 not found")
+	if strings.Contains(err.Error(), `{"Error"`) {
+		t.Errorf("the raw body leaked into the message: %v", err)
+	}
 }
 
 func TestExitCodeOneOnServerError(t *testing.T) {
