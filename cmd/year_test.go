@@ -252,6 +252,63 @@ func TestResolveYearUsesALentClient(t *testing.T) {
 	}
 }
 
+// Every command that resolves the default season hands the lookup the client
+// it already built, so the extra /status request is paced by the same rate
+// limiter as the rest of the command instead of by a second client's.
+//
+// What a command-level test can see is the request stream: /status goes out
+// first, before the command's own request, and every request carries the same
+// User-Agent. That the lookup really borrows the client rather than building
+// an identical one is pinned by TestResolveYearUsesALentClient above, which
+// gives the lent client a User-Agent of its own.
+func TestCommandsLendTheirClientToTheSeasonLookup(t *testing.T) {
+	season := otherSeason()
+	cases := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{"district list", fmt.Sprintf("/districts/%d", season), []string{"district", "list"}},
+		{"event list", fmt.Sprintf("/events/%d", season), []string{"event", "list"}},
+		{"team events", fmt.Sprintf("/team/frc177/events/%d", season), []string{"team", "events", "177"}},
+		{"team media", fmt.Sprintf("/team/frc177/media/%d", season), []string{"team", "media", "177"}},
+		{"team matches", fmt.Sprintf("/team/frc177/matches/%d", season), []string{"team", "matches", "177"}},
+		{"team search", fmt.Sprintf("/teams/%d/0", season), []string{"team", "search", "bobcat"}},
+		{"insight leaderboards", fmt.Sprintf("/insights/leaderboards/%d", season), []string{"insight", "leaderboards"}},
+		{"insight notables", fmt.Sprintf("/insights/notables/%d", season), []string{"insight", "notables"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{
+				"/status": statusWithSeason(season),
+				c.path:    "[]",
+			})
+			_, errOut, err := runCmd(t, srv, append(c.args, "--no-cache")...)
+			requireNoError(t, err, errOut)
+
+			reqs := requestsTo(t, srv)
+			if len(reqs) < 2 {
+				t.Fatalf("%d requests, want the season lookup and the command's own", len(reqs))
+			}
+			if reqs[0].Path != "/status" {
+				t.Errorf("first request = %s, want /status", reqs[0].Path)
+			}
+			if reqs[1].Path != c.path {
+				t.Errorf("second request = %s, want %s", reqs[1].Path, c.path)
+			}
+			ua := reqs[0].Headers.Get("User-Agent")
+			if ua == "" {
+				t.Fatal("the season lookup sent no User-Agent")
+			}
+			for _, r := range reqs[1:] {
+				if got := r.Headers.Get("User-Agent"); got != ua {
+					t.Errorf("%s sent User-Agent %q, want the same client's %q", r.Path, got, ua)
+				}
+			}
+		})
+	}
+}
+
 func TestTheSeasonIsLookedUpOnceADay(t *testing.T) {
 	season := otherSeason()
 	srv := eventsFake(t, season)

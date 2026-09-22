@@ -22,6 +22,9 @@ func addYearFlag(c *cobra.Command) {
 	c.Flags().Int("year", 0, yearFlagUsage)
 }
 
+// firstFRCSeason is the earliest season The Blue Alliance holds data for.
+const firstFRCSeason = 1992
+
 // resolveYear returns the season a command should ask about: the --year flag
 // if it was given, else TBA_YEAR, else the config file, else the season The
 // Blue Alliance says is current, else the calendar year.
@@ -31,12 +34,9 @@ func addYearFlag(c *cobra.Command) {
 // the January kickoff, which is a far better answer than an error.
 //
 // client is optional, and is how a command lends the season lookup the client
-// it already built. Without it the lookup builds its own, which works but
-// gives the extra request its own rate limiter, outside the pacing the rest
-// of the command is doing.
-// firstFRCSeason is the earliest season The Blue Alliance holds data for.
-const firstFRCSeason = 1992
-
+// it already built; every caller that has one does. Without it the lookup
+// builds its own, which works but gives the extra request its own rate
+// limiter, outside the pacing the rest of the command is doing.
 func resolveYear(cmd *cobra.Command, client ...*api.Client) (int, error) {
 	s := settings(cmd)
 	if s.Source("year") != sourceDefault {

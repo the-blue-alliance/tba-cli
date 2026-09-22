@@ -63,7 +63,7 @@ JSON output stays the array the API sent, narrowed to the board --board named.`,
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
@@ -136,7 +136,7 @@ JSON output stays the array the API sent, narrowed to the board --board named.`,
 			if err != nil {
 				return err
 			}
-			year, err := resolveYear(cmd)
+			year, err := resolveYear(cmd, client)
 			if err != nil {
 				return err
 			}
