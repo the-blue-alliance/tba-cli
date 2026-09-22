@@ -20,9 +20,13 @@ Get an API key from your [TBA Account page](https://www.thebluealliance.com/acco
 
 ```
 tba auth login --key <your-key>
+tba auth login                 # prompts, without echoing the key
+tba auth login < key.txt       # reads one line from stdin
 ```
 
-Or set the `TBA_AUTH_KEY` environment variable.
+The key is checked against the API before it is stored, so a key that is
+rejected is never written to disk. Or set the `TBA_AUTH_KEY` environment
+variable.
 
 ## Usage
 
@@ -50,10 +54,12 @@ Auth keys are stored separately per base URL, so prod and local credentials don'
 
 ### Caching
 
-Responses are cached locally and revalidated with `If-None-Match` / `If-Modified-Since` on each request. When the server returns `304 Not Modified`, the cached body is used. Cache files live in `$XDG_CACHE_HOME/tba` (defaults to `~/.cache/tba`).
+Responses are cached locally and revalidated with `If-None-Match` / `If-Modified-Since` on each request. When the server returns `304 Not Modified`, the cached body is used. Cache files live in a `v1/` subdirectory of `$XDG_CACHE_HOME/tba` (defaults to
+`~/.cache/tba`), so `tba cache clear` can only remove files `tba` wrote.
 
 ```
 tba cache info    # show directory, entry count, total size
+tba cache info --format json
 tba cache clear   # remove all cached responses
 tba --no-cache <command>   # skip cache and conditional headers for this invocation
 ```
@@ -81,8 +87,9 @@ tba completion fish > ~/.config/fish/completions/tba.fish
 
 | Format | Description |
 |--------|-------------|
-| `table` | Aligned text columns (default when stdout is a TTY) |
-| `json` | Pretty-printed JSON (default when stdout is piped); `--json` is a shorthand |
+| `auto` | `table` when stdout is a TTY, `json` otherwise (the default) |
+| `table` | Aligned text columns |
+| `json` | Pretty-printed JSON; `--json` is a shorthand |
 | `csv` | Comma-separated values |
 | `tsv` | Tab-separated values |
 | `markdown` (`md`) | GitHub-flavored markdown table |
@@ -95,6 +102,59 @@ tba event rankings 2024necmp --format markdown
 ```
 
 For single-object commands (e.g. `team view`), tabular formats like `csv`/`tsv`/`markdown` fall back to `json`. Use `--jq` to filter with jq expressions.
+
+`--jq` and `--json` need JSON output, so combining either with `--format table|csv|tsv|markdown` is an error rather than a silent override:
+
+```
+$ tba event matches 2024cthar --jq '.[].key' --format csv
+Error: --jq requires JSON output; drop --format csv or use --format json
+```
+
+## Scripting
+
+`tba` is meant to be piped into other tools.
+
+**Streams.** stdout carries data and nothing else. Prompts, progress, notices and errors go to stderr, so `tba auth login < key.txt > /dev/null` still shows you what it is asking, and `tba event matches 2024cthar > matches.csv` writes only rows.
+
+**Format.** Off a TTY the default is JSON, so a piped command needs no flags. `--format auto` asks for that rule explicitly.
+
+**jq.** `--jq` filters the JSON. Several results are printed one compact result per line (NDJSON), a single result stays pretty-printed, and `-r`/`--raw-output` drops the quotes around strings, like `jq -r`:
+
+```
+$ tba district list --year 2024 --jq '.[].key' -r
+2024ne
+2024fim
+```
+
+**Arguments.** Team arguments accept either spelling: `tba team view 177` and `tba team view frc177` are the same command. Event and match keys are checked before any request goes out, so a typo comes back as a usage error rather than a 404:
+
+```
+$ tba event view cthar2024
+Error: "cthar2024" is not a valid event key (expected something like 2024cthar)
+```
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Runtime or network failure (including HTTP 5xx) |
+| 2 | Usage error: a bad flag, a bad argument, an unknown command, a malformed key |
+| 4 | Authentication required: no API key configured, or HTTP 401 |
+| 5 | Not found: HTTP 404 |
+| 130 | Interrupted (Ctrl-C) |
+| 141 | stdout closed early (for example when the reader of a pipe exits first); nothing is printed |
+
+Usage errors (exit 2) print the usage block; every other failure prints only its message.
+
+```
+if ! tba auth status >/dev/null; then
+  case $? in
+    4) echo "run 'tba auth login' first" >&2 ;;
+    *) echo "tba is unhappy" >&2 ;;
+  esac
+fi
+```
 
 ## Development
 
@@ -154,3 +214,7 @@ Releases are cut by pushing a `v*` tag, which runs GoReleaser
 | `tba district rankings <key>` | Show district rankings |
 | `tba insight leaderboards` | Show leaderboards |
 | `tba insight notables` | Show notable insights |
+
+The group commands also answer to their plurals: `teams`, `events`, `matches`,
+`districts`, `insights`. Every command carries examples, so `tba event matches
+--help` shows what a real invocation looks like.
