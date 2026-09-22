@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 func TestHumanizeName(t *testing.T) {
@@ -158,7 +160,7 @@ func TestMatchKeyOrder(t *testing.T) {
 		{"2024cthar_qf2m3", 2, 2, 3, true},
 		{"2024cthar_sf13m1", 3, 13, 1, true},
 		{"2024cthar_f1m2", 4, 1, 2, true},
-		{"2024cthar_zz1", 5, 0, 0, false},
+		{"2024cthar_zz1", frc.UnknownCompLevel, 0, 0, false},
 	}
 	for _, tc := range cases {
 		level, set, match, ok := matchKeyOrder(tc.key)

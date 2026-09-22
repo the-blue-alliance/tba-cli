@@ -541,41 +541,4 @@ JSON output keeps the shape the API returns, an object keyed by team, so
 	return c
 }
 
-func newEventPredictionsCmd() *cobra.Command {
-	return newRawEventCmd("predictions", "Show event predictions", "predictions",
-		`  tba event predictions 2024cthar
-  tba event predictions 2024cthar --format json`)
-}
-
-func newEventInsightsCmd() *cobra.Command {
-	return newRawEventCmd("insights", "Show event insights", "insights",
-		`  tba event insights 2024cthar
-  tba event insights 2024cthar --jq .qual.high_score`)
-}
-
-// newRawEventCmd builds a command that passes an event sub-resource through
-// untouched, since these endpoints have no stable schema.
-func newRawEventCmd(use, short, resource, example string) *cobra.Command {
-	return &cobra.Command{
-		Use:     use + " <key>",
-		Short:   short,
-		Example: example,
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateEventKey(args[0]); err != nil {
-				return err
-			}
-			client, err := newClient(cmd)
-			if err != nil {
-				return err
-			}
-			raw, err := client.GetRaw(cmd.Context(), fmt.Sprintf("/event/%s/%s", args[0], resource))
-			if err != nil {
-				return err
-			}
-			return outputData(cmd, raw, func() {
-				fmt.Fprintln(cmd.OutOrStdout(), string(raw))
-			})
-		},
-	}
-}
+// The predictions and insights commands live in event_insights.go.

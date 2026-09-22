@@ -430,15 +430,55 @@ const districtPoints2024ctharJSON = `{
   }
 }`
 
+// Predictions as the API sends them: match keys in the order a Go map hands
+// them out rather than play order, a playoff round alongside the qualification
+// one, and the model's own statistics.
 const predictions2024ctharJSON = `{
-  "match_predictions": {"qual": {"2024cthar_qm1": {"red": {"score": 84.2}, "blue": {"score": 63.1}}}},
-  "match_prediction_stats": {"qual": {"brier_scores": {"win_loss": 0.14}}},
-  "ranking_predictions": [["frc177", [1, 1, 2.5, 0, 0]]]
+  "match_predictions": {
+    "qual": {
+      "2024cthar_qm10": {"red": {"score": 70}, "blue": {"score": 71.05}, "winning_alliance": "blue", "prob": 0.5104},
+      "2024cthar_qm1": {"red": {"score": 84.2}, "blue": {"score": 63.1}, "winning_alliance": "red", "prob": 0.7853},
+      "2024cthar_qm2": {"red": {"score": 55.5}, "blue": {"score": 77.25}, "winning_alliance": "blue", "prob": 0.6231}
+    },
+    "playoff": {
+      "2024cthar_f1m1": {"red": {"score": 121}, "blue": {"score": 118.4}, "winning_alliance": "red", "prob": 0.52},
+      "2024cthar_sf1m1": {"red": {"score": 101.5}, "blue": {"score": 99.9}, "winning_alliance": "red", "prob": 0.5088},
+      "2024cthar_sf3m1": {"red": {"score": 95}, "blue": {"score": 110.2}, "winning_alliance": "blue", "prob": 0.66}
+    }
+  },
+  "match_prediction_stats": {
+    "qual": {"brier_scores": {"win_loss": 0.14}},
+    "playoff": {"brier_scores": {"win_loss": 0.2075}}
+  },
+  "stat_mean_vars": {
+    "qual": {"score": {"mean": 61.4, "var": 210.25}},
+    "playoff": {"score": {"mean": 94.7, "var": 180.5}}
+  },
+  "ranking_predictions": [
+    ["frc1073", [3, 2, 7, 4, 4]],
+    ["frc177", [1, 1, 2.5, 0, 0]],
+    ["frc5507", [2, 1, 6, 2, 2]],
+    ["frc230", [4]]
+  ]
 }`
 
+// Event insights as the API sends them: season-specific keys, the
+// [count, total, percent] triples the endpoint is full of, a nested object and
+// the mixed high_score array.
 const insights2024ctharJSON = `{
-  "qual": {"high_score": ["2024cthar_qm1", 88, "Quals 1"], "average_score": 61.4},
-  "playoff": {"high_score": ["2024cthar_f1m1", 121, "Finals 1"], "average_score": 94.7}
+  "qual": {
+    "high_score": ["2024cthar_qm1", 88, "Quals 1"],
+    "average_score": 61.4,
+    "average_win_margin": 18.256,
+    "melody_bonus_achieved": [12, 60, 20],
+    "unicorn_matches": [1, 60, 1.6667],
+    "average_score_by_alliance": {"red": 60.5, "blue": 62.3}
+  },
+  "playoff": {
+    "high_score": ["2024cthar_f1m1", 121, "Finals 1"],
+    "average_score": 94.7,
+    "ensemble_bonus_achieved": [8, 14, 57.1429]
+  }
 }`
 
 const districts2024JSON = `[

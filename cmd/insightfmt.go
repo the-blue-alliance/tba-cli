@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 // humanizeName turns a snake_case API identifier into title-cased words, so
@@ -143,10 +145,6 @@ func flattenInsightStats(prefix string, stats map[string]interface{}) [][2]strin
 	return out
 }
 
-// compLevelOrder is the order matches are played in, which is never the order
-// their keys sort in alphabetically.
-var compLevelOrder = map[string]int{"qm": 0, "ef": 1, "qf": 2, "sf": 3, "f": 4}
-
 // matchKeySuffixPattern splits the part of a match key after the event:
 // "qm12" or, for a playoff match, "sf3m1".
 var matchKeySuffixPattern = regexp.MustCompile(`^(qm|ef|qf|sf|f)([0-9]+)(?:m([0-9]+))?$`)
@@ -161,9 +159,9 @@ func matchKeyOrder(key string) (level, set, match int, ok bool) {
 	}
 	m := matchKeySuffixPattern.FindStringSubmatch(suffix)
 	if m == nil {
-		return len(compLevelOrder), 0, 0, false
+		return frc.UnknownCompLevel, 0, 0, false
 	}
-	level = compLevelOrder[m[1]]
+	level = frc.CompLevelOrder(m[1])
 	first, _ := strconv.Atoi(m[2])
 	if m[3] == "" {
 		// A qualification key carries only the match number.

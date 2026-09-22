@@ -199,31 +199,7 @@ func TestEventOPRsJq(t *testing.T) {
 	}
 }
 
-func TestEventPredictionsJq(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/event/2024cthar/predictions": predictions2024ctharJSON,
-	})
-	out, _, err := runCmd(t, srv, "event", "predictions", "2024cthar",
-		"--jq", ".match_predictions.qual.\"2024cthar_qm1\".red.score")
-	requireNoError(t, err, "")
-	if strings.TrimSpace(out) != "84.2" {
-		t.Errorf("jq output = %q", out)
-	}
-}
-
-func TestEventInsights(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/event/2024cthar/insights": insights2024ctharJSON,
-	})
-	out, _, err := runCmd(t, srv, "event", "insights", "2024cthar")
-	requireNoError(t, err, "")
-
-	obj := decodeJSON(t, out).(map[string]any)
-	qual := obj["qual"].(map[string]any)
-	if qual["average_score"] != 61.4 {
-		t.Errorf("average_score = %v", qual["average_score"])
-	}
-}
+// The predictions and insights commands are covered in event_insights_test.go.
 
 func TestEventSubcommandsAreRegistered(t *testing.T) {
 	got := subcommandNames(t, "event")
@@ -235,40 +211,5 @@ func TestEventSubcommandsAreRegistered(t *testing.T) {
 		if !contains(got, want) {
 			t.Errorf("event %s is not registered (have %v)", want, got)
 		}
-	}
-}
-
-// The raw event sub-resources have no stable schema: table mode passes the
-// body through and every other format falls back to JSON.
-func TestRawEventCommandsHonorFormat(t *testing.T) {
-	cases := []struct {
-		command string
-		path    string
-		body    string
-	}{
-		{"predictions", "/event/2024cthar/predictions", predictions2024ctharJSON},
-		{"insights", "/event/2024cthar/insights", insights2024ctharJSON},
-	}
-	for _, tc := range cases {
-		t.Run(tc.command, func(t *testing.T) {
-			for _, format := range []string{"json", "csv", "tsv", "markdown"} {
-				t.Run(format, func(t *testing.T) {
-					srv := newFakeTBA(t, map[string]any{tc.path: tc.body})
-					out, _, err := runCmd(t, srv, "event", tc.command, "2024cthar", "--format", format)
-					requireNoError(t, err, "")
-					if _, ok := decodeJSON(t, out).(map[string]any); !ok {
-						t.Fatalf("want a JSON object, got:\n%s", out)
-					}
-				})
-			}
-			t.Run("table", func(t *testing.T) {
-				srv := newFakeTBA(t, map[string]any{tc.path: tc.body})
-				out, _, err := runCmd(t, srv, "event", tc.command, "2024cthar", "--format", "table")
-				requireNoError(t, err, "")
-				if strings.TrimSpace(out) != strings.TrimSpace(tc.body) {
-					t.Errorf("table mode should pass the body through, got:\n%s", out)
-				}
-			})
-		})
 	}
 }
