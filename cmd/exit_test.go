@@ -77,7 +77,7 @@ func TestExitCodeFourOnHTTP401(t *testing.T) {
 
 func TestExitCodeFiveOnHTTP404(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
-	err := requireExitCode(t, clierr.ExitNotFound, srv, "team", "view", "999999")
+	err := requireExitCode(t, clierr.ExitNotFound, srv, "team", "view", "99999")
 	requireErrorContains(t, err, "404")
 }
 
@@ -146,7 +146,7 @@ func TestUsageErrorsPrintUsage(t *testing.T) {
 
 func TestRuntimeErrorsPrintNoUsage(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
-	stdout, stderr, err := runCmd(t, srv, "team", "view", "999999")
+	stdout, stderr, err := runCmd(t, srv, "team", "view", "99999")
 	if err == nil {
 		t.Fatal("want a 404 error")
 	}

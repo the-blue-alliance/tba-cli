@@ -110,6 +110,15 @@ func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 	}
 	f.types = types
 
+	// --team narrows the fetch rather than the fetched list, so the value is
+	// checked here and used by the caller; a typo is a usage error instead of
+	// a request for a team that cannot exist.
+	if team, _ := cmd.Flags().GetString("team"); strings.TrimSpace(team) != "" {
+		if err := validateTeamArg(team); err != nil {
+			return f, err
+		}
+	}
+
 	f.district, _ = cmd.Flags().GetString("district")
 	f.state, _ = cmd.Flags().GetString("state")
 	f.country, _ = cmd.Flags().GetString("country")

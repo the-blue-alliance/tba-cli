@@ -41,6 +41,9 @@ func newTeamViewCmd() *cobra.Command {
   tba team view 1073 --jq .nickname -r`,
 		Args: exactArgs(1, "a team number (e.g. tba team view 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -112,6 +115,9 @@ func newTeamEventsCmd() *cobra.Command {
   tba team events frc177 --year 2024 --format csv`,
 		Args: exactArgs(1, "a team number (e.g. tba team events 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -148,6 +154,9 @@ to drive a loop over a team's whole history.`,
   tba team years 177 --jq '.[0]' -r`,
 		Args: exactArgs(1, "a team number (e.g. tba team years 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -178,6 +187,9 @@ func newTeamMatchesCmd() *cobra.Command {
   tba team matches 177 --event 2024cthar --upcoming`,
 		Args: exactArgs(1, "a team number (e.g. tba team matches 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -234,6 +246,9 @@ Dean's List or Woodie Flowers that go to a person rather than to the team.`,
   tba team awards 177 --type 0`,
 		Args: exactArgs(1, "a team number (e.g. tba team awards 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -338,6 +353,9 @@ func newTeamMediaCmd() *cobra.Command {
   tba team media frc177 --year 2024 --jq '.[].view_url' -r`,
 		Args: exactArgs(1, "a team number (e.g. tba team media 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -369,6 +387,9 @@ func newTeamRobotsCmd() *cobra.Command {
   tba team robots frc177 --format csv`,
 		Args: exactArgs(1, "a team number (e.g. tba team robots 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -394,6 +415,9 @@ func newTeamDistrictsCmd() *cobra.Command {
   tba team districts frc177 --format json`,
 		Args: exactArgs(1, "a team number (e.g. tba team districts 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err

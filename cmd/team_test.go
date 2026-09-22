@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 func TestTeamViewTable(t *testing.T) {
@@ -342,6 +344,49 @@ func TestTeamDistricts(t *testing.T) {
 		"| 2024ne | New England | 2024 |\n"
 	if out != want {
 		t.Errorf("markdown =\n%q\nwant\n%q", out, want)
+	}
+}
+
+// A team argument that cannot be a team number is a usage mistake, caught
+// before a request is spent on it.
+func TestBadTeamArgumentIsAUsageErrorAndCostsNoRequest(t *testing.T) {
+	commands := []string{"view", "events", "years", "matches", "awards", "media", "robots", "districts"}
+	for _, sub := range commands {
+		t.Run(sub, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{})
+			err := requireExitCode(t, clierr.ExitUsage, srv, "team", sub, "17x7")
+			requireErrorContains(t, err, `"17x7" is not a team number`)
+			requireErrorContains(t, err, "frc177")
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a usage error must not reach the API, got %v", got)
+			}
+		})
+	}
+}
+
+func TestTeamArgumentAccepts(t *testing.T) {
+	for _, arg := range []string{"177", "frc177", "FRC177", "00007", "99999"} {
+		if err := validateTeamArg(arg); err != nil {
+			t.Errorf("validateTeamArg(%q) = %v, want it accepted", arg, err)
+		}
+	}
+	// Surrounding space is trimmed, so " 177 " is fine; nothing else is.
+	if err := validateTeamArg(" 177 "); err != nil {
+		t.Errorf("validateTeamArg(%q) = %v, want it accepted", " 177 ", err)
+	}
+	for _, arg := range []string{"", "17x7", "frc", "frc17x7", "177177", "-177", "1 7 7"} {
+		if err := validateTeamArg(arg); err == nil {
+			t.Errorf("validateTeamArg(%q) = nil, want a usage error", arg)
+		}
+	}
+}
+
+func TestEventListRejectsABadTeamFilter(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{})
+	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--team", "17x7")
+	requireErrorContains(t, err, `"17x7" is not a team number`)
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a usage error must not reach the API, got %v", got)
 	}
 }
 

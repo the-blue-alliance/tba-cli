@@ -230,12 +230,41 @@ func exactArgs(n int, what string) cobra.PositionalArgs {
 
 // teamKey normalises a team argument, so that both "177" and "frc177" (in any
 // case) address the same team.
+//
+// It does not judge what it is given: "17x7" comes back as "frc17x7" and costs
+// a request and a raw 404.
+//
+// TODO: the call sites in cmd/matches.go, cmd/team_next.go,
+// cmd/team_standing.go and cmd/team_search.go should call validateTeamArg on
+// the argument first, the way the ones in cmd/team.go, cmd/open.go and
+// cmd/eventfilter.go do, so that a typo is a usage error instead.
 func teamKey(arg string) string {
+	return "frc" + teamNumberOf(arg)
+}
+
+// teamNumberOf strips an optional "frc" prefix, in any case, and returns what
+// is left. It never panics and never rejects anything; validateTeamArg is what
+// decides whether the remainder is a team number.
+func teamNumberOf(arg string) string {
 	trimmed := strings.TrimSpace(arg)
 	if len(trimmed) >= 3 && strings.EqualFold(trimmed[:3], "frc") {
 		trimmed = trimmed[3:]
 	}
-	return "frc" + trimmed
+	return trimmed
+}
+
+// teamArgPattern is a team number as a person writes it: 1 to 5 digits, with
+// an optional "frc" prefix in any case. Five digits covers every team number
+// FIRST has issued and leaves room for the ones it has not.
+var teamArgPattern = regexp.MustCompile(`^(?i:frc)?[0-9]{1,5}$`)
+
+// validateTeamArg rejects something that is not a team number before any HTTP
+// call, so that a typo comes back as a usage error instead of a raw 404 body.
+func validateTeamArg(arg string) error {
+	if !teamArgPattern.MatchString(strings.TrimSpace(arg)) {
+		return clierr.Usage("%q is not a team number (expected something like 177 or frc177)", arg)
+	}
+	return nil
 }
 
 var (
