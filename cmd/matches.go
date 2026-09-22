@@ -49,7 +49,12 @@ func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(
 	} else {
 		frc.SortMatches(matches)
 	}
+	return printMatchTable(cmd, matches, playoffTypeFor)
+}
 
+// printMatchTable renders matches in the order given. Callers that have
+// already chosen an order — the next-match listing, say — use it directly.
+func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -183,12 +188,23 @@ func hasLevel(level string) func(api.Match) bool {
 	return func(m api.Match) bool { return strings.EqualFold(m.CompLevel, level) }
 }
 
-// eventPlayoffType fetches an event only to learn how its playoff bracket is
-// labelled. A failure is deliberately not fatal: a listing should not fail over
-// a decoration, so the labels fall back to a guess from the season instead.
-func eventPlayoffType(cmd *cobra.Command, client *api.Client, key string) *int {
+// fetchEvent fetches an event for context rather than for its own sake: the
+// bracket format that names its playoff matches, or the name to print above a
+// listing. A failure is deliberately not fatal — a listing should not fail over
+// a decoration — so it reports whether it got anything.
+func fetchEvent(cmd *cobra.Command, client *api.Client, key string) (api.Event, bool) {
 	var event api.Event
 	if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s", key), &event); err != nil {
+		return api.Event{}, false
+	}
+	return event, true
+}
+
+// eventPlayoffType is fetchEvent for the one field the match labels need. When
+// the event cannot be had, the labels fall back to a guess from the season.
+func eventPlayoffType(cmd *cobra.Command, client *api.Client, key string) *int {
+	event, ok := fetchEvent(cmd, client, key)
+	if !ok {
 		return nil
 	}
 	return event.PlayoffType
