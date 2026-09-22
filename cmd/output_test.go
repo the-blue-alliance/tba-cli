@@ -112,6 +112,132 @@ func TestNoHeadersLeavesJSONAlone(t *testing.T) {
 	}
 }
 
+func TestColumnsSelectsAndReorders(t *testing.T) {
+	out := districtsCmd(t, "--format", "csv", "--columns", "abbreviation,key")
+	want := "Abbreviation,Key\nne,2024ne\nfim,2024fim\n"
+	if out != want {
+		t.Errorf("csv = %q, want %q", out, want)
+	}
+}
+
+func TestColumnsMatchesHeaderNamesLoosely(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/district/2024ne/events": "[" + event2024ctharJSON + "]",
+	})
+	out, _, err := runCmd(t, srv, "district", "events", "2024ne", "--format", "csv", "--columns", "start_date")
+	requireNoError(t, err, "")
+	if out != "Start Date\n2024-03-22\n" {
+		t.Errorf("csv = %q", out)
+	}
+}
+
+func TestColumnsAcceptsIndices(t *testing.T) {
+	out := districtsCmd(t, "--format", "tsv", "--columns", "2,1")
+	if out != "Name\tKey\nNew England\t2024ne\nFIRST In Michigan\t2024fim\n" {
+		t.Errorf("tsv = %q", out)
+	}
+}
+
+func TestColumnsWorksWithNoHeaders(t *testing.T) {
+	out := districtsCmd(t, "--format", "csv", "--columns", "key", "--no-headers")
+	if out != "2024ne\n2024fim\n" {
+		t.Errorf("csv = %q", out)
+	}
+}
+
+func TestUnknownColumnListsTheValidOnes(t *testing.T) {
+	err := districtsCmdErr(t, "--format", "csv", "--columns", "nickname")
+	for _, want := range []string{"nickname", "Key, Name, Abbreviation"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %v, want it to mention %q", err, want)
+		}
+	}
+}
+
+func TestColumnsWithJSONIsAnError(t *testing.T) {
+	err := districtsCmdErr(t, "--json", "--columns", "key")
+	want := "--columns applies to tabular formats; use --jq to shape JSON"
+	if err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
+}
+
+func TestSortOrdersRows(t *testing.T) {
+	out := districtsCmd(t, "--format", "csv", "--sort", "name")
+	want := "Key,Name,Abbreviation\n2024fim,FIRST In Michigan,fim\n2024ne,New England,ne\n"
+	if out != want {
+		t.Errorf("csv = %q, want %q", out, want)
+	}
+}
+
+func TestSortDescends(t *testing.T) {
+	out := districtsCmd(t, "--format=csv", "--sort=-name")
+	want := "Key,Name,Abbreviation\n2024ne,New England,ne\n2024fim,FIRST In Michigan,fim\n"
+	if out != want {
+		t.Errorf("csv = %q, want %q", out, want)
+	}
+}
+
+func TestSortAppliesToTheTableFormat(t *testing.T) {
+	out := districtsCmd(t, "--format", "table", "--sort", "abbreviation")
+	got := lines(out)
+	if !strings.HasPrefix(got[2], "2024fim") {
+		t.Errorf("first row = %q, want the fim district first", got[2])
+	}
+}
+
+func TestSortRunsBeforeColumnSelection(t *testing.T) {
+	// The sort column is not displayed, which only works if sorting happens
+	// before the columns are narrowed.
+	out := districtsCmd(t, "--format", "csv", "--sort", "name", "--columns", "key")
+	if out != "Key\n2024fim\n2024ne\n" {
+		t.Errorf("csv = %q", out)
+	}
+}
+
+func TestSortIsNumericAwareAcrossACommand(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/teams/2024/0": "[" + teamFRC5507JSON + "," + teamFRC177JSON + "]",
+		"/teams/2024/1": "[]",
+	})
+	out, _, err := runCmd(t, srv, "team", "list", "--year", "2024", "--format", "tsv", "--sort", "number")
+	requireNoError(t, err, "")
+	got := lines(out)
+	if got[1] != "177\tBobcat Robotics\tSouth Windsor, Connecticut, USA" {
+		t.Errorf("first row = %q, want 177 to sort before 5507 numerically", got[1])
+	}
+}
+
+func TestSortReordersJSON(t *testing.T) {
+	out := districtsCmd(t, "--json", "--sort", "name")
+	arr := decodeJSON(t, out).([]any)
+	if len(arr) != 2 {
+		t.Fatalf("want 2 districts, got %d", len(arr))
+	}
+	if key := arr[0].(map[string]any)["key"]; key != "2024fim" {
+		t.Errorf("first element = %v, want the table's first row", key)
+	}
+}
+
+func TestSortReordersJSONBeforeJq(t *testing.T) {
+	out := districtsCmd(t, "--jq", ".[0].key", "--sort", "-key")
+	if strings.TrimSpace(out) != `"2024ne"` {
+		t.Errorf("jq output = %q", out)
+	}
+}
+
+func TestUnknownSortColumnIsAnError(t *testing.T) {
+	err := districtsCmdErr(t, "--format", "csv", "--sort", "nickname")
+	if !strings.Contains(err.Error(), "Key, Name, Abbreviation") {
+		t.Errorf("error = %v, want it to list the valid columns", err)
+	}
+	// The same complaint reaches a JSON caller, since --sort reorders it too.
+	err = districtsCmdErr(t, "--json", "--sort", "nickname")
+	if !strings.Contains(err.Error(), "unknown column") {
+		t.Errorf("error = %v", err)
+	}
+}
+
 func TestColorAlwaysDoesNotTouchDataFormats(t *testing.T) {
 	for _, format := range []string{"csv", "tsv", "markdown", "json"} {
 		out := districtsCmd(t, "--format", format, "--color", "always")
