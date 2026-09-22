@@ -664,7 +664,9 @@ Time:       Sun 13:00 (predicted)
 Starts in:  18m
 ```
 
-A match whose time has already passed reads `Overdue by` instead. `--all` prints everything still to play as the match table above. If the team is neither competing today nor signed up for anything later that season, that is an error (exit 1), not an empty answer.
+A match whose time has already passed reads `Overdue by` instead, and `--all` prints everything still to play as the match table above.
+
+Having nothing to report is an answer, not a failure: a team with no event left this season, or no match left at the event it is at, exits 0 with the reason on stderr and nothing on stdout (`--json` prints `null`). When the event is over, the note says so and, if the API will tell it, how the event ended — `note: 2024cthar ended 2024-03-24; no matches left for 177; 177 won the event`. Asked after August, when the season being searched is done, it points at the next one: `try --year 2025`.
 
 `tba team standing <team> --event KEY` is how one team stands at one event:
 

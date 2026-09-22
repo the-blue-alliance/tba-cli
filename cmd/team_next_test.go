@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // during2024ctharServer serves team 177's season and its matches at the event
@@ -86,16 +84,63 @@ func TestTeamNextRejectsAMalformedEventKey(t *testing.T) {
 	}
 }
 
-// Out of season there is nothing to be next.
+// Out of season there is nothing to be next. That is an answer, not a failure:
+// exit 0, the reason on stderr, and nothing on stdout to be piped anywhere.
 func TestTeamNextWithNoCurrentOrUpcomingEvent(t *testing.T) {
 	withNow(t, time.Date(2024, 7, 1, 12, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/events/2024": teamEvents177In2024JSON,
 	})
-	_, _, err := runCmd(t, srv, "team", "next", "177", "--year", "2024")
-	requireErrorContains(t, err, "no current or upcoming event for team 177 in 2024")
-	if got := clierr.ExitCode(err); got != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", got, clierr.ExitFailure)
+	out, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	if want := "note: no current or upcoming event for team 177 in 2024\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
+	}
+}
+
+// A JSON reader asked for a match and gets the JSON for "there is none".
+func TestTeamNextWithNoEventPrintsNullInJSON(t *testing.T) {
+	withNow(t, time.Date(2024, 7, 1, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": teamEvents177In2024JSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--json")
+	requireNoError(t, err, errOut)
+	if strings.TrimSpace(out) != "null" {
+		t.Errorf("stdout = %q, want null", out)
+	}
+	requireContains(t, errOut, "no current or upcoming event")
+}
+
+// Asked in the autumn, the season being searched is over, so the answer points
+// at the one that is not.
+func TestTeamNextInTheOffseasonSuggestsTheNextSeason(t *testing.T) {
+	withNow(t, time.Date(2024, 9, 15, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": teamEvents177In2024JSON,
+	})
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+	if want := "note: no current or upcoming event for team 177 in 2024; try --year 2025\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// In July the season is over but the next one has no schedule either, so there
+// is nothing useful to point at.
+func TestTeamNextInJulySuggestsNothing(t *testing.T) {
+	withNow(t, time.Date(2024, 7, 1, 12, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": teamEvents177In2024JSON,
+	})
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+	if strings.Contains(errOut, "--year") {
+		t.Errorf("stderr = %q, want no suggestion mid-year", errOut)
 	}
 }
 
@@ -108,17 +153,82 @@ func TestTeamNextPicksTheUpcomingEvent(t *testing.T) {
 	requireContains(t, out, "Event:      NE District Hartford Event (2024cthar)")
 }
 
+// Mid-event, with every match so far played, the queue simply has not posted
+// the next one yet.
 func TestTeamNextWhenEveryMatchIsPlayed(t *testing.T) {
 	withNow(t, time.Date(2024, 3, 9, 12, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{
 		"/team/frc177/events/2024":             teamEvents177In2024JSON,
-		"/event/2024ctwat":                     event2019ctwatJSON,
+		"/event/2024ctwat":                     event2024ctwatJSON,
 		"/team/frc177/event/2024ctwat/matches": teamMatches177FinishedJSON,
 	})
-	_, _, err := runCmd(t, srv, "team", "next", "177", "--year", "2024")
-	requireErrorContains(t, err, "no upcoming match for team 177 at 2024ctwat")
-	if got := clierr.ExitCode(err); got != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", got, clierr.ExitFailure)
+	out, errOut, err := runCmd(t, srv, "team", "next", "177", "--year", "2024", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	if want := "note: no upcoming match for team 177 at 2024ctwat\n"; errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want nothing", out)
+	}
+	// The event is still running, so there is no reason to ask how it ended.
+	for _, p := range requestPaths(t, srv) {
+		if strings.HasSuffix(p, "/status") {
+			t.Errorf("a running event should not be asked for its outcome, but requested %s", p)
+		}
+	}
+}
+
+// After the event, "no upcoming match" would read like a schedule gap. Say the
+// event is over, and how it ended for this team.
+func TestTeamNextAfterTheEventEnded(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 12, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024":             teamEvents177In2024JSON,
+		"/event/2024ctwat":                     event2024ctwatJSON,
+		"/team/frc177/event/2024ctwat/matches": teamMatches177FinishedJSON,
+		"/team/frc177/event/2024ctwat/status":  teamStatus177At2024ctharJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "2024ctwat", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	want := "note: 2024ctwat ended 2024-03-10; no matches left for 177; 177 won the event\n"
+	if errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// A team knocked out is told which round it went out in.
+func TestTeamNextAfterTheEventEndedForAnEliminatedTeam(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 12, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024ctwat":                     event2024ctwatJSON,
+		"/team/frc177/event/2024ctwat/matches": teamMatches177FinishedJSON,
+		"/team/frc177/event/2024ctwat/status":  teamStatusBackupJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "2024ctwat", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	want := "note: 2024ctwat ended 2024-03-10; no matches left for 177; eliminated in SF\n"
+	if errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
+	}
+}
+
+// The outcome is worth one extra request, not the answer: without it the rest
+// of the sentence still stands.
+func TestTeamNextAfterTheEventEndedWithoutAStatus(t *testing.T) {
+	withNow(t, time.Date(2024, 3, 12, 9, 0, 0, 0, time.Local))
+	srv := newFakeTBA(t, map[string]any{
+		"/event/2024ctwat":                     event2024ctwatJSON,
+		"/team/frc177/event/2024ctwat/matches": teamMatches177FinishedJSON,
+	})
+	_, errOut, err := runCmd(t, srv, "team", "next", "177", "2024ctwat", "--format", "table")
+	requireNoError(t, err, errOut)
+
+	want := "note: 2024ctwat ended 2024-03-10; no matches left for 177\n"
+	if errOut != want {
+		t.Errorf("stderr = %q, want %q", errOut, want)
 	}
 }
 

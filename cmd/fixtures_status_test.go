@@ -183,3 +183,23 @@ const teamStatusBackupJSON = `{
   "next_match_key": null,
   "last_match_key": null
 }`
+
+// The Waterbury district event of 2024, the one team 177 finished before
+// Hartford started.
+const event2024ctwatJSON = `{
+  "key": "2024ctwat",
+  "name": "NE District Waterbury Event",
+  "event_code": "ctwat",
+  "event_type": 1,
+  "city": "Waterbury",
+  "state_prov": "CT",
+  "country": "USA",
+  "start_date": "2024-03-08",
+  "end_date": "2024-03-10",
+  "year": 2024,
+  "short_name": "Waterbury",
+  "event_type_string": "District",
+  "week": 1,
+  "webcasts": [],
+  "playoff_type": 10
+}`
