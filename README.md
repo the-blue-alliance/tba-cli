@@ -416,9 +416,13 @@ tba event rankings 2024cthar --columns team,name,"ranking score"
 tba event rankings 2024cthar --sort='-total ranking points'
 ```
 
-Team names come from a second request. If that one fails the Name column is
-left blank rather than failing the ranking table, and `--format json` skips it
-altogether. Seasons without a win/loss record (2015) show an empty Record.
+Team names come from a second request. If that one fails the ranking table is
+printed anyway, and `--format json` skips the request altogether.
+
+A column no team at the event has anything in is not printed: 2015 had no
+win/loss record at all, so its table has no `Record` column rather than a blank
+stripe down it. The column is gone rather than hidden, so `--columns record`
+there is the usual unknown-column error listing what the table does have.
 
 `event alliances` shows `Alliance | Captain | Pick 1 | Pick 2 | Backup | Status |
 Level | Record | Declines`. Backup reads "1234 in for 5678" when the API says who
