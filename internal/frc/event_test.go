@@ -290,3 +290,31 @@ func TestGroupByEventPutsUnknownEventsLast(t *testing.T) {
 		t.Errorf("GroupByEvent = %v, want %v", got, want)
 	}
 }
+
+// An event that ends today has not ended, however late in the evening the
+// question is asked; the day after, it has.
+func TestEnded(t *testing.T) {
+	e := api.Event{Key: "2024ctwat", StartDate: "2024-03-08", EndDate: "2024-03-10"}
+	cases := map[string]struct {
+		at   time.Time
+		want bool
+	}{
+		"before":   {day(2024, time.March, 7), false},
+		"during":   {day(2024, time.March, 9), false},
+		"last day": {time.Date(2024, time.March, 10, 23, 59, 0, 0, time.UTC), false},
+		"after":    {day(2024, time.March, 11), true},
+	}
+	for name, c := range cases {
+		if got := frc.Ended(e, c.at); got != c.want {
+			t.Errorf("Ended(%s) = %v, want %v", name, got, c.want)
+		}
+	}
+}
+
+// Without an end date there is nothing to compare, and guessing would be worse
+// than saying nothing.
+func TestEndedWithoutAnEndDate(t *testing.T) {
+	if frc.Ended(api.Event{Key: "2024ctwat"}, day(2030, time.January, 1)) {
+		t.Error("Ended = true for an event with no end date")
+	}
+}

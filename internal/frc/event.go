@@ -43,6 +43,20 @@ func IsRunningOn(e api.Event, day time.Time) bool {
 	return !day.Before(start) && !day.After(end)
 }
 
+// Ended reports whether an event's last day is already behind day. Like
+// IsRunningOn it counts whole days: an event that ends today has not ended,
+// however late in the evening the question is asked.
+//
+// An event with no end date has not ended, since guessing would be worse than
+// saying nothing.
+func Ended(e api.Event, day time.Time) bool {
+	end, ok := ParseDate(e.EndDate, day.Location())
+	if !ok {
+		return false
+	}
+	return truncateToDay(day).After(end)
+}
+
 // CurrentOrNextEvent picks the event a team is at right now, or failing that
 // the next one it is going to. It returns false when the season holds neither,
 // which is every day outside the competition season.

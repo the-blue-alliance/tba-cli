@@ -31,10 +31,20 @@ func newTeamNextCmd() *cobra.Command {
 			team := teamKey(args[0])
 			now := nowFunc()
 
-			event, err := resolveTeamEvent(cmd, client, team, args, now)
+			named := ""
+			if len(args) == 2 {
+				named = args[1]
+			}
+			choice, err := resolveTeamEvent(cmd, client, team, named, now)
 			if err != nil {
 				return err
 			}
+			if !choice.found {
+				// Out of season a team is simply not going anywhere. That is
+				// an answer, not a failure.
+				return printNoMatch(cmd, noEventNote(team, choice.year, now))
+			}
+			event := choice.event
 
 			var matches []api.Match
 			path := fmt.Sprintf("/team/%s/event/%s/matches", team, event.Key)
@@ -53,8 +63,7 @@ func newTeamNextCmd() *cobra.Command {
 				return printMatchTable(cmd, upcoming, playoffTypeFor, listing)
 			}
 			if len(upcoming) == 0 {
-				return fmt.Errorf("no upcoming match for team %s at %s",
-					output.TeamNumberFromKey(team), event.Key)
+				return printNoMatch(cmd, noMatchNote(cmd, client, team, event, now))
 			}
 
 			next := upcoming[0]
@@ -70,39 +79,121 @@ func newTeamNextCmd() *cobra.Command {
 	return c
 }
 
+// teamEventChoice is which event a team question turned out to be about.
+// found is false when the team is neither competing today nor signed up for
+// anything later that season, which is most of the calendar; year is the
+// season that was searched, and 0 when the event was named outright.
+type teamEventChoice struct {
+	event api.Event
+	found bool
+	year  int
+}
+
 // resolveTeamEvent works out which event the question is about: the one named
 // on the command line, or else the one the team is at today, or else the next
-// one it is going to.
+// one it is going to. `team next` and `team standing` share it so that both
+// auto-detect the same way.
 //
 // The named case still fetches the event, because the bracket format and the
 // event's name both come from it; a failure there is not fatal, so a key that
 // cannot be looked up still gets its matches listed.
-func resolveTeamEvent(cmd *cobra.Command, client *api.Client, team string, args []string, now time.Time) (api.Event, error) {
-	if len(args) == 2 {
-		if err := validateEventKey(args[1]); err != nil {
-			return api.Event{}, err
+func resolveTeamEvent(cmd *cobra.Command, client *api.Client, team, eventKey string, now time.Time) (teamEventChoice, error) {
+	if eventKey != "" {
+		if err := validateEventKey(eventKey); err != nil {
+			return teamEventChoice{}, err
 		}
-		event, ok := fetchEvent(cmd, client, args[1])
+		event, ok := fetchEvent(cmd, client, eventKey)
 		if !ok {
-			event = api.Event{Key: args[1]}
+			event = api.Event{Key: eventKey}
 		}
-		return event, nil
+		return teamEventChoice{event: event, found: true}, nil
 	}
 
 	year, err := resolveYear(cmd)
 	if err != nil {
-		return api.Event{}, err
+		return teamEventChoice{}, err
 	}
 	var events []api.Event
 	if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", team, year), &events); err != nil {
-		return api.Event{}, err
+		return teamEventChoice{year: year}, err
 	}
 	event, ok := frc.CurrentOrNextEvent(events, now)
-	if !ok {
-		return api.Event{}, fmt.Errorf("no current or upcoming event for team %s in %d",
-			output.TeamNumberFromKey(team), year)
+	return teamEventChoice{event: event, found: ok, year: year}, nil
+}
+
+// lastCompetitionMonth is the last month of a season worth waiting out. After
+// it, a team with nothing left in the current season is between seasons rather
+// than done for the year, so the answer points at the next one.
+const lastCompetitionMonth = time.August
+
+// noEventNote explains a season with nothing left in it, and in the offseason
+// points at the season that does have something.
+func noEventNote(team string, year int, now time.Time) string {
+	note := fmt.Sprintf("no current or upcoming event for team %s in %d",
+		output.TeamNumberFromKey(team), year)
+	if now.Month() > lastCompetitionMonth && year <= now.Year() {
+		note += fmt.Sprintf("; try --year %d", now.Year()+1)
 	}
-	return event, nil
+	return note
+}
+
+// noMatchNote explains an event with no match left to play. An event that is
+// over says so and, when the API will tell us, how it ended: "no matches left"
+// reads like a schedule gap otherwise.
+func noMatchNote(cmd *cobra.Command, client *api.Client, team string, event api.Event, now time.Time) string {
+	number := output.TeamNumberFromKey(team)
+	if !frc.Ended(event, now) {
+		return fmt.Sprintf("no upcoming match for team %s at %s", number, event.Key)
+	}
+	note := fmt.Sprintf("%s ended %s; no matches left for %s", event.Key, event.EndDate, number)
+	if outcome := teamPlayoffOutcome(cmd, client, team, event.Key, number); outcome != "" {
+		note += "; " + outcome
+	}
+	return note
+}
+
+// teamPlayoffOutcome asks how the team's event finished. It is one extra
+// request for a sentence, so a failure simply leaves the sentence off.
+func teamPlayoffOutcome(cmd *cobra.Command, client *api.Client, team, eventKey, number string) string {
+	var status api.TeamEventStatus
+	path := fmt.Sprintf("/team/%s/event/%s/status", team, eventKey)
+	if err := client.Get(cmd.Context(), path, &status); err != nil {
+		return ""
+	}
+	return playoffOutcome(status.Playoff, number)
+}
+
+// playoffOutcome turns an event's playoff status into the end of a sentence.
+// An event that is over but still says "playing" is stale, and gets nothing.
+func playoffOutcome(p *api.AllianceStatus, number string) string {
+	if p == nil {
+		return ""
+	}
+	switch strings.ToLower(p.Status) {
+	case "won":
+		return number + " won the event"
+	case "eliminated":
+		return "eliminated in " + roundName(p.Level)
+	default:
+		return ""
+	}
+}
+
+// roundName is the short name a round is spoken by in a sentence: "SF", but
+// "the finals", which nobody calls "F".
+func roundName(level string) string {
+	if strings.EqualFold(strings.TrimSpace(level), frc.LevelFinal) {
+		return "the finals"
+	}
+	return strings.ToUpper(strings.TrimSpace(level))
+}
+
+// printNoMatch reports that there is nothing to show. It is not a failure —
+// exit 0, nothing on stdout in table mode, and null for a JSON reader, which
+// asked for a match and needs to be told there is none.
+func printNoMatch(cmd *cobra.Command, note string) error {
+	fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
+	return outputData(cmd, nil, func() {})
 }
 
 // printNextMatch answers the questions a team in the pits actually has: which
