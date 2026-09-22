@@ -230,3 +230,56 @@ func TestCompletionUnknownShellShowsSupportedShells(t *testing.T) {
 		t.Errorf("tcsh should not be offered as a shell:\n%s", out)
 	}
 }
+
+func TestJqMultipleResultsAreOnePerLine(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[].key")
+	requireNoError(t, err, "")
+	if got := lines(out); len(got) != 2 || got[0] != `"2024ne"` || got[1] != `"2024fim"` {
+		t.Errorf("jq output = %q", out)
+	}
+}
+
+func TestJqRawOutputDropsQuotes(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[].key", "-r")
+	requireNoError(t, err, "")
+	if out != "2024ne\n2024fim\n" {
+		t.Errorf("jq -r output = %q", out)
+	}
+}
+
+func TestJqRawOutputLongFlag(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024",
+		"--jq", ".[0].key", "--raw-output")
+	requireNoError(t, err, "")
+	if out != "2024ne\n" {
+		t.Errorf("jq --raw-output = %q", out)
+	}
+}
+
+func TestJqSingleObjectResultIsPrettyPrinted(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[0]")
+	requireNoError(t, err, "")
+	if !strings.Contains(out, "\n  \"key\": \"2024ne\"") {
+		t.Errorf("a single result should stay indented, got:\n%s", out)
+	}
+}
+
+func TestJqMultipleObjectResultsAreNDJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[]")
+	requireNoError(t, err, "")
+	got := lines(out)
+	if len(got) != 2 {
+		t.Fatalf("want 2 NDJSON lines, got %d:\n%s", len(got), out)
+	}
+	for _, line := range got {
+		if strings.Contains(line, "\n") || !strings.HasPrefix(line, "{") {
+			t.Errorf("line is not compact JSON: %q", line)
+		}
+		decodeJSON(t, line)
+	}
+}

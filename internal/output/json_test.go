@@ -76,7 +76,7 @@ func TestPrintJSONWithFilterEmptyExpressionIsPlainJSON(t *testing.T) {
 	if err := PrintJSON(&a, data); err != nil {
 		t.Fatalf("PrintJSON: %v", err)
 	}
-	if err := PrintJSONWithFilter(&b, data, ""); err != nil {
+	if err := PrintJSONWithFilter(&b, data, "", false); err != nil {
 		t.Fatalf("PrintJSONWithFilter: %v", err)
 	}
 	if a.String() != b.String() {
@@ -87,7 +87,7 @@ func TestPrintJSONWithFilterEmptyExpressionIsPlainJSON(t *testing.T) {
 func TestPrintJSONWithFilterSelectsAField(t *testing.T) {
 	var buf bytes.Buffer
 	data := sampleTeam{Key: "frc177", TeamNumber: 177, Nickname: "Bobcat Robotics"}
-	if err := PrintJSONWithFilter(&buf, data, ".nickname"); err != nil {
+	if err := PrintJSONWithFilter(&buf, data, ".nickname", false); err != nil {
 		t.Fatalf("PrintJSONWithFilter: %v", err)
 	}
 	if buf.String() != "\"Bobcat Robotics\"\n" {
@@ -98,7 +98,7 @@ func TestPrintJSONWithFilterSelectsAField(t *testing.T) {
 func TestPrintJSONWithFilterWritesOneResultPerLine(t *testing.T) {
 	var buf bytes.Buffer
 	data := []sampleTeam{{Key: "frc177"}, {Key: "frc1073"}}
-	if err := PrintJSONWithFilter(&buf, data, ".[].key"); err != nil {
+	if err := PrintJSONWithFilter(&buf, data, ".[].key", false); err != nil {
 		t.Fatalf("PrintJSONWithFilter: %v", err)
 	}
 	if buf.String() != "\"frc177\"\n\"frc1073\"\n" {
@@ -109,7 +109,7 @@ func TestPrintJSONWithFilterWritesOneResultPerLine(t *testing.T) {
 func TestPrintJSONWithFilterIndentsObjectResults(t *testing.T) {
 	var buf bytes.Buffer
 	data := []map[string]any{{"key": "frc177", "rank": 1}}
-	if err := PrintJSONWithFilter(&buf, data, ".[0]"); err != nil {
+	if err := PrintJSONWithFilter(&buf, data, ".[0]", false); err != nil {
 		t.Fatalf("PrintJSONWithFilter: %v", err)
 	}
 	want := "{\n  \"key\": \"frc177\",\n  \"rank\": 1\n}\n"
@@ -120,7 +120,7 @@ func TestPrintJSONWithFilterIndentsObjectResults(t *testing.T) {
 
 func TestPrintJSONWithFilterRejectsAnInvalidExpression(t *testing.T) {
 	var buf bytes.Buffer
-	err := PrintJSONWithFilter(&buf, map[string]any{}, ".[")
+	err := PrintJSONWithFilter(&buf, map[string]any{}, ".[", false)
 	if err == nil {
 		t.Fatal("want a parse error")
 	}
@@ -132,7 +132,7 @@ func TestPrintJSONWithFilterRejectsAnInvalidExpression(t *testing.T) {
 func TestPrintJSONWithFilterReportsRuntimeErrors(t *testing.T) {
 	var buf bytes.Buffer
 	// Indexing a string is a jq runtime error.
-	err := PrintJSONWithFilter(&buf, "a string", ".foo")
+	err := PrintJSONWithFilter(&buf, "a string", ".foo", false)
 	if err == nil {
 		t.Fatal("want a runtime error")
 	}
@@ -143,7 +143,62 @@ func TestPrintJSONWithFilterReportsRuntimeErrors(t *testing.T) {
 
 func TestPrintJSONWithFilterOnUnmarshalableData(t *testing.T) {
 	var buf bytes.Buffer
-	if err := PrintJSONWithFilter(&buf, make(chan int), "."); err == nil {
+	if err := PrintJSONWithFilter(&buf, make(chan int), ".", false); err == nil {
 		t.Error("want an error marshalling a channel")
+	}
+}
+
+func TestPrintJSONWithFilterRawStripsQuotesFromStrings(t *testing.T) {
+	var buf bytes.Buffer
+	data := sampleTeam{Key: "frc177", TeamNumber: 177, Nickname: "Bobcat Robotics"}
+	if err := PrintJSONWithFilter(&buf, data, ".nickname", true); err != nil {
+		t.Fatalf("PrintJSONWithFilter: %v", err)
+	}
+	if buf.String() != "Bobcat Robotics\n" {
+		t.Errorf("raw output = %q", buf.String())
+	}
+}
+
+func TestPrintJSONWithFilterRawWritesNonStringsCompactly(t *testing.T) {
+	var buf bytes.Buffer
+	data := []map[string]any{{"key": "frc177", "rank": 1}}
+	if err := PrintJSONWithFilter(&buf, data, ".[0]", true); err != nil {
+		t.Fatalf("PrintJSONWithFilter: %v", err)
+	}
+	if buf.String() != "{\"key\":\"frc177\",\"rank\":1}\n" {
+		t.Errorf("raw output = %q", buf.String())
+	}
+}
+
+func TestPrintJSONWithFilterMultipleResultsAreCompact(t *testing.T) {
+	var buf bytes.Buffer
+	data := []map[string]any{{"key": "frc177"}, {"key": "frc1073"}}
+	if err := PrintJSONWithFilter(&buf, data, ".[]", false); err != nil {
+		t.Fatalf("PrintJSONWithFilter: %v", err)
+	}
+	want := "{\"key\":\"frc177\"}\n{\"key\":\"frc1073\"}\n"
+	if buf.String() != want {
+		t.Errorf("ndjson output =\n%q\nwant\n%q", buf.String(), want)
+	}
+}
+
+func TestPrintJSONWithFilterMultipleRawStrings(t *testing.T) {
+	var buf bytes.Buffer
+	data := []map[string]any{{"key": "frc177"}, {"key": "frc1073"}}
+	if err := PrintJSONWithFilter(&buf, data, ".[].key", true); err != nil {
+		t.Fatalf("PrintJSONWithFilter: %v", err)
+	}
+	if buf.String() != "frc177\nfrc1073\n" {
+		t.Errorf("raw output = %q", buf.String())
+	}
+}
+
+func TestPrintJSONWithFilterRawIgnoredWithoutAnExpression(t *testing.T) {
+	var buf bytes.Buffer
+	if err := PrintJSONWithFilter(&buf, "a string", "", true); err != nil {
+		t.Fatalf("PrintJSONWithFilter: %v", err)
+	}
+	if buf.String() != "\"a string\"\n" {
+		t.Errorf("output = %q", buf.String())
 	}
 }

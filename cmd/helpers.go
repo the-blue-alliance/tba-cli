@@ -78,6 +78,13 @@ func jqExpr(cmd *cobra.Command) string {
 	return jqFlag
 }
 
+// rawOutput reports whether --raw-output was given: jq string results are
+// printed without their quotes, as jq -r does.
+func rawOutput(cmd *cobra.Command) bool {
+	raw, _ := cmd.Flags().GetBool("raw-output")
+	return raw
+}
+
 // outputData routes opaque/key-value output: human renderer for table, JSON otherwise.
 // Tabular formats (csv/tsv/markdown) on key-value data fall back to JSON.
 func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
@@ -90,7 +97,7 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 		humanFn()
 		return nil
 	default:
-		return output.PrintJSONWithFilter(cmd.OutOrStdout(), data, jqExpr(cmd))
+		return output.PrintJSONWithFilter(cmd.OutOrStdout(), data, jqExpr(cmd), rawOutput(cmd))
 	}
 }
 
@@ -103,7 +110,7 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	w := cmd.OutOrStdout()
 	switch format {
 	case "json":
-		return output.PrintJSONWithFilter(w, data, jqExpr(cmd))
+		return output.PrintJSONWithFilter(w, data, jqExpr(cmd), rawOutput(cmd))
 	case "csv":
 		return output.PrintDelimited(w, headers, rows, ',')
 	case "tsv":
