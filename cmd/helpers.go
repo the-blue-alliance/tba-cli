@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -110,18 +109,43 @@ func normalizeFormat(raw string) (string, bool) {
 	}
 }
 
-// colorMode reads the user's color preference. --no-color is a spelling of
-// --color=never and wins, so scripts can set it unconditionally.
+// colorMode reads the user's color preference.
+//
+// no-color is a spelling of color=never and is checked first, so it wins
+// whenever it is true, whichever layer either setting came from: a script can
+// set it unconditionally without knowing what color says. `tba config list`
+// documents the same rule.
+//
+// A bad color value is still reported when no-color settles the question, so
+// that a typo in the config file is not hidden by an unrelated setting.
 func colorMode(cmd *cobra.Command) (output.ColorMode, error) {
 	s := settings(cmd)
+	mode, err := output.ParseColorMode(s.String("color"))
+	if err != nil {
+		// Like every other bad flag value, this is exit 2.
+		return mode, clierr.Wrap(clierr.KindUsage, err)
+	}
 	if s.Bool("no-color") {
 		return output.ColorNever, nil
 	}
-	return output.ParseColorMode(s.String("color"))
+	return mode, nil
 }
 
 func jqExpr(cmd *cobra.Command) string {
 	return settings(cmd).String("jq")
+}
+
+// checkJQ rejects a --jq expression that is not a jq program.
+//
+// It runs before the command does any work, so a typo costs no request, and it
+// is a usage error: an expression that does not parse is a mistake in the
+// command line. An expression that parses but then fails on the data is a
+// failure of the run, and keeps exit 1.
+func checkJQ(cmd *cobra.Command) error {
+	if err := output.ValidateJQ(jqExpr(cmd)); err != nil {
+		return clierr.Wrap(clierr.KindUsage, err)
+	}
+	return nil
 }
 
 // rawOutput reports whether --raw-output was given: jq string results are
@@ -153,6 +177,25 @@ func outputData(cmd *cobra.Command, data interface{}, humanFn func()) error {
 // share one Table so that column selection, sorting and width handling behave
 // identically no matter which renderer prints it.
 func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows [][]string) error {
+	return outputTableWithEmptyNote(cmd, data, headers, rows, "")
+}
+
+// outputTableWithEmptyNote is outputTable with something to say when there is
+// nothing to show.
+//
+// A bare header row does not distinguish "this team played no matches at that
+// event" from "your filters cancelled each other out" or "you typed the wrong
+// event key". note says which, in one line on stderr — never on stdout, so a
+// pipeline still sees an empty table — and only in the human-facing formats.
+// JSON keeps printing [], which is the answer a script wants.
+//
+// note reads as the completion of "no ...": "no matches for team 9999 at
+// 2024cthar", "no events match those filters".
+//
+// TODO: the listings owned by other in-flight branches (event matches, event
+// rankings, event awards, team matches, team search, insights) should pass a
+// note too.
+func outputTableWithEmptyNote(cmd *cobra.Command, data interface{}, headers []string, rows [][]string, note string) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -168,11 +211,13 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 
 	// Sorting runs before column selection so that a table can be ordered by a
 	// column the user chose not to display.
+	// A bad --sort or --columns is a mistake in the invocation, not a failure
+	// of the work, so it exits 2 like any other flag error.
 	sortSpec := settings(cmd).String("sort")
 	var order []int
 	if sortSpec != "" {
 		if order, err = table.SortOrder(sortSpec); err != nil {
-			return err
+			return clierr.Wrap(clierr.KindUsage, err)
 		}
 		table = table.Reorder(order)
 	}
@@ -180,34 +225,96 @@ func outputTable(cmd *cobra.Command, data interface{}, headers []string, rows []
 	columns := settings(cmd).String("columns")
 	if format == "json" {
 		if columns != "" {
-			return errors.New("--columns applies to tabular formats; use --jq to shape JSON")
+			return clierr.Usage("--columns applies to tabular formats; use --jq to shape JSON")
 		}
 		// --sort is about the order of the result, not its shape, so it also
-		// reorders the JSON array the table was built from.
+		// reorders the JSON array the table was built from. When the payload is
+		// not that array — an object keyed by team, a document with the rows
+		// nested inside — there is no order to apply, and saying so beats
+		// printing an unsorted answer to a command that asked for a sorted one.
+		if sortSpec != "" && !output.CanPermute(data, order) {
+			return clierr.Usage("--sort cannot reorder this JSON payload (it is not a list of rows); " +
+				"use --jq to sort it, or drop --format json")
+		}
 		return output.PrintJSONWithFilter(w, output.PermuteSlice(data, order), jqExpr(cmd), rawOutput(cmd))
 	}
 	if columns != "" {
 		if table, err = table.SelectColumns(columns); err != nil {
-			return err
+			return clierr.Wrap(clierr.KindUsage, err)
 		}
 	}
 
 	noHeaders := settings(cmd).Bool("no-headers")
-	return output.Render(w, table, output.RenderOptions{
+	if err := output.Render(w, table, output.RenderOptions{
 		Format:    format,
 		NoHeaders: noHeaders,
 		Color:     color,
-	})
+	}); err != nil {
+		return err
+	}
+	if len(rows) == 0 && note != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", note)
+	}
+	return nil
+}
+
+// exactArgs is cobra.ExactArgs with an error a person can act on.
+//
+// Cobra's own text is "accepts 1 arg(s), received 0", which says nothing about
+// what the missing argument is. what names it and shows one, e.g.
+// exactArgs(1, "a team number (e.g. tba team view 177)").
+func exactArgs(n int, what string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == n {
+			return nil
+		}
+		// The root's name is already on every example, so the complaint reads
+		// as "team view needs ...", not "tba team view needs ...".
+		name := strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")
+		if len(args) < n {
+			return clierr.Usage("%s needs %s", name, what)
+		}
+		return clierr.Usage("%s takes %s, but got %d arguments", name, what, len(args))
+	}
 }
 
 // teamKey normalises a team argument, so that both "177" and "frc177" (in any
 // case) address the same team.
+//
+// It does not judge what it is given: "17x7" comes back as "frc17x7" and costs
+// a request and a raw 404.
+//
+// TODO: the call sites in cmd/matches.go, cmd/team_next.go,
+// cmd/team_standing.go and cmd/team_search.go should call validateTeamArg on
+// the argument first, the way the ones in cmd/team.go, cmd/open.go and
+// cmd/eventfilter.go do, so that a typo is a usage error instead.
 func teamKey(arg string) string {
+	return "frc" + teamNumberOf(arg)
+}
+
+// teamNumberOf strips an optional "frc" prefix, in any case, and returns what
+// is left. It never panics and never rejects anything; validateTeamArg is what
+// decides whether the remainder is a team number.
+func teamNumberOf(arg string) string {
 	trimmed := strings.TrimSpace(arg)
 	if len(trimmed) >= 3 && strings.EqualFold(trimmed[:3], "frc") {
 		trimmed = trimmed[3:]
 	}
-	return "frc" + trimmed
+	return trimmed
+}
+
+// teamArgPattern is a team number as a person writes it: 1 to 5 digits, with
+// an optional "frc" prefix in any case. Five digits covers every team number
+// FIRST has issued and leaves room for the ones it has not.
+var teamArgPattern = regexp.MustCompile(`^(?i:frc)?[0-9]{1,5}$`)
+
+// validateTeamArg rejects something that is not a team number before any HTTP
+// call, so that a typo comes back as a usage error instead of a raw 404 body.
+func validateTeamArg(arg string) error {
+	if !teamArgPattern.MatchString(strings.TrimSpace(arg)) {
+		return clierr.Usage("%q is not a team number (expected something like 177 or frc177)", arg)
+	}
+	return nil
 }
 
 var (

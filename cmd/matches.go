@@ -64,8 +64,28 @@ func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor fun
 		return err
 	}
 
-	rows := make([][]string, len(matches))
-	marked := false
+	rows, marked := matchTableRows(matches, playoffTypeFor, color)
+
+	if err := outputTable(cmd, matches, matchHeaders, rows); err != nil {
+		return err
+	}
+	// The legend explains the marks in the table above it, so it is only worth
+	// printing when a mark is actually there — and it goes to stderr, so it
+	// never lands in a file the table was piped into.
+	if marked && format == "table" {
+		fmt.Fprintln(cmd.ErrOrStderr(), frc.Legend)
+	}
+	return nil
+}
+
+// matchTableRows builds the cells of a match listing, in the order given, one
+// row per match under matchHeaders. It also reports whether any cell carries a
+// surrogate or DQ mark, which is what decides if the legend is worth printing.
+//
+// color is passed in rather than resolved here so that the callers that write
+// to a file — `event export` — can ask for the same cells without escapes.
+func matchTableRows(matches []api.Match, playoffTypeFor func(api.Match) *int, color bool) (rows [][]string, marked bool) {
+	rows = make([][]string, len(matches))
 	for i, m := range matches {
 		red, blue := m.Alliances[frc.AllianceRed], m.Alliances[frc.AllianceBlue]
 		redCell := strings.Join(frc.MarkedTeams(red), ", ")
@@ -94,17 +114,7 @@ func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor fun
 			frc.MatchStatus(m),
 		}
 	}
-
-	if err := outputTable(cmd, matches, matchHeaders, rows); err != nil {
-		return err
-	}
-	// The legend explains the marks in the table above it, so it is only worth
-	// printing when a mark is actually there — and it goes to stderr, so it
-	// never lands in a file the table was piped into.
-	if marked && format == "table" {
-		fmt.Fprintln(cmd.ErrOrStderr(), frc.Legend)
-	}
-	return nil
+	return rows, marked
 }
 
 // tableColorEnabled reports whether a command may put ANSI escapes in its

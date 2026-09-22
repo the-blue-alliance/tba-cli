@@ -40,32 +40,39 @@ TBA's overall_status_str with its markup removed.`,
 				return err
 			}
 
-			teams := make([]string, 0, len(statuses))
-			for key := range statuses {
-				teams = append(teams, key)
-			}
-			sortTeamKeys(teams)
-			sort.SliceStable(teams, func(i, j int) bool {
-				a, aOK := qualRank(statuses[teams[i]])
-				b, bOK := qualRank(statuses[teams[j]])
-				if aOK != bOK {
-					// An unranked team sorts after every ranked one rather
-					// than at rank zero.
-					return aOK
-				}
-				return aOK && a < b
-			})
-
-			headers := []string{"Team", "Rank", "Record", "Alliance", "Pick", "Playoff Level", "Playoff Status", "Overall"}
-			rows := make([][]string, len(teams))
-			for i, key := range teams {
-				rows[i] = teamStatusRow(key, statuses[key])
-			}
+			table := eventTeamStatusesTable(statuses)
 			// The parsed map, so --jq still sees the shape the API returns.
 			// It is not a slice, so --sort reorders the table only.
-			return outputTable(cmd, statuses, headers, rows)
+			return outputTable(cmd, statuses, table.Headers, table.Rows)
 		},
 	}
+}
+
+// eventTeamStatusesTable renders one row per team at an event, by rank, with
+// the teams that have no rank yet last.
+func eventTeamStatusesTable(statuses map[string]*api.TeamEventStatus) output.Table {
+	teams := make([]string, 0, len(statuses))
+	for key := range statuses {
+		teams = append(teams, key)
+	}
+	sortTeamKeys(teams)
+	sort.SliceStable(teams, func(i, j int) bool {
+		a, aOK := qualRank(statuses[teams[i]])
+		b, bOK := qualRank(statuses[teams[j]])
+		if aOK != bOK {
+			// An unranked team sorts after every ranked one rather than at
+			// rank zero.
+			return aOK
+		}
+		return aOK && a < b
+	})
+
+	headers := []string{"Team", "Rank", "Record", "Alliance", "Pick", "Playoff Level", "Playoff Status", "Overall"}
+	rows := make([][]string, len(teams))
+	for i, key := range teams {
+		rows[i] = teamStatusRow(key, statuses[key])
+	}
+	return output.Table{Headers: headers, Rows: rows}
 }
 
 // qualRank returns a team's qualification rank, and whether it has one at all.

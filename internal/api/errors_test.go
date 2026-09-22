@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,47 @@ func TestTruncateErrorBodyDoesNotSplitRunes(t *testing.T) {
 	}
 	if len(trimmed) > maxErrorBodyBytes {
 		t.Errorf("truncated body is %d bytes, want at most %d", len(trimmed), maxErrorBodyBytes)
+	}
+}
+
+func TestNotFoundMessageUnwrapsTheAPIsErrorField(t *testing.T) {
+	body := []byte(`{"Error":"event key: 2024chtar does not exist"}`)
+	if got, want := notFoundMessage(body), "not found: event key: 2024chtar does not exist"; got != want {
+		t.Errorf("notFoundMessage = %q, want %q", got, want)
+	}
+}
+
+func TestNotFoundMessageFallsBackToTheRawBody(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"html", "<html>nope</html>", "API error 404: <html>nope</html>"},
+		{"empty", "", "API error 404: "},
+		{"other json", `{"message":"nope"}`, `API error 404: {"message":"nope"}`},
+		{"blank error field", `{"Error":"  "}`, `API error 404: {"Error":"  "}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := notFoundMessage([]byte(tc.body)); got != tc.want {
+				t.Errorf("notFoundMessage(%q) = %q, want %q", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNotFoundMessageTruncatesALongErrorField(t *testing.T) {
+	body, err := json.Marshal(map[string]string{"Error": strings.Repeat("x", 500)})
+	if err != nil {
+		t.Fatalf("marshalling: %v", err)
+	}
+	got := notFoundMessage(body)
+	if !strings.HasPrefix(got, "not found: ") || !strings.HasSuffix(got, "…") {
+		t.Errorf("message = %q", got)
+	}
+	if len(got) > len("not found: ")+maxErrorBodyBytes+len("…") {
+		t.Errorf("message is %d bytes, want the detail capped at %d", len(got), maxErrorBodyBytes)
 	}
 }
 

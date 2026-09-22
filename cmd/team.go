@@ -39,8 +39,11 @@ func newTeamViewCmd() *cobra.Command {
 		Example: `  tba team view 177
   tba team view frc177 --format json
   tba team view 1073 --jq .nickname -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team view 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -110,8 +113,11 @@ func newTeamEventsCmd() *cobra.Command {
 		Short: "List team events",
 		Example: `  tba team events 177 --year 2024
   tba team events frc177 --year 2024 --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team events 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -128,7 +134,9 @@ func newTeamEventsCmd() *cobra.Command {
 			for i, e := range events {
 				rows[i] = []string{e.Key, e.Name, e.StartDate, output.FormatLocation(e.City, e.StateProv, e.Country)}
 			}
-			return outputTable(cmd, events, []string{"Key", "Name", "Start Date", "Location"}, rows)
+			return outputTableWithEmptyNote(cmd, events,
+				[]string{"Key", "Name", "Start Date", "Location"}, rows,
+				fmt.Sprintf("no events for team %s in %d", teamNumberOf(args[0]), year))
 		},
 	}
 	addYearFlag(c)
@@ -146,8 +154,11 @@ to drive a loop over a team's whole history.`,
 		Example: `  tba team years 177
   tba team years frc177 --json
   tba team years 177 --jq '.[0]' -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team years 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -176,8 +187,11 @@ func newTeamMatchesCmd() *cobra.Command {
   tba team matches frc177 --year 2024 --format tsv
   tba team matches 177 --event 2024cthar
   tba team matches 177 --event 2024cthar --upcoming`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team matches 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -228,12 +242,33 @@ the event's name, which takes one extra request for the team's event list; if
 that request fails the awards are still listed, with the name left blank.
 
 Recipient names the individual who received the award, for awards such as
-Dean's List or Woodie Flowers that go to a person rather than to the team.`,
+Dean's List or Woodie Flowers that go to a person rather than to the team.
+
+--type narrows the list to one kind of award. It takes a name, matched
+case-insensitively against any part of it (--type impact, --type "dean's"), or
+TBA's own award_type code (--type 0). A name that could mean several awards is
+an error that lists them.`,
 		Example: `  tba team awards 177
   tba team awards frc177 --year 2024 --format markdown
-  tba team awards 177 --type 0`,
-		Args: cobra.ExactArgs(1),
+  tba team awards 177 --type impact
+  tba team awards 177 --type 9`,
+		Args: exactArgs(1, "a team number (e.g. tba team awards 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
+			// The award type is resolved before the request, so a name that
+			// means nothing costs nothing.
+			typeSpec, _ := cmd.Flags().GetString("type")
+			filterByType := cmd.Flags().Changed("type")
+			wantType := 0
+			if filterByType {
+				code, err := parseAwardType(typeSpec)
+				if err != nil {
+					return err
+				}
+				wantType = code
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -251,9 +286,8 @@ Dean's List or Woodie Flowers that go to a person rather than to the team.`,
 			if err := client.Get(cmd.Context(), path, &awards); err != nil {
 				return err
 			}
-			if cmd.Flags().Changed("type") {
-				awardType, _ := cmd.Flags().GetInt("type")
-				awards = filterAwardsByType(awards, awardType)
+			if filterByType {
+				awards = filterAwardsByType(awards, wantType)
 			}
 			names := teamEventNames(cmd, client, key, len(awards) > 0)
 			sortTeamAwards(awards)
@@ -264,14 +298,20 @@ Dean's List or Woodie Flowers that go to a person rather than to the team.`,
 					strconv.Itoa(a.Year),
 					names[a.EventKey],
 					a.Name,
+					awardTypeName(a.AwardType),
 					awardeeNames(a),
 				}
 			}
-			return outputTable(cmd, awards, []string{"Year", "Event", "Award", "Recipient"}, rows)
+			note := fmt.Sprintf("no awards for team %s", teamNumberOf(args[0]))
+			if filterByType {
+				note = fmt.Sprintf("no %s awards for team %s", awardTypeName(wantType), teamNumberOf(args[0]))
+			}
+			return outputTableWithEmptyNote(cmd, awards,
+				[]string{"Year", "Event", "Award", "Type", "Recipient"}, rows, note)
 		},
 	}
 	c.Flags().Int("year", 0, "Season year (default: all years)")
-	c.Flags().Int("type", -1, "Only awards with this TBA award_type")
+	c.Flags().String("type", "", "Only awards of this kind, by name or TBA award_type code (e.g. impact, 0)")
 	return c
 }
 
@@ -336,8 +376,11 @@ func newTeamMediaCmd() *cobra.Command {
 		Short: "List team media",
 		Example: `  tba team media 177 --year 2024
   tba team media frc177 --year 2024 --jq '.[].view_url' -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team media 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -367,8 +410,11 @@ func newTeamRobotsCmd() *cobra.Command {
 		Short: "List team robots",
 		Example: `  tba team robots 177
   tba team robots frc177 --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team robots 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
@@ -392,8 +438,11 @@ func newTeamDistrictsCmd() *cobra.Command {
 		Short: "List team districts",
 		Example: `  tba team districts 177
   tba team districts frc177 --format json`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number (e.g. tba team districts 177)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateTeamArg(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err

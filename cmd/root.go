@@ -18,9 +18,18 @@ import (
 // tests independent of each other.
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:           "tba",
-		Short:         "The Blue Alliance CLI",
-		Long:          "A command-line interface for The Blue Alliance API v3.",
+		Use:   "tba",
+		Short: "The Blue Alliance CLI",
+		Long:  "A command-line interface for The Blue Alliance API v3.",
+		// `tba --help` is where someone lands first, and a list of nouns does
+		// not show what the tool is for. These are the questions people
+		// actually turn up with, in the order they tend to ask them.
+		Example: `  tba team next 177
+  tba event matches 2024cthar --team 177 --upcoming
+  tba event rankings 2024cthar
+  tba team standing 177 2024cthar
+  tba event export 2024cthar --to csv
+  tba event list --week 4 --district ne`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		// Setting Version gives the root a --version flag.
@@ -36,6 +45,9 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 			if _, err := resolveFormat(cmd); err != nil {
+				return err
+			}
+			if err := checkJQ(cmd); err != nil {
 				return err
 			}
 			_, err := colorMode(cmd)
@@ -61,9 +73,9 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")
 	rootCmd.PersistentFlags().Bool("no-headers", false, "Omit the header row from table, csv, tsv and markdown output")
 	rootCmd.PersistentFlags().String("columns", "", "Select and order columns by header name or 1-based index (e.g. --columns key,name)")
-	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (use the --sort=-col form)")
+	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (e.g. --sort=-opr)")
 	rootCmd.PersistentFlags().String("color", "auto", "When to colorize output: auto, always, never")
-	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (alias for --color=never)")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (alias for --color=never; wins over --color)")
 
 	rootCmd.AddCommand(newAuthCmd())
 	rootCmd.AddCommand(newStatusCmd())
@@ -108,11 +120,24 @@ func Run(ctx context.Context, root *cobra.Command) error {
 		if cmd == nil {
 			cmd = root
 		}
-		w := cmd.ErrOrStderr()
-		fmt.Fprint(w, cmd.UsageString())
-		fmt.Fprintf(w, "Run '%s --help' for usage.\n", cmd.CommandPath())
+		printUsageHint(cmd)
 	}
 	return err
+}
+
+// printUsageHint shows how the command is called and where the rest is.
+//
+// Cobra's full usage block is about twenty-five lines, most of them the global
+// flags, and it pushes the one line that says what went wrong off the top of a
+// small terminal. The call shape is the part that helps in the moment; --help
+// is one keystroke away for everything else.
+func printUsageHint(cmd *cobra.Command) {
+	w := cmd.ErrOrStderr()
+	fmt.Fprintf(w, "Usage:\n  %s\n", cmd.UseLine())
+	if cmd.HasAvailableSubCommands() {
+		fmt.Fprintf(w, "  %s [command]\n", cmd.CommandPath())
+	}
+	fmt.Fprintf(w, "Run '%s --help' for usage.\n", cmd.CommandPath())
 }
 
 // Execute runs the CLI with the process's standard streams.

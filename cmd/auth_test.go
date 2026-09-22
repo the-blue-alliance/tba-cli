@@ -180,6 +180,35 @@ func TestAuthStatusWhenNotAuthenticatedExitsFour(t *testing.T) {
 	}
 }
 
+// A first-run dead end: someone who has never had a key is told to log in but
+// not where a key comes from.
+func TestAuthErrorsAndHelpSayWhereToGetAKey(t *testing.T) {
+	const page = "https://www.thebluealliance.com/account"
+
+	authEnv(t)
+	_, _, err := runCmd(t, nil, "auth", "status")
+	if err == nil {
+		t.Fatal("want an error when no key is configured")
+	}
+	requireErrorContains(t, err, page)
+
+	out, _, helpErr := runCmd(t, nil, "auth", "login", "--help")
+	requireNoError(t, helpErr, "")
+	requireContains(t, out, page)
+}
+
+func TestHTTP401SaysWhereToGetAKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"Error":"Invalid X-TBA-Auth-Key"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	t.Setenv("TBA_AUTH_KEY", "bogus")
+	err := requireExitCode(t, clierr.ExitAuth, srv, "status")
+	requireErrorContains(t, err, "https://www.thebluealliance.com/account")
+}
+
 func TestAuthStatusTableMasksTheKey(t *testing.T) {
 	dir := authEnv(t)
 	srv := authServer(t)
@@ -275,10 +304,26 @@ func TestAuthLogoutWhenNotAuthenticatedFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("logging out with nothing stored should fail")
 	}
-	if got := clierr.ExitCode(err); got != clierr.ExitFailure {
-		t.Errorf("exit code = %d, want %d", got, clierr.ExitFailure)
+	// The same state `auth status` reports, so the same exit code.
+	if got := clierr.ExitCode(err); got != clierr.ExitAuth {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitAuth)
 	}
 	requireErrorContains(t, err, "not authenticated")
+}
+
+func TestAuthLogoutForAnUnknownBaseURLExitsFour(t *testing.T) {
+	authEnv(t)
+	srv := authServer(t)
+	_, _, err := runCmd(t, srv, "auth", "login", "--key", "abcd1234")
+	requireNoError(t, err, "")
+
+	_, _, err = runCmd(t, nil, "auth", "logout", "--base-url", "http://elsewhere.example/api/v3")
+	if err == nil {
+		t.Fatal("logging out of a URL with no key should fail")
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitAuth {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitAuth)
+	}
 }
 
 func TestMaskKey(t *testing.T) {

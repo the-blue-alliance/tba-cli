@@ -89,7 +89,15 @@ func newConfigListCmd() *cobra.Command {
 		Use:     "list",
 		Short:   "Show every setting with its effective value and source",
 		Aliases: []string{"ls"},
-		Args:    cobra.NoArgs,
+		Long: `Show every setting, the value in effect and where it came from.
+
+The source is the layer that supplied the value: flag, env, config or default.
+
+Two of these settings overlap: no-color is a spelling of color=never, and it
+wins whenever it is true, whichever layer either of them came from. Setting
+no-color and color=always together leaves output uncolored, so a script can set
+no-color unconditionally without having to know what color says.`,
+		Args: cobra.NoArgs,
 		Example: `  tba config list
   tba config list --format json
   tba config list --jq '.[] | select(.source != "default")'`,
@@ -116,7 +124,7 @@ func newConfigGetCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "get <key>",
 		Short: "Print one setting's effective value",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1, "a setting name (e.g. tba config get format)"),
 		Example: `  tba config get format
   tba config get timeout
   tba config get year --json`,
@@ -141,7 +149,7 @@ func newConfigSetCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "set <key> <value>",
 		Short: "Write a setting to the config file",
-		Args:  cobra.ExactArgs(2),
+		Args:  exactArgs(2, "a setting name and a value (e.g. tba config set format table)"),
 		Example: `  tba config set format table
   tba config set timeout 30s
   tba config set retries 0
@@ -172,7 +180,7 @@ func newConfigUnsetCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "unset <key>",
 		Short: "Remove a setting from the config file",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1, "a setting name (e.g. tba config unset format)"),
 		Example: `  tba config unset format
   tba config unset timeout`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -85,8 +85,8 @@ tba event list --year 2024 --team 177
 
 | Filter | Matches |
 |--------|---------|
-| `--week N` | The **1-based** week number, as thebluealliance.com shows it. The API's own `week` field counts from 0; `--week 1` is week 1. Events with no week (championships, offseasons) never match. |
-| `--type` | One or more event types, comma-separated: `regional`, `district`, `dcmp`, `dcmp-division`, `cmp-division`, `cmp-finals`, `foc`, `offseason`, `preseason`, `remote`, `unlabeled`, `all`. An unknown value is a usage error listing the valid ones. `all` cancels the filter. |
+| `--week N` | The **1-based** week number, as thebluealliance.com shows it. The API's own `week` field counts from 0; `--week 1` is week 1. `--week 0` is a usage error. Events with no week (championships, offseasons) never match. |
+| `--type` | One or more event types, comma-separated: `regional`, `district`, `dcmp`, `dcmp-division`, `cmp-division`, `cmp-finals`, `foc`, `offseason`, `preseason`, `remote`, `unlabeled`, `all`. `dcmp` covers a district championship and its divisions; `dcmp-division` is the divisions alone. An unknown value is a usage error listing the valid ones. `all` cancels the filter. |
 | `--district` | The district abbreviation (`ne`, `fim`, `isr`), case-insensitive. |
 | `--state` | `state_prov` exactly as the API spells it, case-insensitive (`CT`, `Ontario`). |
 | `--country` | `country`, case-insensitive (`USA`, `Israel`). |
@@ -158,18 +158,22 @@ not offered: it would repeat that walk once per year, so `--year 0` and
 tba team years 177
 tba team awards 177
 tba team awards 177 --year 2024
+tba team awards 177 --type impact
 tba team awards 177 --type 0
 ```
 
 `team years` lists the seasons a team has competed in, newest first, as a
 single `Year` column; `--json` gives the plain array of years.
 
-`team awards` lists a team's awards as `Year | Event | Award | Recipient`,
-newest season first and grouped by event. The event column shows the event's
-name, which costs one extra request for the team's event list; if that request
-fails the awards are still listed with the name left blank. `Recipient` names
-the individual for awards that go to a person rather than to the team, and
-`--type` filters by TBA's numeric `award_type`.
+`team awards` lists a team's awards as `Year | Event | Award | Type |
+Recipient`, newest season first and grouped by event. The event column shows
+the event's name, which costs one extra request for the team's event list; if
+that request fails the awards are still listed with the name left blank.
+`Recipient` names the individual for awards that go to a person rather than to
+the team. `--type` filters by kind: a name matched case-insensitively against
+any part of it (`--type impact`, `--type "dean's"`), or TBA's numeric
+`award_type` (`--type 0`). A name that could mean several awards is an error
+that lists them.
 
 ### Opening the website
 
@@ -362,7 +366,9 @@ tba event oprs 2024cthar --sort=-opr
 
 `--sort` is stable, so rows that compare equal keep the order the API returned them in, and it is numeric-aware: two cells that both parse as numbers compare as numbers, so team `177` sorts before `1073`. Sorting happens before `--columns`, so you can sort by a column you do not display.
 
-`--sort` also reorders the array in `--format json`, keeping the JSON and the table in the same order. `--columns` does not apply to JSON — use `--jq` to shape it.
+`--sort` also reorders the array in `--format json`, keeping the JSON and the table in the same order. Where the JSON is not that array — an object keyed by team, or a document with the rows nested inside — there is no row order to apply, and `--sort` says so (exit 2) rather than printing an unsorted answer; use `--jq` to sort those. `--columns` does not apply to JSON — use `--jq` to shape it.
+
+A bad `--columns` or `--sort` value is a usage error (exit 2).
 
 `--no-headers` drops the header row from `table`, `csv` and `tsv`, and both the header and its separator from `markdown`. In `table` output the dashed separator goes too, and columns are sized from the data alone.
 
@@ -374,7 +380,7 @@ tba event oprs 2024cthar --sort=-opr
 | `--color always` | Color even when piped, e.g. into `less -R` |
 | `--color never`, `--no-color` | Never color |
 
-In `auto` mode color is off unless stdout is a terminal. It is also off when [`NO_COLOR`](https://no-color.org) is set to any non-empty value, or when `TERM=dumb`. Setting `CLICOLOR_FORCE` to anything but `0` turns color back on for a pipe. `--color always` overrides the environment; `--color never` and `--no-color` override everything.
+In `auto` mode color is off unless stdout is a terminal. It is also off when [`NO_COLOR`](https://no-color.org) is set to any non-empty value, or when `TERM=dumb`. Setting `CLICOLOR_FORCE` to anything but `0` turns color back on for a pipe. `--color always` overrides the environment; `--color never` and `--no-color` override everything. `no-color` wins over `color` whichever layer either came from, so a script can set it unconditionally.
 
 Only presentation is colored: the `table` header row, and the alliance cells of a match listing. `csv`, `tsv`, `markdown` and `json` never carry escape sequences, whatever `--color` says, so piping stays safe.
 
@@ -699,6 +705,141 @@ tba event insights 2024cthar --level playoff
 tba event insights 2024cthar --columns stat,value --format markdown
 ```
 
+### Watching an event
+
+`tba event watch <key>` polls an event and prints what changed since the last look. It talks to a shared API for as long as it is left running, so the defaults are deliberately timid: **one poll a minute, for two hours, then it stops**. To run it longer, say so:
+
+```
+tba event watch 2024cthar --for 8h          # a whole competition day
+tba event watch 2024cthar --for 0           # until you press Ctrl-C
+tba event watch 2024cthar --interval 30s    # more often (15s is the floor)
+tba event watch 2024cthar --max-polls 10    # a fixed number of looks
+```
+
+Unchanged polls are cheap: each one is a conditional request the API answers with a 304 and no body, so a watch left open all afternoon costs far less than its poll count suggests.
+
+Output is append-only. Nothing is cleared, nothing is redrawn, and the cursor never moves, so the stream can be scrolled back through, `tee`d into a file or diffed later. The first poll prints the whole match table — the same columns as `tba event matches` — and every later poll prints only the rows that changed, under a line naming the time and the poll number:
+
+```
+$ tba event watch 2024cthar
+Match   Key            Red              Blue             Score (R-B)  Winner  Time       Time Source  Status
+------  -------------  ---------------  ---------------  -----------  ------  ---------  -----------  ---------
+Qual 1  2024cthar_qm1  177, 1073, 5507  230, 1071, 4055  88-61        red     Fri 14:00  actual       Played
+Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153                       Fri 14:10  predicted    Scheduled
+Qual 3  2024cthar_qm3  177, 1073, 5507  195, 1124, 6153                       Fri 14:20  predicted    Scheduled
+--- 14:32:07 (poll 2) ---
+Qual 2  2024cthar_qm2  558, 3467, 2168  195, 1124, 6153  101-99       red     Fri 14:10  actual       Played
+```
+
+Column widths are fixed by that first table, so the rows below it stay in line.
+
+`--team 177` narrows the whole feed to one team's matches. `--rankings` adds the standings, printed after the matches on the first poll and again whenever a rank or a record moves. A match counts as changed when it is newly played, when a score or a winner changes, when its predicted time moves by a minute or more, or when it appears in the schedule for the first time; `actual_time` being restamped after the fact is not news.
+
+Why the watch stopped goes to stderr, and stopping is not a failure:
+
+```
+note: stopped after 2h0m0s (--for)
+note: stopped after 10 polls (--max-polls)
+```
+
+Both exit 0. Ctrl-C exits 130 without a word. A poll that fails is a note on stderr and another try at the next interval — five failures in a row is exit 1.
+
+**JSON Lines.** Piped, or with `--format json`, each change is one self-contained JSON object on its own line, flushed as it happens. It is never a growing array, so a reader can act on a change the moment it arrives. The first line is a snapshot of everything as it stood at the first poll:
+
+```
+{"ts":"2024-03-22T14:31:07-04:00","poll":1,"type":"snapshot","matches":[…]}
+{"ts":"2024-03-22T14:32:07-04:00","poll":2,"type":"match","key":"2024cthar_qm2","change":"played","match":{…}}
+{"ts":"2024-03-22T14:33:07-04:00","poll":3,"type":"ranking","team_key":"frc177","rank":3,"previous_rank":5,"record":{"wins":9,"losses":3,"ties":0}}
+```
+
+`change` is one of `added`, `played`, `score`, `winner` or `rescheduled`. `--jq` is applied to each line on its own, so a filter written for a single change works all day:
+
+```
+$ tba event watch 2024cthar --format json \
+    --jq 'select(.change == "played") | "\(.match.key) \(.match.winning_alliance)"' -r
+2024cthar_qm12 red
+2024cthar_qm13 blue
+```
+
+`csv`, `tsv` and `markdown` describe a finished table and have nothing to say about a stream, so they are a usage error. `--columns` and `--sort` do not apply either, and are ignored.
+### Exporting an event
+
+`tba event export <key>` writes everything the API knows about an event to files, one per dataset.
+
+**`--to` is required.** It is the only thing that decides the format, and there are three values:
+
+```
+$ tba event export 2024cthar --to csv
+2024cthar-event.csv
+2024cthar-teams.csv
+2024cthar-matches.csv
+2024cthar-rankings.csv
+2024cthar-alliances.csv
+2024cthar-awards.csv
+2024cthar-oprs.csv
+2024cthar-district-points.csv
+2024cthar-team-statuses.csv
+```
+
+Nothing is inferred — not from a file name, not from whether you are on a terminal, not from `format:` in your config file. `--format` on this command describes how the command talks to *you*, so `--format csv` here is a usage error that points you back at `--to`. Leaving `--to` out is an error too, rather than a guess.
+
+**The files.** Each dataset becomes `<dir>/<prefix>-<dataset>.<ext>`, where `--dir` defaults to the working directory and `--prefix` defaults to the event key. The nine datasets are `event`, `teams`, `matches`, `rankings`, `alliances`, `awards`, `oprs`, `district-points` and `team-statuses`; `--only` takes a comma-separated subset of those names.
+
+```
+$ tba event export 2024cthar --to json --dir exports --only matches,rankings
+exports/2024cthar-matches.json
+exports/2024cthar-rankings.json
+```
+
+For `csv` and `tsv` each file carries exactly the columns the matching `tba event <dataset>` command prints — the same row builders render both — with a header row and no color. The `event` dataset is a single object rather than a list, so in `csv` and `tsv` it becomes a two-column `Field,Value` listing of the same fields `tba event view` shows. For `json` each file holds the API's own payload, pretty-printed and newline-terminated; it is re-indented rather than re-encoded, so nothing in it is re-escaped or reordered.
+
+**Reproducibility.** Two exports of the same data produce byte-identical files. Nothing written carries a timestamp or a version string, every listing has a fixed order (matches in play order, teams by number, rankings by rank, oprs by team, awards by award type then team), lines end with LF on every platform, and files arrive with mode `0644`.
+
+**Nothing half-done.** Every file is written to a temporary file in the target directory, and the whole set is renamed into place only once all of them have been fetched. A failure part way through — a 500 on the seventh dataset — leaves the directory exactly as it was. An existing file is never overwritten without `--force`, and the clash is found before the first request, with every conflicting path listed at once:
+
+```
+$ tba event export 2024cthar --to csv
+Error: refusing to overwrite 2 existing file(s); pass --force to replace them:
+  2024cthar-matches.csv
+  2024cthar-oprs.csv
+```
+
+`--dry-run` prints the paths it would write and fetches nothing at all.
+
+**A dataset the event does not have** — district points at a regional, alliances before selection — answers 404. That is the API saying it never existed, not a failure, so it is skipped with a note on stderr and the rest of the export goes ahead:
+
+```
+note: skipped district-points: the API has no district-points for this event (HTTP 404)
+wrote 8 file(s) to .
+```
+
+Any other error aborts the whole export.
+
+**Streams.** Written paths go to stdout, one per line, so they can be piped straight into something else. Notes and the summary go to stderr.
+
+```
+$ tba event export 2024cthar --to csv --only matches | xargs wc -l
+```
+
+`--format json` (or `--json`) replaces the path list with a summary object:
+
+```
+$ tba event export 2024cthar --to csv --json --only event,district-points
+{
+  "written": [
+    "2024cthar-event.csv"
+  ],
+  "skipped": [
+    {
+      "dataset": "district-points",
+      "reason": "the API has no district-points for this event (HTTP 404)"
+    }
+  ]
+}
+```
+
+A dry run carries `"dry_run": true` as well, so a script cannot mistake a preview for an export.
+
 ## Scripting
 
 `tba` is meant to be piped into other tools.
@@ -715,11 +856,21 @@ $ tba district list --year 2024 --jq '.[].key' -r
 2024fim
 ```
 
-**Arguments.** Team arguments accept either spelling: `tba team view 177` and `tba team view frc177` are the same command. Event and match keys are checked before any request goes out, so a typo comes back as a usage error rather than a 404:
+**Arguments.** Team arguments accept either spelling: `tba team view 177` and `tba team view frc177` are the same command. Team numbers, event keys and match keys are all checked before any request goes out, so a typo comes back as a usage error rather than a 404:
 
 ```
 $ tba event view cthar2024
 Error: "cthar2024" is not a valid event key (expected something like 2024cthar)
+
+$ tba team view 17x7
+Error: "17x7" is not a team number (expected something like 177 or frc177)
+```
+
+A missing argument names what is missing:
+
+```
+$ tba event matches
+Error: event matches needs an event key (e.g. tba event matches 2024cthar)
 ```
 
 ## Exit codes
@@ -729,12 +880,13 @@ Error: "cthar2024" is not a valid event key (expected something like 2024cthar)
 | 0 | Success |
 | 1 | Runtime or network failure (including HTTP 5xx) |
 | 2 | Usage error: a bad flag, a bad argument, an unknown command, a malformed key |
-| 4 | Authentication required: no API key configured, or HTTP 401 |
+| 4 | Authentication required: no API key configured, HTTP 401, or nothing to log out of |
 | 5 | Not found: HTTP 404 |
-| 130 | Interrupted (Ctrl-C) |
+| 130 | Interrupted (Ctrl-C); nothing is printed |
 | 141 | stdout closed early (for example when the reader of a pipe exits first); nothing is printed |
 
-Usage errors (exit 2) print the usage block; every other failure prints only its message.
+Usage errors (exit 2) print the `Usage:` line and where to find the full help;
+every other failure prints only its message.
 
 ```
 if ! tba auth status >/dev/null; then
@@ -822,6 +974,7 @@ identical archives.
 | `tba event teams <key>` | List teams at event |
 | `tba event matches <key>` | List event matches |
 | `tba event rankings <key>` | Show event rankings |
+| `tba event watch <key>` | Follow an event live (`--interval`, `--for`, `--max-polls`, `--rankings`, `--team`) |
 | `tba event alliances <key>` | Show playoff alliances |
 | `tba event team-statuses <key>` | Show where every team at an event stands |
 | `tba event awards <key>` | Show event awards |
@@ -829,6 +982,9 @@ identical archives.
 | `tba event district-points <key>` | Show district points (`--tiebreakers`) |
 | `tba event predictions <key>` | Show match predictions (`--rankings`, `--stats`) |
 | `tba event insights <key>` | Show event insights (`--level qual\|playoff`) |
+| `tba event predictions <key>` | Show predictions |
+| `tba event insights <key>` | Show event insights |
+| `tba event export <key> --to csv\|tsv\|json` | Export an event's datasets to files (`--dir`, `--only`, `--prefix`, `--force`, `--dry-run`) |
 | `tba match view <key>` | View match details |
 | `tba district list` | List districts (defaults to the current season) |
 | `tba district events <key>` | List district events |

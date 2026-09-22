@@ -395,9 +395,10 @@ func (c *Client) attempt(ctx context.Context, url string, cached *cache.Entry) (
 		message := truncateErrorBody(string(body))
 		switch resp.StatusCode {
 		case http.StatusUnauthorized:
-			return nil, outcome{}, clierr.Auth("not authenticated for %s (HTTP 401): run 'tba auth login'", c.baseURL)
+			return nil, outcome{}, clierr.Auth("not authenticated for %s (HTTP 401): run 'tba auth login' with a working API key. Get one at %s",
+				c.baseURL, config.APIKeyPage)
 		case http.StatusNotFound:
-			return nil, outcome{}, clierr.NotFound("API error 404: %s", message)
+			return nil, outcome{}, clierr.NotFound("%s", notFoundMessage(body))
 		}
 		return nil, c.outcomeFor(resp), &httpError{status: resp.StatusCode, body: message}
 	}

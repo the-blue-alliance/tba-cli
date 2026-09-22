@@ -22,6 +22,7 @@ func newEventCmd() *cobra.Command {
 	eventCmd.AddCommand(newEventTeamsCmd())
 	eventCmd.AddCommand(newEventMatchesCmd())
 	eventCmd.AddCommand(newEventRankingsCmd())
+	eventCmd.AddCommand(newEventWatchCmd())
 	eventCmd.AddCommand(newEventAlliancesCmd())
 	eventCmd.AddCommand(newEventTeamStatusesCmd())
 	eventCmd.AddCommand(newEventAwardsCmd())
@@ -29,6 +30,7 @@ func newEventCmd() *cobra.Command {
 	eventCmd.AddCommand(newEventDistrictPointsCmd())
 	eventCmd.AddCommand(newEventPredictionsCmd())
 	eventCmd.AddCommand(newEventInsightsCmd())
+	eventCmd.AddCommand(newEventExportCmd())
 	return eventCmd
 }
 
@@ -38,7 +40,7 @@ func newEventViewCmd() *cobra.Command {
 		Short: "View event info",
 		Example: `  tba event view 2024cthar
   tba event view 2024necmp --format json`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event view 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -52,37 +54,44 @@ func newEventViewCmd() *cobra.Command {
 				return err
 			}
 			return outputData(cmd, event, func() {
-				week := "N/A"
-				if event.Week != nil {
-					week = humanWeek(event.Week)
-				}
-				pairs := []string{
-					"Event", event.Name,
-					"Key", event.Key,
-					"Type", event.EventTypeStr,
-				}
-				pairs = appendPair(pairs, "District", districtName(event.District))
-				pairs = append(pairs,
-					"Location", output.FormatLocation(event.City, event.StateProv, event.Country),
-					"Venue", event.LocationName,
-					"Dates", fmt.Sprintf("%s to %s", event.StartDate, event.EndDate),
-					"Week", week,
-				)
-				pairs = appendPair(pairs, "Playoff", playoffTypeName(event.PlayoffType))
-				pairs = appendPair(pairs, "Timezone", event.Timezone)
-				pairs = appendPair(pairs, "Website", event.Website)
-				if event.FirstEventCode != nil {
-					pairs = appendPair(pairs, "First Code", *event.FirstEventCode)
-				}
-				// One line per webcast: an event can stream several fields at
-				// once, and each needs its own link.
-				for _, w := range event.Webcasts {
-					pairs = appendPair(pairs, "Webcast", webcastURL(w))
-				}
-				output.PrintKeyValue(cmd.OutOrStdout(), pairs...)
+				output.PrintKeyValue(cmd.OutOrStdout(), eventDetailPairs(event)...)
 			})
 		},
 	}
+}
+
+// eventDetailPairs describes an event as alternating key/value strings, in the
+// order `event view` prints them. `event export` reuses it so an exported
+// event carries exactly the fields the command shows.
+func eventDetailPairs(event api.Event) []string {
+	week := "N/A"
+	if event.Week != nil {
+		week = humanWeek(event.Week)
+	}
+	pairs := []string{
+		"Event", event.Name,
+		"Key", event.Key,
+		"Type", event.EventTypeStr,
+	}
+	pairs = appendPair(pairs, "District", districtName(event.District))
+	pairs = append(pairs,
+		"Location", output.FormatLocation(event.City, event.StateProv, event.Country),
+		"Venue", event.LocationName,
+		"Dates", fmt.Sprintf("%s to %s", event.StartDate, event.EndDate),
+		"Week", week,
+	)
+	pairs = appendPair(pairs, "Playoff", playoffTypeName(event.PlayoffType))
+	pairs = appendPair(pairs, "Timezone", event.Timezone)
+	pairs = appendPair(pairs, "Website", event.Website)
+	if event.FirstEventCode != nil {
+		pairs = appendPair(pairs, "First Code", *event.FirstEventCode)
+	}
+	// One line per webcast: an event can stream several fields at once, and
+	// each needs its own link.
+	for _, w := range event.Webcasts {
+		pairs = appendPair(pairs, "Webcast", webcastURL(w))
+	}
+	return pairs
 }
 
 func newEventListCmd() *cobra.Command {
@@ -137,7 +146,11 @@ returns.`,
 				}
 			}
 			headers := []string{"Key", "Name", "Type", "Week", "Start", "End", "Location", "District"}
-			return outputTable(cmd, events, headers, rows)
+			note := fmt.Sprintf("no events in %d", year)
+			if filterFlagsGiven(cmd) {
+				note = "no events match those filters"
+			}
+			return outputTableWithEmptyNote(cmd, events, headers, rows, note)
 		},
 	}
 	addYearFlag(c)
@@ -156,7 +169,7 @@ func newEventTeamsCmd() *cobra.Command {
 		Short: "List teams at event",
 		Example: `  tba event teams 2024cthar
   tba event teams 2024cthar --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event teams 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -169,13 +182,20 @@ func newEventTeamsCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/teams", args[0]), &teams); err != nil {
 				return err
 			}
-			rows := make([][]string, len(teams))
-			for i, t := range teams {
-				rows[i] = []string{fmt.Sprintf("%d", t.TeamNumber), t.Nickname, output.FormatLocation(t.City, t.StateProv, t.Country)}
-			}
-			return outputTable(cmd, teams, []string{"Number", "Name", "Location"}, rows)
+			table := eventTeamsTable(teams)
+			return outputTableWithEmptyNote(cmd, teams, table.Headers, table.Rows,
+				fmt.Sprintf("no teams listed for %s yet", args[0]))
 		},
 	}
+}
+
+// eventTeamsTable renders the teams attending an event, in the order given.
+func eventTeamsTable(teams []api.Team) output.Table {
+	rows := make([][]string, len(teams))
+	for i, t := range teams {
+		rows[i] = []string{fmt.Sprintf("%d", t.TeamNumber), t.Nickname, output.FormatLocation(t.City, t.StateProv, t.Country)}
+	}
+	return output.Table{Headers: []string{"Number", "Name", "Location"}, Rows: rows}
 }
 
 func newEventMatchesCmd() *cobra.Command {
@@ -187,7 +207,7 @@ func newEventMatchesCmd() *cobra.Command {
   tba event matches 2024cthar --level playoff
   tba event matches 2024cthar --format csv
   tba event matches 2024cthar --jq '.[].key' -r`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event matches 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -224,7 +244,7 @@ as Total Ranking Points. The columns therefore differ from season to season.`,
   tba event rankings 2024cthar --format markdown
   tba event rankings 2024cthar --columns rank,team,name,"ranking score"
   tba event rankings 2024cthar --sort=-played`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event rankings 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -258,35 +278,46 @@ as Total Ranking Points. The columns therefore differ from season to season.`,
 				}
 			}
 
-			sort.SliceStable(rankings.Rankings, func(i, j int) bool {
-				return rankings.Rankings[i].Rank < rankings.Rankings[j].Rank
-			})
-
-			headers := []string{"Rank", "Team", "Name", "Record", "Played", "DQ"}
-			for _, info := range rankings.SortOrderInfo {
-				headers = append(headers, info.Name)
-			}
-			for _, info := range rankings.ExtraStatsInfo {
-				headers = append(headers, info.Name)
-			}
-
-			rows := make([][]string, len(rankings.Rankings))
-			for i, r := range rankings.Rankings {
-				row := []string{
-					strconv.Itoa(r.Rank),
-					output.TeamNumberFromKey(r.TeamKey),
-					nicknames[r.TeamKey],
-					formatWLT(r.Record),
-					strconv.Itoa(r.MatchesPlayed),
-					strconv.Itoa(r.DQ),
-				}
-				row = append(row, formatStats(r.SortOrders, rankings.SortOrderInfo)...)
-				row = append(row, formatStats(r.ExtraStats, rankings.ExtraStatsInfo)...)
-				rows[i] = row
-			}
-			return outputTable(cmd, rankings, headers, rows)
+			table := eventRankingsTable(&rankings, nicknames)
+			return outputTable(cmd, rankings, table.Headers, table.Rows)
 		},
 	}
+}
+
+// eventRankingsTable renders qualification rankings, lowest rank first. The
+// columns after DQ are whatever the season declared, so they change from year
+// to year; nicknames fills the Name column and may be nil or incomplete.
+//
+// The rankings are sorted in place: the caller hands JSON output the same
+// struct, and the two should agree on the order.
+func eventRankingsTable(rankings *api.EventRankings, nicknames map[string]string) output.Table {
+	sort.SliceStable(rankings.Rankings, func(i, j int) bool {
+		return rankings.Rankings[i].Rank < rankings.Rankings[j].Rank
+	})
+
+	headers := []string{"Rank", "Team", "Name", "Record", "Played", "DQ"}
+	for _, info := range rankings.SortOrderInfo {
+		headers = append(headers, info.Name)
+	}
+	for _, info := range rankings.ExtraStatsInfo {
+		headers = append(headers, info.Name)
+	}
+
+	rows := make([][]string, len(rankings.Rankings))
+	for i, r := range rankings.Rankings {
+		row := []string{
+			strconv.Itoa(r.Rank),
+			output.TeamNumberFromKey(r.TeamKey),
+			nicknames[r.TeamKey],
+			formatWLT(r.Record),
+			strconv.Itoa(r.MatchesPlayed),
+			strconv.Itoa(r.DQ),
+		}
+		row = append(row, formatStats(r.SortOrders, rankings.SortOrderInfo)...)
+		row = append(row, formatStats(r.ExtraStats, rankings.ExtraStatsInfo)...)
+		rows[i] = row
+	}
+	return output.Table{Headers: headers, Rows: rows}
 }
 
 func newEventAlliancesCmd() *cobra.Command {
@@ -303,7 +334,7 @@ is its playoff win-loss-tie.`,
 		Example: `  tba event alliances 2024cthar
   tba event alliances 2024cthar --format json
   tba event alliances 2024cthar --columns alliance,captain,status`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event alliances 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -316,36 +347,42 @@ is its playoff win-loss-tie.`,
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/alliances", args[0]), &alliances); err != nil {
 				return err
 			}
-			headers := []string{"Alliance", "Captain", "Pick 1", "Pick 2", "Backup", "Status", "Level", "Record", "Declines"}
-			rows := make([][]string, len(alliances))
-			for i, a := range alliances {
-				// Most seasons name their alliances; the ones that do not are
-				// still numbered by selection order.
-				name := fmt.Sprintf("Alliance %d", i+1)
-				if a.Name != nil && *a.Name != "" {
-					name = *a.Name
-				}
-				status, level, record := "", "", ""
-				if a.Status != nil {
-					status = a.Status.Status
-					level = strings.ToUpper(a.Status.Level)
-					record = formatWLT(a.Status.Record)
-				}
-				rows[i] = []string{
-					name,
-					pickAt(a.Picks, 0),
-					pickAt(a.Picks, 1),
-					pickAt(a.Picks, 2),
-					formatBackup(a.Backup),
-					status,
-					level,
-					record,
-					joinTeamNumbers(a.Declines),
-				}
-			}
-			return outputTable(cmd, alliances, headers, rows)
+			table := eventAlliancesTable(alliances)
+			return outputTable(cmd, alliances, table.Headers, table.Rows)
 		},
 	}
+}
+
+// eventAlliancesTable renders the playoff alliances in selection order.
+func eventAlliancesTable(alliances []api.EventAlliance) output.Table {
+	headers := []string{"Alliance", "Captain", "Pick 1", "Pick 2", "Backup", "Status", "Level", "Record", "Declines"}
+	rows := make([][]string, len(alliances))
+	for i, a := range alliances {
+		// Most seasons name their alliances; the ones that do not are still
+		// numbered by selection order.
+		name := fmt.Sprintf("Alliance %d", i+1)
+		if a.Name != nil && *a.Name != "" {
+			name = *a.Name
+		}
+		status, level, record := "", "", ""
+		if a.Status != nil {
+			status = a.Status.Status
+			level = strings.ToUpper(a.Status.Level)
+			record = formatWLT(a.Status.Record)
+		}
+		rows[i] = []string{
+			name,
+			pickAt(a.Picks, 0),
+			pickAt(a.Picks, 1),
+			pickAt(a.Picks, 2),
+			formatBackup(a.Backup),
+			status,
+			level,
+			record,
+			joinTeamNumbers(a.Declines),
+		}
+	}
+	return output.Table{Headers: headers, Rows: rows}
 }
 
 // pickAt renders the nth alliance pick, or an empty cell when an alliance is
@@ -384,7 +421,7 @@ func newEventAwardsCmd() *cobra.Command {
 		Short: "Show event awards",
 		Example: `  tba event awards 2024cthar
   tba event awards 2024cthar --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event awards 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -397,26 +434,32 @@ func newEventAwardsCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/awards", args[0]), &awards); err != nil {
 				return err
 			}
-			rows := make([][]string, len(awards))
-			for i, a := range awards {
-				recipient := ""
-				if len(a.Recipients) > 0 {
-					r := a.Recipients[0]
-					if r.TeamKey != nil {
-						recipient = output.TeamNumberFromKey(*r.TeamKey)
-					}
-					if r.Awardee != nil {
-						if recipient != "" {
-							recipient += " - "
-						}
-						recipient += *r.Awardee
-					}
-				}
-				rows[i] = []string{a.Name, recipient}
-			}
-			return outputTable(cmd, awards, []string{"Award", "Recipient"}, rows)
+			table := eventAwardsTable(awards)
+			return outputTable(cmd, awards, table.Headers, table.Rows)
 		},
 	}
+}
+
+// eventAwardsTable renders an event's awards in the order given.
+func eventAwardsTable(awards []api.Award) output.Table {
+	rows := make([][]string, len(awards))
+	for i, a := range awards {
+		recipient := ""
+		if len(a.Recipients) > 0 {
+			r := a.Recipients[0]
+			if r.TeamKey != nil {
+				recipient = output.TeamNumberFromKey(*r.TeamKey)
+			}
+			if r.Awardee != nil {
+				if recipient != "" {
+					recipient += " - "
+				}
+				recipient += *r.Awardee
+			}
+		}
+		rows[i] = []string{a.Name, recipient}
+	}
+	return output.Table{Headers: []string{"Award", "Recipient"}, Rows: rows}
 }
 
 func newEventOPRsCmd() *cobra.Command {
@@ -425,7 +468,7 @@ func newEventOPRsCmd() *cobra.Command {
 		Short: "Show event OPRs",
 		Example: `  tba event oprs 2024cthar
   tba event oprs 2024cthar --format csv`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event oprs 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -438,31 +481,38 @@ func newEventOPRsCmd() *cobra.Command {
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/oprs", args[0]), &oprs); err != nil {
 				return err
 			}
-			teamKeys := make([]string, 0, len(oprs.OPRs))
-			for team := range oprs.OPRs {
-				teamKeys = append(teamKeys, team)
-			}
-			// Map iteration order is random; sort so the output is stable.
-			sort.Slice(teamKeys, func(i, j int) bool {
-				a, errA := strconv.Atoi(output.TeamNumberFromKey(teamKeys[i]))
-				b, errB := strconv.Atoi(output.TeamNumberFromKey(teamKeys[j]))
-				if errA == nil && errB == nil {
-					return a < b
-				}
-				return teamKeys[i] < teamKeys[j]
-			})
-			var rows [][]string
-			for _, team := range teamKeys {
-				rows = append(rows, []string{
-					output.TeamNumberFromKey(team),
-					fmt.Sprintf("%.2f", oprs.OPRs[team]),
-					fmt.Sprintf("%.2f", oprs.DPRs[team]),
-					fmt.Sprintf("%.2f", oprs.CCWMs[team]),
-				})
-			}
-			return outputTable(cmd, oprs, []string{"Team", "OPR", "DPR", "CCWM"}, rows)
+			table := eventOPRsTable(oprs)
+			return outputTable(cmd, oprs, table.Headers, table.Rows)
 		},
 	}
+}
+
+// eventOPRsTable renders the calculated contributions, one row per team,
+// ordered by team number.
+func eventOPRsTable(oprs api.EventOPRs) output.Table {
+	teamKeys := make([]string, 0, len(oprs.OPRs))
+	for team := range oprs.OPRs {
+		teamKeys = append(teamKeys, team)
+	}
+	// Map iteration order is random; sort so the output is stable.
+	sort.Slice(teamKeys, func(i, j int) bool {
+		a, errA := strconv.Atoi(output.TeamNumberFromKey(teamKeys[i]))
+		b, errB := strconv.Atoi(output.TeamNumberFromKey(teamKeys[j]))
+		if errA == nil && errB == nil {
+			return a < b
+		}
+		return teamKeys[i] < teamKeys[j]
+	})
+	var rows [][]string
+	for _, team := range teamKeys {
+		rows = append(rows, []string{
+			output.TeamNumberFromKey(team),
+			fmt.Sprintf("%.2f", oprs.OPRs[team]),
+			fmt.Sprintf("%.2f", oprs.DPRs[team]),
+			fmt.Sprintf("%.2f", oprs.CCWMs[team]),
+		})
+	}
+	return output.Table{Headers: []string{"Team", "OPR", "DPR", "CCWM"}, Rows: rows}
 }
 
 func newEventDistrictPointsCmd() *cobra.Command {
@@ -479,7 +529,7 @@ JSON output keeps the shape the API returns, an object keyed by team, so
 		Example: `  tba event district-points 2024cthar
   tba event district-points 2024cthar --tiebreakers
   tba event district-points 2024cthar --jq '.points.frc177.total'`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "an event key (e.g. tba event district-points 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateEventKey(args[0]); err != nil {
 				return err
@@ -493,48 +543,11 @@ JSON output keeps the shape the API returns, an object keyed by team, so
 				return err
 			}
 
-			teams := make([]string, 0, len(points.Points))
-			for key := range points.Points {
-				teams = append(teams, key)
-			}
-			// Map order is random, so sort by team number first and then by
-			// total: the result is total descending with ties broken by team
-			// number, and it is the same every run.
-			sortTeamKeys(teams)
-			sort.SliceStable(teams, func(i, j int) bool {
-				return points.Points[teams[i]].Total > points.Points[teams[j]].Total
-			})
-
 			withTiebreakers, _ := cmd.Flags().GetBool("tiebreakers")
-			headers := []string{"Team", "Qual", "Alliance", "Award", "Elim", "Total"}
-			if withTiebreakers {
-				headers = append(headers, "Highest Qual Scores", "Qual Wins")
-			}
-
-			rows := make([][]string, len(teams))
-			for i, key := range teams {
-				p := points.Points[key]
-				row := []string{
-					output.TeamNumberFromKey(key),
-					strconv.Itoa(p.QualPoints),
-					strconv.Itoa(p.AlliancePoints),
-					strconv.Itoa(p.AwardPoints),
-					strconv.Itoa(p.ElimPoints),
-					strconv.Itoa(p.Total),
-				}
-				if withTiebreakers {
-					tb := points.Tiebreakers[key]
-					scores := make([]string, len(tb.HighestQualScores))
-					for n, v := range tb.HighestQualScores {
-						scores[n] = strconv.Itoa(v)
-					}
-					row = append(row, strings.Join(scores, ", "), strconv.Itoa(tb.QualWins))
-				}
-				rows[i] = row
-			}
+			table := eventDistrictPointsTable(points, withTiebreakers)
 			// The parsed struct, not the raw body: PermuteSlice would happily
 			// treat a json.RawMessage as a slice of bytes to reorder.
-			return outputTable(cmd, points, headers, rows)
+			return outputTable(cmd, points, table.Headers, table.Rows)
 		},
 	}
 	c.Flags().Bool("tiebreakers", false, "Add the highest qual scores and qual wins columns")
@@ -542,3 +555,46 @@ JSON output keeps the shape the API returns, an object keyed by team, so
 }
 
 // The predictions and insights commands live in event_insights.go.
+// eventDistrictPointsTable renders an event's district points, highest total
+// first. withTiebreakers adds the two columns that break a tie on total.
+func eventDistrictPointsTable(points api.EventDistrictPoints, withTiebreakers bool) output.Table {
+	teams := make([]string, 0, len(points.Points))
+	for key := range points.Points {
+		teams = append(teams, key)
+	}
+	// Map order is random, so sort by team number first and then by total: the
+	// result is total descending with ties broken by team number, and it is
+	// the same every run.
+	sortTeamKeys(teams)
+	sort.SliceStable(teams, func(i, j int) bool {
+		return points.Points[teams[i]].Total > points.Points[teams[j]].Total
+	})
+
+	headers := []string{"Team", "Qual", "Alliance", "Award", "Elim", "Total"}
+	if withTiebreakers {
+		headers = append(headers, "Highest Qual Scores", "Qual Wins")
+	}
+
+	rows := make([][]string, len(teams))
+	for i, key := range teams {
+		p := points.Points[key]
+		row := []string{
+			output.TeamNumberFromKey(key),
+			strconv.Itoa(p.QualPoints),
+			strconv.Itoa(p.AlliancePoints),
+			strconv.Itoa(p.AwardPoints),
+			strconv.Itoa(p.ElimPoints),
+			strconv.Itoa(p.Total),
+		}
+		if withTiebreakers {
+			tb := points.Tiebreakers[key]
+			scores := make([]string, len(tb.HighestQualScores))
+			for n, v := range tb.HighestQualScores {
+				scores[n] = strconv.Itoa(v)
+			}
+			row = append(row, strings.Join(scores, ", "), strconv.Itoa(tb.QualWins))
+		}
+		rows[i] = row
+	}
+	return output.Table{Headers: headers, Rows: rows}
+}

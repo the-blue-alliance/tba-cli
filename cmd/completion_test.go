@@ -53,7 +53,7 @@ func TestEventKeyCompletionFromAWarmCache(t *testing.T) {
 
 func TestEventKeyCompletionCoversEveryEventSubcommand(t *testing.T) {
 	warmCache(t, "event", "list", "--year", "2024")
-	for _, sub := range []string{"view", "teams", "matches", "rankings", "alliances", "awards", "oprs"} {
+	for _, sub := range []string{"view", "teams", "matches", "rankings", "alliances", "awards", "oprs", "export"} {
 		t.Run(sub, func(t *testing.T) {
 			got := complete(t, nil, "event", sub, "2024ct")
 			if len(got) != 1 || !strings.HasPrefix(got[0], "2024cthar\t") {
@@ -191,6 +191,64 @@ func TestOpenCompletesEventAndMatchKeys(t *testing.T) {
 	}
 	if !strings.Contains(joined, "2024cthar_qm1") {
 		t.Errorf("completions = %v, want the match key", got)
+	}
+}
+
+// completeRaw is complete with the directive line, which says whether the
+// shell falls back to file names.
+func completeRaw(t *testing.T, args ...string) (suggestions []string, directive string) {
+	t.Helper()
+	out, stderr, err := runCmd(t, nil, append([]string{"__complete"}, args...)...)
+	requireNoError(t, err, stderr)
+	for _, l := range lines(out) {
+		switch {
+		case l == "":
+		case strings.HasPrefix(l, ":"):
+			directive = l
+		default:
+			suggestions = append(suggestions, l)
+		}
+	}
+	return suggestions, directive
+}
+
+// The global enum flags used to complete to file names, which is never the
+// right answer for --format.
+func TestGlobalEnumFlagsComplete(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"format", []string{"event", "list", "--format", ""}, []string{"auto", "table", "json", "csv", "tsv", "markdown"}},
+		{"format prefix", []string{"team", "view", "--format", "t"}, []string{"table", "tsv"}},
+		{"color", []string{"status", "--color", ""}, []string{"auto", "always", "never"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, directive := completeRaw(t, tc.args...)
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Errorf("completions = %v, want %v", got, tc.want)
+			}
+			if directive != ":4" {
+				t.Errorf("directive = %q, want :4 (NoFileComp)", directive)
+			}
+		})
+	}
+}
+
+// A value only the user knows still beats a list of file names.
+func TestOpenEndedGlobalFlagsOfferNoFiles(t *testing.T) {
+	for _, flag := range []string{"--jq", "--columns", "--sort", "--base-url", "--timeout", "--retries"} {
+		t.Run(flag, func(t *testing.T) {
+			got, directive := completeRaw(t, "event", "list", flag, "")
+			if len(got) != 0 {
+				t.Errorf("completions = %v, want none", got)
+			}
+			if directive != ":4" {
+				t.Errorf("directive = %q, want :4 (NoFileComp)", directive)
+			}
+		})
 	}
 }
 

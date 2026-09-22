@@ -37,9 +37,11 @@ func launchBrowser(url string) error {
 	return nil
 }
 
-// teamTargetPattern matches a bare team number, with or without the "frc"
-// prefix, in any case: 177, frc177 and FRC177 are the same team.
-var teamTargetPattern = regexp.MustCompile(`^(?i:frc)?([0-9]+)$`)
+// teamTargetish matches an argument that can only have been meant as a team:
+// digits, or anything at all behind an "frc" prefix. Whether it really is a
+// team number is validateTeamArg's decision, so that "frc17x7" is told it is
+// not a team number rather than that it is not anything at all.
+var teamTargetish = regexp.MustCompile(`^(?i:frc.*|[0-9]+)$`)
 
 // webPathFor turns an `open` argument into a path on thebluealliance.com.
 //
@@ -48,8 +50,11 @@ var teamTargetPattern = regexp.MustCompile(`^(?i:frc)?([0-9]+)$`)
 // ambiguous. year is appended only for teams, and only when it was asked for.
 func webPathFor(target string, year int) (string, error) {
 	trimmed := strings.TrimSpace(target)
-	if m := teamTargetPattern.FindStringSubmatch(trimmed); m != nil {
-		number, err := strconv.Atoi(m[1])
+	if teamTargetish.MatchString(trimmed) {
+		if err := validateTeamArg(trimmed); err != nil {
+			return "", err
+		}
+		number, err := strconv.Atoi(teamNumberOf(trimmed))
 		if err == nil {
 			if year > 0 {
 				return fmt.Sprintf("/team/%d/%d", number, year), nil
@@ -87,7 +92,7 @@ which is what you want in a script or over ssh.`,
   tba open 177 --year 2024
   tba open 2024cthar
   tba open 2024cthar_qm12 --print`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1, "a team number, an event key or a match key (e.g. tba open 2024cthar)"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			year, _ := cmd.Flags().GetInt("year")
 			path, err := webPathFor(args[0], year)

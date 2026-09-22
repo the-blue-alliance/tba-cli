@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/config"
 )
 
 // ValidateKey checks an API key against a TBA deployment by asking it for
@@ -33,7 +34,7 @@ func ValidateKey(ctx context.Context, baseURL, key string) error {
 	case http.StatusOK:
 		return nil
 	case http.StatusUnauthorized:
-		return clierr.Auth("that API key was rejected by %s (HTTP 401)", baseURL)
+		return clierr.Auth("that API key was rejected by %s (HTTP 401). Get one at %s", baseURL, config.APIKeyPage)
 	default:
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API error %d: %s", resp.StatusCode, truncateErrorBody(string(body)))

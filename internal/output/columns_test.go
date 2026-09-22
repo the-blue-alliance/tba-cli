@@ -257,6 +257,30 @@ func TestPermuteSliceLeavesOtherShapesAlone(t *testing.T) {
 	}
 }
 
+func TestCanPermuteAnswersWhetherAnOrderApplies(t *testing.T) {
+	cases := []struct {
+		name  string
+		data  interface{}
+		order []int
+		want  bool
+	}{
+		{"matching slice", []string{"a", "b"}, []int{1, 0}, true},
+		{"empty slice, empty order", []string{}, []int{}, true},
+		{"map", map[string]int{"a": 1}, []int{0}, false},
+		{"struct", struct{ A int }{1}, []int{0}, false},
+		{"length mismatch", []string{"a", "b"}, []int{0}, false},
+		{"raw json", json.RawMessage(`[1,2]`), []int{1, 0}, false},
+		{"nil", nil, []int{0}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CanPermute(tc.data, tc.order); got != tc.want {
+				t.Errorf("CanPermute(%#v, %v) = %v, want %v", tc.data, tc.order, got, tc.want)
+			}
+		})
+	}
+}
+
 func mustOrder(t *testing.T, tbl Table, spec string) []int {
 	t.Helper()
 	order, err := tbl.SortOrder(spec)

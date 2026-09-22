@@ -21,7 +21,10 @@ type eventTypeAlias struct {
 var eventTypeAliases = []eventTypeAlias{
 	{"regional", []int{0}},
 	{"district", []int{1}},
-	{"dcmp", []int{2}},
+	// A district championship that is large enough gets split into divisions
+	// (event_type 5) that feed a finals event (event_type 2). Both are the
+	// DCMP, so "dcmp" covers them; "dcmp-division" narrows to the divisions.
+	{"dcmp", []int{2, 5}},
 	{"dcmp-division", []int{5}},
 	{"cmp-division", []int{3}},
 	{"cmp-finals", []int{4}},
@@ -95,13 +98,27 @@ type eventFilter struct {
 	country  string
 }
 
+// firstFRCSeason is the earliest season The Blue Alliance holds events for. A
+// year below it is a typo, and answering it with an empty list looks like "that
+// season had no events".
+const firstFRCSeason = 1992
+
 func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 	var f eventFilter
+	// Week 0 is not a week: the flag is 1-based, the way thebluealliance.com
+	// numbers weeks, and 0 is only the "no week filter" default. Asking for it
+	// explicitly and being handed the whole season is worse than being told.
 	week, _ := cmd.Flags().GetInt("week")
-	if week < 0 {
-		return f, clierr.Usage("invalid --week %d (weeks are numbered from 1)", week)
+	if cmd.Flags().Changed("week") && week < 1 {
+		return f, clierr.Usage("invalid --week %d (weeks are numbered from 1, as thebluealliance.com numbers them)", week)
 	}
 	f.week = week
+
+	// A season that predates FRC's records would print an empty list, which
+	// reads as "no events that year" rather than "no such year".
+	if year := settings(cmd).Int("year"); year != 0 && year < firstFRCSeason {
+		return f, clierr.Usage("--year %d is before the first FRC season (%d)", year, firstFRCSeason)
+	}
 
 	typeSpec, _ := cmd.Flags().GetString("type")
 	types, err := parseEventTypes(typeSpec)
@@ -110,10 +127,31 @@ func eventFilterFromFlags(cmd *cobra.Command) (eventFilter, error) {
 	}
 	f.types = types
 
+	// --team narrows the fetch rather than the fetched list, so the value is
+	// checked here and used by the caller; a typo is a usage error instead of
+	// a request for a team that cannot exist.
+	if team, _ := cmd.Flags().GetString("team"); strings.TrimSpace(team) != "" {
+		if err := validateTeamArg(team); err != nil {
+			return f, err
+		}
+	}
+
 	f.district, _ = cmd.Flags().GetString("district")
 	f.state, _ = cmd.Flags().GetString("state")
 	f.country, _ = cmd.Flags().GetString("country")
 	return f, nil
+}
+
+// filterFlagsGiven reports whether this invocation narrowed the event list at
+// all, which decides whether an empty result is "no events that season" or "no
+// events match those filters".
+func filterFlagsGiven(cmd *cobra.Command) bool {
+	for _, name := range []string{"week", "type", "district", "state", "country", "team"} {
+		if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
+			return true
+		}
+	}
+	return false
 }
 
 func (f eventFilter) match(e api.Event) bool {

@@ -119,6 +119,20 @@ func TestOpenRejectsAnUnrecognizedTarget(t *testing.T) {
 	}
 }
 
+// A target that was plainly meant as a team is told that it is not a team
+// number, rather than that it is not anything at all.
+func TestOpenRejectsABadTeamTarget(t *testing.T) {
+	for _, target := range []string{"frc17x7", "1771771"} {
+		t.Run(target, func(t *testing.T) {
+			_, _, err := runCmd(t, nil, "open", target)
+			if got := clierr.ExitCode(err); got != clierr.ExitUsage {
+				t.Fatalf("exit code for %q = %d (err %v), want %d", target, got, err, clierr.ExitUsage)
+			}
+			requireErrorContains(t, err, "is not a team number")
+		})
+	}
+}
+
 func TestOpenNeedsExactlyOneTarget(t *testing.T) {
 	_, _, err := runCmd(t, nil, "open")
 	if got := clierr.ExitCode(err); got != clierr.ExitUsage {

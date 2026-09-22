@@ -130,6 +130,25 @@ func TestEventListTypeFilter(t *testing.T) {
 	}
 }
 
+// A district championship that is large enough runs as divisions (event_type
+// 5) feeding a finals event (event_type 2). Both are the DCMP, so --type dcmp
+// has to show both; --type dcmp-division narrows to the divisions.
+func TestEventListDcmpIncludesDivisions(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/events/2024": `[
+		{"key":"2024micmp","name":"FIM Championship","event_type":2,"event_type_string":"District Championship",
+		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6},
+		{"key":"2024micmp1","name":"FIM Championship - APTIV Division","event_type":5,
+		 "event_type_string":"District Championship Division",
+		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6},
+		{"key":"2024cthar","name":"NE District Hartford Event","event_type":1,"event_type_string":"District",
+		 "start_date":"2024-03-28","end_date":"2024-03-30","city":"Hartford","state_prov":"CT","country":"USA","week":3}
+	]`})
+
+	requireKeys(t, listedKeys(t, srv, "--type", "dcmp"), "2024micmp", "2024micmp1")
+	requireKeys(t, listedKeys(t, srv, "--type", "dcmp-division"), "2024micmp1")
+	requireKeys(t, listedKeys(t, srv, "--type", "district"), "2024cthar")
+}
+
 func TestEventListTypeAcceptsMultipleValues(t *testing.T) {
 	srv := eventListServer(t)
 	requireKeys(t, listedKeys(t, srv, "--type", "dcmp,cmp-division"), "2024necmp", "2024mil")
@@ -169,10 +188,36 @@ func TestEventListRejectsUnknownTypeAmongGoodOnes(t *testing.T) {
 	_ = requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--type", "district,nope")
 }
 
-func TestEventListRejectsNegativeWeek(t *testing.T) {
+func TestEventListRejectsAWeekBelowOne(t *testing.T) {
+	// Week 0 is the flag's "no filter" default, so asking for it explicitly
+	// used to list the whole season although the help says weeks start at 1.
+	for _, week := range []string{"-1", "0"} {
+		t.Run("week "+week, func(t *testing.T) {
+			srv := eventListServer(t)
+			err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--week", week)
+			requireErrorContains(t, err, "numbered from 1")
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a usage error must not reach the API, got %v", got)
+			}
+		})
+	}
+}
+
+// Without --week the whole season is listed, which is what week 0 used to do.
+func TestEventListWithoutWeekListsEverything(t *testing.T) {
 	srv := eventListServer(t)
-	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--week", "-1")
-	requireErrorContains(t, err, "numbered from 1")
+	if got := listedKeys(t, srv); len(got) < 2 {
+		t.Errorf("want the whole season, got %v", got)
+	}
+}
+
+func TestEventListRejectsAYearBeforeTheFirstSeason(t *testing.T) {
+	srv := eventListServer(t)
+	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "1800")
+	requireErrorContains(t, err, "--year 1800 is before the first FRC season (1992)")
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a usage error must not reach the API, got %v", got)
+	}
 }
 
 func TestEventListDistrictFilterIgnoresCase(t *testing.T) {

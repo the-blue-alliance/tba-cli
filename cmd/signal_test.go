@@ -94,6 +94,29 @@ func TestAlreadyCancelledContextMakesNoRequest(t *testing.T) {
 	}
 }
 
+// Ctrl-C is not a failure to explain: the person who pressed it knows what
+// happened, and "Error: context canceled" reads like a bug in the tool.
+func TestInterruptIsReportedSilently(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	stdout, stderr, err := runCtx(t, ctx, srv.URL, "status")
+	if err == nil {
+		t.Fatal("want an error for a cancelled context")
+	}
+	if !clierr.Silent(err) {
+		t.Errorf("an interrupt should not be printed, but %v is not silent", err)
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitInterrupt {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitInterrupt)
+	}
+	if stdout != "" || stderr != "" {
+		t.Errorf("nothing should be written: stdout %q, stderr %q", stdout, stderr)
+	}
+}
+
 // Commands must pass the context through, not fall back to Background.
 func TestCommandsUseTheirContext(t *testing.T) {
 	cases := [][]string{
