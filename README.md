@@ -535,6 +535,62 @@ tba event matches 2024cthar --level playoff --format csv
 
 Filters apply to `--format json` too, so `--jq` and `--format csv` always see the same rows.
 
+### At an event
+
+Three commands answer the questions you have while an event is running.
+
+`tba match view <key>` is one match in full: what it is called, when it is relative to now, both alliances by driver station, the game's own score breakdown, and links to any video.
+
+```
+$ tba match view 2024cthar_qm12
+Match:       Qual 12
+Key:         2024cthar_qm12
+Event:       2024cthar
+Status:      Played
+Time:        Fri 14:07 (actual, 2h ago)
+Red:         R1 177, R2 1073, R3 5507
+Red Score:   88
+Blue:        B1 230, B2 1071, B3 4055*
+Blue Score:  61
+Winner:      red
+```
+
+The score breakdown's fields change every season and are documented nowhere, so they are listed as the API gives them, sorted, with nested values flattened into dotted names. A match with no breakdown — anything before 2015, or anything not yet played — simply has no such section.
+
+`tba team next <team> [event]` finds the next match a team has not played. With no event it uses the one the team is at today, or the next one it is going to:
+
+```
+$ tba team next 177
+Event:      NE District Hartford Event (2024cthar)
+Match:      SF 13 (2024cthar_sf13m1)
+Alliance:   red
+Station:    R1
+Partners:   1073, 5507
+Opponents:  230, 195, 558
+Time:       Sun 13:00 (predicted)
+Starts in:  18m
+```
+
+A match whose time has already passed reads `Overdue by` instead. `--all` prints everything still to play as the match table above. If the team is neither competing today nor signed up for anything later that season, that is an error (exit 1), not an empty answer.
+
+`tba team standing <team> --event KEY` is how one team stands at one event:
+
+```
+$ tba team standing 177 --event 2024cthar
+Team:           177
+Event:          2024cthar
+Rank:           1 of 40
+Record:         10-2-0
+Played:         12
+Ranking Score:  2.50
+Avg Match:      88
+Alliance:       Alliance 1 (Captain)
+Playoff:        Finals — won (6-1-0)
+Status:         Team 177 was Rank 1 with a record of 10-2-0 and won the event.
+```
+
+The rows between `Record` and `Alliance` are the season's own ranking tiebreakers, named and rounded the way the event reports them. Each part of the answer only exists once that part of the event has happened, so before it starts you get `not ranked yet`, `not selected` and `not started` rather than blanks. A team that is not attending the event has no standing there, which is exit 5.
+
 ## Scripting
 
 `tba` is meant to be piped into other tools.
@@ -645,6 +701,8 @@ identical archives.
 | `tba team events <number>` | List team events |
 | `tba team years <number>` | List the seasons a team competed in |
 | `tba team matches <number>` | List team matches |
+| `tba team next <number> [event]` | Show a team's next match |
+| `tba team standing <number> --event <key>` | Show a team's standing at an event |
 | `tba team awards <number>` | List team awards |
 | `tba team media <number>` | List team media |
 | `tba team robots <number>` | List team robots |
