@@ -125,9 +125,9 @@ func NeedsDate(matches []api.Match, loc *time.Location, now time.Time) bool {
 func Relative(t, now time.Time) string {
 	d := t.Sub(now)
 	if d < 0 {
-		return Magnitude(-d) + " ago"
+		return humanize.Age(-d) + " ago"
 	}
-	return "in " + Magnitude(d)
+	return "in " + humanize.Age(d)
 }
 
 // RelativeEpoch is Relative for an optional Unix timestamp, returning "" when
@@ -138,9 +138,3 @@ func RelativeEpoch(epoch *int64, now time.Time) string {
 	}
 	return Relative(time.Unix(*epoch, 0), now)
 }
-
-// Magnitude renders a non-negative duration with a single coarse unit,
-// because a countdown of "1h 3m 12s" is harder to read at a glance than "1h".
-// A negative duration is measured as its absolute value, so a caller that has
-// already chosen a "before"/"after" wording cannot print a minus sign.
-func Magnitude(d time.Duration) string { return humanize.Age(d) }

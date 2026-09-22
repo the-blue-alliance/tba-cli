@@ -116,6 +116,29 @@ func (s *settingsSet) validate() error {
 	if s.Duration("timeout") <= 0 {
 		return s.settingError("timeout", "timeout must be positive")
 	}
+	return s.validateBaseURL()
+}
+
+// validateBaseURL refuses a base URL that is not one.
+//
+// `tba config set base-url nonsense` had been refused all along, while
+// TBA_BASE_URL=nonsense went through and surfaced three layers down as
+// "not authenticated for nonsense" -- a message about a key, for a mistake in
+// a URL. config.Key.ParseValue is the judge here too, so the same text gets
+// the same answer wherever it was written.
+func (s *settingsSet) validateBaseURL() error {
+	raw := s.String("base-url")
+	if raw == "" {
+		// Unset means the default, which is a URL by construction.
+		return nil
+	}
+	k, ok := config.LookupKey("base-url")
+	if !ok {
+		return nil
+	}
+	if _, err := k.ParseValue(raw); err != nil {
+		return s.settingError("base-url", err.Error())
+	}
 	return nil
 }
 

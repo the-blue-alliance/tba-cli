@@ -9,6 +9,7 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/frc"
+	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -271,9 +272,9 @@ func printNextMatch(cmd *cobra.Command, m api.Match, event api.Event, team strin
 		// A match that should already have started is overdue, not "in -3m".
 		d := time.Unix(*epoch, 0).Sub(now)
 		if d < 0 {
-			pairs = append(pairs, "Overdue by", frc.Magnitude(d))
+			pairs = append(pairs, "Overdue by", humanize.Age(d))
 		} else {
-			pairs = append(pairs, "Starts in", frc.Magnitude(d))
+			pairs = append(pairs, "Starts in", humanize.Age(d))
 		}
 	}
 	output.PrintKeyValue(cmd.OutOrStdout(), pairs...)

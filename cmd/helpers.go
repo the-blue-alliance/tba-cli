@@ -398,13 +398,7 @@ func groupArgs() cobra.PositionalArgs {
 		}
 		msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
 		// Cobra's own wording for the same mistake on the root, so a typo
-		// reads the same however deep in the tree it was made. The distance
-		// is the default cobra fills in on the path this stands in for;
-		// SuggestionsFor on its own would compare against zero and never
-		// suggest anything.
-		if cmd.SuggestionsMinimumDistance <= 0 {
-			cmd.SuggestionsMinimumDistance = 2
-		}
+		// reads the same however deep in the tree it was made.
 		if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
 			msg += "\n\nDid you mean this?\n"
 			for _, s := range suggestions {
@@ -424,6 +418,14 @@ func groupArgs() cobra.PositionalArgs {
 func asGroup(cmd *cobra.Command) {
 	if cmd.Args == nil {
 		cmd.Args = groupArgs()
+	}
+	// The distance cobra fills in on the path groupArgs stands in for, set
+	// where the command is built rather than while its arguments are being
+	// checked: SuggestionsFor compares against zero otherwise and never
+	// suggests anything, and a validator is no place to be configuring the
+	// command it is validating.
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = 2
 	}
 	if !cmd.Runnable() {
 		cmd.RunE = func(c *cobra.Command, _ []string) error { return c.Help() }

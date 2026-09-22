@@ -993,7 +993,9 @@ with nothing said about why — so it is refused the same way `tba config set
 timeout 5` always was, naming the key, the value and the file:
 `Error: timeout "5" in /home/you/.config/tba/config.yaml is not a duration; write
 the unit, as in 5s or 1m`. `TBA_TIMEOUT=5` is the same error against the
-variable's name.
+variable's name. `base-url` is judged the same way, as a flag, a variable or a
+file entry: anything that is not an http(s) URL with a host is refused up front
+rather than surfacing later as `not authenticated for nonsense`.
 
 ```
 $ tba config set format table
