@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -301,9 +301,7 @@ func watchPoll(ctx context.Context, client *api.Client, opts watchOptions) ([]ap
 	if err := client.Get(ctx, fmt.Sprintf("/event/%s/rankings", opts.eventKey), &rankings); err != nil {
 		return nil, nil, err
 	}
-	sort.SliceStable(rankings.Rankings, func(i, j int) bool {
-		return rankings.Rankings[i].Rank < rankings.Rankings[j].Rank
-	})
+	slices.SortStableFunc(rankings.Rankings, frc.CompareRankings)
 	return matches, &rankings, nil
 }
 

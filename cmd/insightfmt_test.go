@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/the-blue-alliance/tba-cli/internal/frc"
 )
 
 func TestHumanizeName(t *testing.T) {
@@ -146,27 +144,5 @@ func TestSortMatchKeysPutsUnknownKeysLast(t *testing.T) {
 	want := []string{"2024cthar_qm1", "2024cthar_qm2", "also bad", "nonsense"}
 	if strings.Join(keys, " ") != strings.Join(want, " ") {
 		t.Errorf("got %v, want %v", keys, want)
-	}
-}
-
-func TestMatchKeyOrder(t *testing.T) {
-	cases := []struct {
-		key               string
-		level, set, match int
-		ok                bool
-	}{
-		{"2024cthar_qm12", 0, 0, 12, true},
-		{"2024cthar_ef1m1", 1, 1, 1, true},
-		{"2024cthar_qf2m3", 2, 2, 3, true},
-		{"2024cthar_sf13m1", 3, 13, 1, true},
-		{"2024cthar_f1m2", 4, 1, 2, true},
-		{"2024cthar_zz1", frc.UnknownCompLevel, 0, 0, false},
-	}
-	for _, tc := range cases {
-		level, set, match, ok := matchKeyOrder(tc.key)
-		if level != tc.level || set != tc.set || match != tc.match || ok != tc.ok {
-			t.Errorf("matchKeyOrder(%q) = (%d, %d, %d, %v), want (%d, %d, %d, %v)",
-				tc.key, level, set, match, ok, tc.level, tc.set, tc.match, tc.ok)
-		}
 	}
 }

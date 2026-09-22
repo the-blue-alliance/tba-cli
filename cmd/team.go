@@ -1,8 +1,9 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -174,7 +175,7 @@ to drive a loop over a team's whole history.`,
 				return err
 			}
 			// Newest first: the recent seasons are the ones people look up.
-			sort.Sort(sort.Reverse(sort.IntSlice(years)))
+			slices.SortFunc(years, func(a, b int) int { return cmp.Compare(b, a) })
 			rows := make([][]string, len(years))
 			for i, y := range years {
 				rows[i] = []string{strconv.Itoa(y)}
@@ -356,11 +357,11 @@ func filterAwardsByType(awards []api.Award, awardType int) []api.Award {
 // sortTeamAwards puts the most recent season first, with the event key
 // grouping a season's awards together and keeping the order reproducible.
 func sortTeamAwards(awards []api.Award) {
-	sort.SliceStable(awards, func(i, j int) bool {
-		if awards[i].Year != awards[j].Year {
-			return awards[i].Year > awards[j].Year
+	slices.SortStableFunc(awards, func(a, b api.Award) int {
+		if c := cmp.Compare(b.Year, a.Year); c != 0 {
+			return c
 		}
-		return awards[i].EventKey < awards[j].EventKey
+		return strings.Compare(a.EventKey, b.EventKey)
 	})
 }
 

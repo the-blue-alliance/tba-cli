@@ -1,13 +1,15 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -297,9 +299,7 @@ as Total Ranking Points. The columns therefore differ from season to season.`,
 // The rankings are sorted in place: the caller hands JSON output the same
 // struct, and the two should agree on the order.
 func eventRankingsTable(rankings *api.EventRankings, nicknames map[string]string) output.Table {
-	sort.SliceStable(rankings.Rankings, func(i, j int) bool {
-		return rankings.Rankings[i].Rank < rankings.Rankings[j].Rank
-	})
+	slices.SortStableFunc(rankings.Rankings, frc.CompareRankings)
 
 	headers := []string{"Rank", "Team", "Name", "Record", "Played", "DQ"}
 	for _, info := range rankings.SortOrderInfo {
@@ -514,9 +514,9 @@ func eventOPRsTable(oprs api.EventOPRs) output.Table {
 		teamKeys = append(teamKeys, team)
 	}
 	// Map iteration order is random; sort so the output is stable.
-	sortTeamKeys(teamKeys)
-	sort.SliceStable(teamKeys, func(i, j int) bool {
-		return oprs.OPRs[teamKeys[i]] > oprs.OPRs[teamKeys[j]]
+	slices.SortFunc(teamKeys, frc.CompareTeamKeys)
+	slices.SortStableFunc(teamKeys, func(a, b string) int {
+		return cmp.Compare(oprs.OPRs[b], oprs.OPRs[a])
 	})
 	var rows [][]string
 	for _, team := range teamKeys {
@@ -580,9 +580,9 @@ func eventDistrictPointsTable(points api.EventDistrictPoints, withTiebreakers bo
 	// Map order is random, so sort by team number first and then by total: the
 	// result is total descending with ties broken by team number, and it is
 	// the same every run.
-	sortTeamKeys(teams)
-	sort.SliceStable(teams, func(i, j int) bool {
-		return points.Points[teams[i]].Total > points.Points[teams[j]].Total
+	slices.SortFunc(teams, frc.CompareTeamKeys)
+	slices.SortStableFunc(teams, func(a, b string) int {
+		return cmp.Compare(points.Points[b].Total, points.Points[a].Total)
 	})
 
 	headers := []string{"Team", "Qual", "Alliance", "Award", "Elim", "Total"}

@@ -8,7 +8,7 @@ package frc
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,19 +52,7 @@ func CompLevelOrder(level string) int {
 // by set, then by match number. The sort is stable, so matches the API
 // considers equal keep the order it returned them in.
 func SortMatches(matches []api.Match) {
-	sort.SliceStable(matches, func(i, j int) bool {
-		return lessByPlayOrder(matches[i], matches[j])
-	})
-}
-
-func lessByPlayOrder(a, b api.Match) bool {
-	if oa, ob := CompLevelOrder(a.CompLevel), CompLevelOrder(b.CompLevel); oa != ob {
-		return oa < ob
-	}
-	if a.SetNumber != b.SetNumber {
-		return a.SetNumber < b.SetNumber
-	}
-	return a.MatchNumber < b.MatchNumber
+	slices.SortStableFunc(matches, CompareMatches)
 }
 
 // SortByTime orders matches by their best known time, earliest first. Matches
@@ -72,14 +60,7 @@ func lessByPlayOrder(a, b api.Match) bool {
 // event that has not published a schedule still comes out in a sensible order.
 func SortByTime(matches []api.Match) {
 	SortMatches(matches)
-	sort.SliceStable(matches, func(i, j int) bool {
-		a, _ := BestTime(matches[i])
-		b, _ := BestTime(matches[j])
-		if a == nil || b == nil {
-			return a != nil && b == nil
-		}
-		return *a < *b
-	})
+	slices.SortStableFunc(matches, CompareMatchTimes)
 }
 
 // Playoff bracket formats, as the API reports them in an event's playoff_type.

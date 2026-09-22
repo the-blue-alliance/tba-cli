@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -83,25 +83,18 @@ func formatStats(values []float64, info []api.SortOrderInfo) []string {
 	return cells
 }
 
-// teamNumber parses the numeric part of a team key, for ordering. Keys that do
-// not parse sort last, keeping the comparison total.
+// unorderedTeamNumber stands for a team key whose number will not parse, so
+// that it sorts after every key that does rather than at team zero.
+const unorderedTeamNumber = 1 << 30
+
+// teamNumber parses the numeric part of a team key, for the orderings that
+// compare it against something else — a predicted rank, an award recipient —
+// rather than against another team key. Sorting team keys themselves is
+// frc.CompareTeamKeys.
 func teamNumber(key string) int {
-	n, err := strconv.Atoi(output.TeamNumberFromKey(key))
-	if err != nil {
-		return 1 << 30
+	n, ok := frc.TeamKeyNumber(key)
+	if !ok {
+		return unorderedTeamNumber
 	}
 	return n
-}
-
-// sortTeamKeys orders team keys by team number, which is the order a person
-// reading a list of teams expects. Map iteration order is random, so every
-// table built from a keyed object goes through here to stay reproducible.
-func sortTeamKeys(keys []string) {
-	sort.Slice(keys, func(i, j int) bool {
-		a, b := teamNumber(keys[i]), teamNumber(keys[j])
-		if a != b {
-			return a < b
-		}
-		return keys[i] < keys[j]
-	})
 }

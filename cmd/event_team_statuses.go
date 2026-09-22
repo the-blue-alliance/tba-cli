@@ -1,13 +1,15 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -83,16 +85,22 @@ func eventTeamStatusesTableWith(statuses map[string]*api.TeamEventStatus, withOv
 	for key := range statuses {
 		teams = append(teams, key)
 	}
-	sortTeamKeys(teams)
-	sort.SliceStable(teams, func(i, j int) bool {
-		a, aOK := qualRank(statuses[teams[i]])
-		b, bOK := qualRank(statuses[teams[j]])
+	slices.SortFunc(teams, frc.CompareTeamKeys)
+	slices.SortStableFunc(teams, func(x, y string) int {
+		a, aOK := qualRank(statuses[x])
+		b, bOK := qualRank(statuses[y])
 		if aOK != bOK {
 			// An unranked team sorts after every ranked one rather than at
 			// rank zero.
-			return aOK
+			if aOK {
+				return -1
+			}
+			return 1
 		}
-		return aOK && a < b
+		if !aOK {
+			return 0
+		}
+		return cmp.Compare(a, b)
 	})
 
 	headers := []string{"Team", "Rank", "Record", "Alliance", "Pick", "Playoff Level", "Round", "Playoff Status"}

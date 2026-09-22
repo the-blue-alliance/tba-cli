@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -281,12 +282,11 @@ func searchTeams(teams []api.Team, query string, fields map[string]bool) []api.T
 	for _, t := range matches {
 		ranks[t.Key] = searchRank(t, query, fields)
 	}
-	sort.SliceStable(matches, func(i, j int) bool {
-		a, b := ranks[matches[i].Key], ranks[matches[j].Key]
-		if a != b {
-			return a < b
+	slices.SortStableFunc(matches, func(a, b api.Team) int {
+		if c := cmp.Compare(ranks[a.Key], ranks[b.Key]); c != 0 {
+			return c
 		}
-		return matches[i].TeamNumber < matches[j].TeamNumber
+		return cmp.Compare(a.TeamNumber, b.TeamNumber)
 	})
 	return matches
 }
