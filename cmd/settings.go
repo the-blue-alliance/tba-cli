@@ -107,7 +107,7 @@ func initSettings(cmd *cobra.Command) error {
 // the config file's, with the layer named when it is not the flag the user
 // would otherwise go looking for.
 func (s *settingsSet) validate() error {
-	if err := s.validateEnv(); err != nil {
+	if err := s.validateShapes(); err != nil {
 		return err
 	}
 	if s.Int("retries") < 0 {
@@ -119,45 +119,80 @@ func (s *settingsSet) validate() error {
 	return nil
 }
 
-// validateEnv refuses an environment value the setting cannot hold.
+// validateShapes refuses a value the setting cannot hold, wherever it was
+// written down.
 //
 // viper coerced instead, and quietly: TBA_RETRIES=abc became 0, which turns
 // retries off, and TBA_TIMEOUT=5 became five nanoseconds, after which every
-// request timed out and nothing said why. `tba config set retries abc` had
-// been refused all along — the same text in the environment is the same
-// mistake, and config.Key.ParseValue is the same judge.
+// request timed out and nothing said why. config.yaml was no better — `timeout:
+// 5` there is the same five nanoseconds, and `retries: abc` the same silent 0 —
+// while `tba config set timeout 5` had been refused all along. The same text is
+// the same mistake in all three places, and config.Key.ParseValue is the same
+// judge.
 //
 // format and color are left out: their accepted words are listed where they
-// are read, and base-url is judged when a request is built, both with better
-// messages than a generic one could be. So is a variable a flag has already
-// overridden, because precedence is the whole point of the layering: a flag
-// still beats whatever the environment holds.
-func (s *settingsSet) validateEnv() error {
+// are read, with better messages than a generic one could be. So is a layer a
+// higher one has already overridden, because precedence is the whole point of
+// the layering: a flag still beats whatever the environment or the file holds.
+func (s *settingsSet) validateShapes() error {
 	for _, k := range config.Keys {
 		switch k.Kind {
 		case config.KindBool, config.KindInt, config.KindDuration:
 		default:
 			continue
 		}
-		if s.Source(k.Name) != sourceEnv {
+		var raw, where string
+		switch s.Source(k.Name) {
+		case sourceEnv:
+			where = envKey(k.Name)
+			raw = os.Getenv(where)
+		case sourceConfig:
+			// YAML has already decided what `timeout: 5` is — an int, not a
+			// duration — so the value goes back to the text the file holds
+			// and through the same parser `config set` uses.
+			raw = rawConfigValue(s.file.Values[k.Name])
+		default:
 			continue
 		}
-		name := envKey(k.Name)
-		raw := os.Getenv(name)
-		_, err := k.ParseValue(raw)
-		if err == nil {
+		if _, err := k.ParseValue(raw); err == nil {
 			continue
 		}
-		// Only the shape is judged here, in the environment's own terms,
-		// because "5" looks like a perfectly good timeout until you learn it
-		// means five nanoseconds. A value of the right shape but the wrong
-		// size — retries: -1, year: 1800 — belongs to whoever knows the range,
-		// and those messages already name the layer the value came from.
-		if !parsesAs(k.Kind, raw) {
-			return clierr.Usage("%s %q is not %s", name, raw, envWant(k.Kind))
+		// Only the shape is judged here, in the layer's own terms, because
+		// "5" looks like a perfectly good timeout until you learn it means
+		// five nanoseconds. A value of the right shape but the wrong size —
+		// retries: -1, year: 1800 — belongs to whoever knows the range, and
+		// those messages already name the layer the value came from.
+		if parsesAs(k.Kind, raw) {
+			continue
 		}
+		if where != "" {
+			return clierr.Usage("%s %q is not %s", where, raw, envWant(k.Kind))
+		}
+		return clierr.Usage("%s %q in %s is not %s", k.Name, raw, s.file.Path, envWant(k.Kind))
 	}
 	return nil
+}
+
+// rawConfigValue is the text a config.yaml value was written as, so that it
+// can be judged by the parser `tba config set` uses. YAML types it on the way
+// in — `timeout: 5` arrives as an int and `no-cache: true` as a bool — and
+// nothing is lost by writing it back out: what matters is whether "5" is a
+// duration, not that YAML was willing to call it a number.
+func rawConfigValue(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case int:
+		return strconv.Itoa(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
 
 // parsesAs reports whether raw is a value of that kind at all, leaving how
