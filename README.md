@@ -325,7 +325,7 @@ tba event oprs 2024cthar --sort=-opr
 
 In `auto` mode color is off unless stdout is a terminal. It is also off when [`NO_COLOR`](https://no-color.org) is set to any non-empty value, or when `TERM=dumb`. Setting `CLICOLOR_FORCE` to anything but `0` turns color back on for a pipe. `--color always` overrides the environment; `--color never` and `--no-color` override everything.
 
-Only presentation is colored (currently the `table` header row). `csv`, `tsv`, `markdown` and `json` never carry escape sequences, whatever `--color` says, so piping stays safe.
+Only presentation is colored: the `table` header row, and the alliance cells of a match listing. `csv`, `tsv`, `markdown` and `json` never carry escape sequences, whatever `--color` says, so piping stays safe.
 
 `--jq` and `--json` need JSON output, so combining either with `--format table|csv|tsv|markdown` is an error rather than a silent override:
 
@@ -478,6 +478,62 @@ The answer from `/status` is remembered for 24 hours in `season.json` in the
 cache directory, so the lookup costs at most one extra request a day;
 `--no-cache` asks again. `tba team awards` is the exception: its `--year`
 defaults to every year a team has won anything.
+### Match listings
+
+`tba event matches` and `tba team matches` print the same table, so what you learn on one reads the same on the other:
+
+```
+$ tba event matches 2024cthar --level playoff
+Match    Key                Red              Blue              Score (R-B)  Winner  Time       Time Source  Status
+-------  -----------------  ---------------  ----------------  -----------  ------  ---------  -----------  ---------
+SF 13    2024cthar_sf13m1   177, 1073, 5507  230, 195, 558     102-118      blue    Sun 13:03  actual       Played
+Final 1  2024cthar_f1m1     177, 1073, 5507  230, 195, 558                          Sun 14:55  predicted    Scheduled
+```
+
+Matches always come back in the order the event plays them — qualification matches by number, then the elimination rounds — never alphabetically by key, which would put `qm10` before `qm2` and the finals before the quarterfinals.
+
+**Labels.** The `Match` column is what the match is announced by; `Key` keeps the raw key for scripts.
+
+| Label | Meaning |
+|-------|---------|
+| `Qual 12` | Qualification match 12 |
+| `SF 3` | Semifinal 3 of a double-elimination bracket (2023 and later), where each set is one match |
+| `SF 1-2` | Match 2 of semifinal set 1, in a pre-2023 best-of-three bracket or an Einstein round robin |
+| `QF 2-1`, `EF 1-1` | Quarterfinal and octofinal sets, likewise |
+| `Final 2` | Match 2 of the finals series |
+
+Which form a playoff match gets depends on the event's bracket, so these commands fetch the event as well. If that fetch fails the listing still prints, guessing from the season.
+
+**Scores and status.** The API scores an unplayed match `-1` to `-1`. That is a placeholder, not a result, so the score cell is left blank and `Status` reads `Scheduled`. A played match with no winning alliance is a `tie`.
+
+**Marks.** A team number carries a mark when its appearance was unusual:
+
+| Mark | Meaning |
+|------|---------|
+| `4055*` | Surrogate: an extra match that does not count towards the team's own ranking |
+| `2168!` | Disqualified from the match |
+
+When a mark appears in `table` output, the legend `* surrogate  ! disqualified` is printed to stderr, so it explains the table on screen without landing in a file you piped it into.
+
+**Times.** `Time` is shown in your local time zone, and `Time Source` says where it came from: `actual` for a match that has been played, `predicted` for the queue's live estimate, `scheduled` for the published schedule. Drop the source with `--columns` if you do not want it.
+
+**Filters.**
+
+| Flag | Description |
+|------|-------------|
+| `--team N` | Only matches this team played in; `177` and `frc177` both work |
+| `--level qm\|playoff\|ef\|qf\|sf\|f` | Only this level; `playoff` means every elimination level at once |
+| `--upcoming` | Only matches that have not been played, soonest first |
+| `--event KEY` | (`team matches` only) One event instead of a whole season |
+
+```
+tba event matches 2024cthar --team 177
+tba event matches 2024cthar --upcoming
+tba team matches 177 --event 2024cthar --upcoming
+tba event matches 2024cthar --level playoff --format csv
+```
+
+Filters apply to `--format json` too, so `--jq` and `--format csv` always see the same rows.
 
 ## Scripting
 
