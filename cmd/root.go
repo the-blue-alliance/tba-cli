@@ -43,6 +43,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().String("format", "", "Output format: auto, table, json, csv, tsv, markdown (auto: table on TTY, json otherwise)")
 	rootCmd.PersistentFlags().Duration("timeout", api.DefaultTimeout, "Per-request timeout (e.g. 10s, 1m)")
 	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")
+	rootCmd.PersistentFlags().Bool("no-headers", false, "Omit the header row from table, csv, tsv and markdown output")
 	rootCmd.PersistentFlags().String("color", "auto", "When to colorize output: auto, always, never")
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (alias for --color=never)")
 
