@@ -37,6 +37,26 @@ func writeLegacyAuthFile(t *testing.T, key string) {
 	}
 }
 
+func TestAuthFileFollowsXDGConfigHome(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("TBA_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	if want := filepath.Join(xdg, "tba", "auth.yaml"); mustAuthFile(t) != want {
+		t.Errorf("AuthFile() = %q, want %q", mustAuthFile(t), want)
+	}
+}
+
+func TestTBAConfigDirBeatsXDGConfigHome(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("TBA_CONFIG_DIR", dir)
+
+	if want := filepath.Join(dir, "auth.yaml"); mustAuthFile(t) != want {
+		t.Errorf("AuthFile() = %q, want %q", mustAuthFile(t), want)
+	}
+}
+
 func TestAuthFileFollowsTBAConfigDir(t *testing.T) {
 	dir := configEnv(t)
 	if want := filepath.Join(dir, "auth.yaml"); mustAuthFile(t) != want {
@@ -150,9 +170,29 @@ func TestGetAPIKeyErrorWhenNoConfigFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error with no config file")
 	}
-	want := "not authenticated for " + DefaultBaseURL + ". Run 'tba auth login' first"
+	want := "not authenticated for " + DefaultBaseURL + ". Run 'tba auth login' first. Get one at " + APIKeyPage
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+// Someone hitting this message for the first time has no key yet, so it has to
+// say where keys come from.
+func TestAuthErrorsSayWhereToGetAKey(t *testing.T) {
+	configEnv(t)
+	if _, err := GetAPIKey(DefaultBaseURL); err == nil {
+		t.Fatal("want an error with no config file")
+	} else if !strings.Contains(err.Error(), "https://www.thebluealliance.com/account") {
+		t.Errorf("error = %q, want it to point at the account page", err)
+	}
+
+	if err := SaveAPIKey("prod-key", DefaultBaseURL); err != nil {
+		t.Fatalf("SaveAPIKey: %v", err)
+	}
+	if _, err := GetAPIKey(localURL); err == nil {
+		t.Fatal("want an error for an unknown base URL")
+	} else if !strings.Contains(err.Error(), "https://www.thebluealliance.com/account") {
+		t.Errorf("error = %q, want it to point at the account page", err)
 	}
 }
 
@@ -336,6 +376,7 @@ func TestSaveCreatesTheConfigDirectory(t *testing.T) {
 // the way it does for a user with no home directory.
 func clearHome(t *testing.T) {
 	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("HOMEDRIVE", "")

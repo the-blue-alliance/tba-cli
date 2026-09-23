@@ -11,9 +11,23 @@ import (
 
 const DefaultBaseURL = "https://www.thebluealliance.com/api/v3"
 
+// APIKeyPage is where a TBA API key comes from. "Run 'tba auth login'" is only
+// half an instruction to someone who does not have a key yet, so every message
+// that asks for one says where to get it.
+const APIKeyPage = "https://www.thebluealliance.com/account"
+
+// keyHint is the sentence appended to the "you need a key" messages.
+const keyHint = "Get one at " + APIKeyPage
+
+// configDir is where tba keeps auth.yaml and config.yaml. TBA_CONFIG_DIR
+// names the directory outright; otherwise the XDG base directory spec picks
+// it, falling back to ~/.config/tba when XDG_CONFIG_HOME is unset.
 func configDir() (string, error) {
 	if d := os.Getenv("TBA_CONFIG_DIR"); d != "" {
 		return d, nil
+	}
+	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
+		return filepath.Join(d, "tba"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -65,7 +79,7 @@ func GetAPIKey(baseURL string) (string, error) {
 	v := viper.New()
 	v.SetConfigFile(authFile)
 	if err := v.ReadInConfig(); err != nil {
-		return "", clierr.Auth("not authenticated for %s. Run 'tba auth login' first", baseURL)
+		return "", clierr.Auth("not authenticated for %s. Run 'tba auth login' first. %s", baseURL, keyHint)
 	}
 	_ = secureAuthFile(authFile) // remediate legacy files written with wider perms; ignore errors
 
@@ -82,7 +96,7 @@ func GetAPIKey(baseURL string) (string, error) {
 		}
 	}
 
-	return "", clierr.Auth("not authenticated for %s. Run 'tba auth login --base-url %s' first", baseURL, baseURL)
+	return "", clierr.Auth("not authenticated for %s. Run 'tba auth login --base-url %s' first. %s", baseURL, baseURL, keyHint)
 }
 
 // migrateLegacyKey folds a pre-per-URL "api_key" entry into the "keys" map.
@@ -149,15 +163,17 @@ func RemoveAPIKey(baseURL string) error {
 
 	v := viper.New()
 	v.SetConfigFile(authFile)
+	// Having nothing to log out of is the same state `auth status` reports,
+	// so it is reported the same way: exit 4, not a generic failure.
 	if err := v.ReadInConfig(); err != nil {
-		return fmt.Errorf("not authenticated")
+		return clierr.Auth("not authenticated")
 	}
 
 	migrateLegacyKey(v)
 
 	keys := v.GetStringMapString("keys")
 	if _, ok := keys[baseURL]; !ok {
-		return fmt.Errorf("not authenticated for %s", baseURL)
+		return clierr.Auth("not authenticated for %s", baseURL)
 	}
 	delete(keys, baseURL)
 	v.Set("keys", keys)

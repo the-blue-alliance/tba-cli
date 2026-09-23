@@ -8,7 +8,9 @@ import (
 	"io"
 	"math"
 	"math/rand/v2"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/cache"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/config"
+	"github.com/the-blue-alliance/tba-cli/internal/humanize"
 	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
@@ -62,12 +65,18 @@ type Client struct {
 	baseURL  string
 	cache    *cache.Cache
 	useCache bool
+	offline  bool
 
 	userAgent  string
 	timeout    time.Duration
 	retries    int
 	maxElapsed time.Duration
 	limiter    Limiter
+
+	// notify receives one-line human notes ("using cached copy from 12m
+	// ago"). The package never writes to a stream itself: the caller decides
+	// where a note goes, which in the CLI is stderr.
+	notify func(string)
 
 	// Injectable so that tests can drive the retry loop without sleeping.
 	sleep     func(ctx context.Context, d time.Duration) error
@@ -141,17 +150,27 @@ func WithLimiter(l Limiter) Option {
 	return func(c *Client) { c.limiter = l }
 }
 
+// WithNotifier installs a sink for one-line human notes, such as the warning
+// that a stale cached copy is being served. Each note is a complete line
+// without a trailing newline. Without a notifier the notes are dropped: this
+// package never picks a stream to write to.
+func WithNotifier(f func(string)) Option {
+	return func(c *Client) { c.notify = f }
+}
+
+// WithOffline makes the client answer from the on-disk cache alone. No request
+// is made, no revalidation happens, and a URL that has never been fetched is
+// an error rather than a fetch.
+func WithOffline(b bool) Option {
+	return func(c *Client) { c.offline = b }
+}
+
 func NewClient(baseURL string, opts ...Option) (*Client, error) {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	key, err := config.GetAPIKey(baseURL)
-	if err != nil {
-		return nil, err
-	}
 	c := &Client{
 		http:       &http.Client{},
-		apiKey:     key,
 		baseURL:    baseURL,
 		useCache:   true,
 		userAgent:  userAgent,
@@ -163,11 +182,30 @@ func NewClient(baseURL string, opts ...Option) (*Client, error) {
 		randFloat:  rand.Float64,
 		now:        time.Now,
 	}
-	if cc, err := cache.New(); err == nil {
-		c.cache = cc
+	// A cache that cannot be opened is reported rather than shrugged off.
+	// Running cacheless after a silent failure makes every later symptom —
+	// an --offline run insisting nothing is cached, a revalidation that never
+	// happens — describe something other than the actual problem.
+	cc, err := cache.New()
+	if err != nil {
+		return nil, fmt.Errorf("opening the response cache: %w", err)
 	}
+	c.cache = cc
+	// The options are applied before the key is looked up, because --offline
+	// decides whether there needs to be one.
 	for _, opt := range opts {
 		opt(c)
+	}
+	// Reading one's own cache is not a request to anyone, so it needs no
+	// credentials: `tba --offline event rankings 2024cthar` used to exit 4
+	// "not authenticated" over a warm cache on a machine with no key, which
+	// is the one situation where offline is most worth having.
+	if !c.offline {
+		key, err := config.GetAPIKey(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		c.apiKey = key
 	}
 	return c, nil
 }
@@ -204,6 +242,22 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 		cached = c.cache.Get(url)
 	}
 
+	if c.offline {
+		if cached == nil {
+			// "we have no copy of that" is the same answer as a 404 as far as
+			// a script is concerned: the thing asked for is not here, and
+			// trying again will not change it. Exit 5, like every other
+			// not-found, rather than 1, which means the run itself failed.
+			return nil, clierr.NotFound("not cached: %s (run without --offline to fetch)", path)
+		}
+		// Say how old the copy is, exactly as the stale-fallback path does.
+		// Offline output is indistinguishable from live output otherwise, and
+		// a week-old ranking read as today's is the kind of mistake the user
+		// only finds out about later.
+		c.notef("note: offline: %s from cache (%s ago)", path, humanize.Age(max(0, c.now().Sub(cached.FetchedAt))))
+		return []byte(cached.Body), nil
+	}
+
 	body, err := c.send(ctx, url, cached)
 	if errors.Is(err, errStale304) {
 		// Ask again without the conditional headers so a pruned cache entry
@@ -213,7 +267,58 @@ func (c *Client) fetch(ctx context.Context, path string) ([]byte, error) {
 			return nil, fmt.Errorf("API returned 304 but no cached response is available")
 		}
 	}
+	if err != nil && cached != nil && ctx.Err() == nil {
+		if reason, ok := fallbackReason(err); ok {
+			c.notef("note: %s unavailable (%s); using cached copy from %s ago",
+				path, reason, humanize.Age(max(0, c.now().Sub(cached.FetchedAt))))
+			return []byte(cached.Body), nil
+		}
+	}
 	return body, err
+}
+
+// notef hands a one-line note to whatever the caller installed, if anything.
+func (c *Client) notef(format string, args ...interface{}) {
+	if c.notify == nil {
+		return
+	}
+	c.notify(fmt.Sprintf(format, args...))
+}
+
+// fallbackReason reports whether a failed request is the kind where a stale
+// cached copy is better than nothing, and how to describe it in one phrase.
+//
+// The test is "did we fail to reach an answer" rather than "did the server
+// dislike the question": a timeout, a dead connection, a 429 or a 5xx say
+// nothing about the resource, so last week's copy is still the best available
+// answer. A 401 or a 404 is an answer, and serving a cached body over it would
+// hide the very thing the user needs to see.
+func fallbackReason(err error) (string, bool) {
+	var he *httpError
+	if errors.As(err, &he) {
+		if isRetryableStatus(he.status) {
+			return fmt.Sprintf("HTTP %d", he.status), true
+		}
+		return "", false
+	}
+	var ne *netError
+	if errors.As(err, &ne) {
+		if isTimeout(ne.err) {
+			return "timeout", true
+		}
+		return "network error", true
+	}
+	return "", false
+}
+
+// isTimeout reports whether err is a deadline being hit rather than some other
+// transport failure.
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 // send runs one request, retrying retryable failures until the retry budget or
@@ -314,9 +419,10 @@ func (c *Client) attempt(ctx context.Context, url string, cached *cache.Entry) (
 		message := truncateErrorBody(string(body))
 		switch resp.StatusCode {
 		case http.StatusUnauthorized:
-			return nil, outcome{}, clierr.Auth("not authenticated for %s (HTTP 401): run 'tba auth login'", c.baseURL)
+			return nil, outcome{}, clierr.Auth("not authenticated for %s (HTTP 401): run 'tba auth login' with a working API key. Get one at %s",
+				c.baseURL, config.APIKeyPage)
 		case http.StatusNotFound:
-			return nil, outcome{}, clierr.NotFound("API error 404: %s", message)
+			return nil, outcome{}, clierr.NotFound("%s", notFoundMessage(body))
 		}
 		return nil, c.outcomeFor(resp), &httpError{status: resp.StatusCode, body: message}
 	}

@@ -208,6 +208,38 @@ func runCmd(t *testing.T, srv *httptest.Server, args ...string) (stdout, stderr 
 	return runCmdStdin(t, srv, "", args...)
 }
 
+// fixedClock stops the clock at now, which is what makes a countdown, a
+// relative time or an "is this event over" the same on every run.
+//
+// Its sleep returns at once: a test that pins the clock and then waits for
+// real time would wait forever, since nothing is going to move.
+func fixedClock(now time.Time) clock {
+	return clock{
+		now:   func() time.Time { return now },
+		sleep: func(ctx context.Context, _ time.Duration) error { return ctx.Err() },
+	}
+}
+
+// runCmdAt is runCmd with the clock stopped at now.
+//
+// The clock belongs to the tree this one run builds, so two tests pinning
+// different moments cannot see each other's, and `go test -race` has nothing
+// to say about it.
+func runCmdAt(t *testing.T, srv *httptest.Server, now time.Time, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return runCmdWith(t, srv, fixedClock(now), &bytes.Buffer{}, args...)
+}
+
+// runCmdWith runs against a clock of the caller's own making, which is how the
+// watch tests drive a two-hour poll loop in microseconds.
+func runCmdWith(t *testing.T, srv *httptest.Server, clk clock, out interface {
+	io.Writer
+	String() string
+}, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return runCmdOnWith(t, srv, out, "", clk, args...)
+}
+
 // runCmdStdin is runCmd with a canned stdin, for commands that prompt.
 func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
@@ -226,11 +258,21 @@ func runCmdTTY(t *testing.T, srv *httptest.Server, args ...string) (stdout, stde
 	return runCmdOn(t, srv, &terminalBuffer{}, "", args...)
 }
 
-// runCmdOn runs a fresh command tree with out as its stdout.
+// runCmdOn runs a fresh command tree with out as its stdout, against the real
+// clock.
 func runCmdOn(t *testing.T, srv *httptest.Server, out interface {
 	io.Writer
 	String() string
 }, stdin string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return runCmdOnWith(t, srv, out, stdin, systemClock(), args...)
+}
+
+// runCmdOnWith is runCmdOn against a given clock.
+func runCmdOnWith(t *testing.T, srv *httptest.Server, out interface {
+	io.Writer
+	String() string
+}, stdin string, clk clock, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 
 	// Each run gets throwaway auth/cache/config state. A test that needs the
@@ -240,7 +282,7 @@ func runCmdOn(t *testing.T, srv *httptest.Server, out interface {
 	setEnvUnlessSet(t, "TBA_CACHE_DIR", t.TempDir())
 	setEnvUnlessSet(t, "TBA_CONFIG_DIR", t.TempDir())
 
-	root := NewRootCmd()
+	root := newRootCmdWithClock(clk)
 	var errBuf bytes.Buffer
 	root.SetOut(out)
 	root.SetErr(&errBuf)
@@ -329,3 +371,7 @@ func requireContains(t *testing.T, got, want string) {
 		t.Errorf("output missing %q\n---\n%s", want, got)
 	}
 }
+
+// thisYear is the calendar year now, which is what a command's default --year
+// resolves to when nothing tells it otherwise.
+func thisYear() int { return currentYear(time.Now()) }

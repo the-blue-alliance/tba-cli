@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"sort"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -64,7 +65,9 @@ func (t Table) SelectColumns(spec string) (Table, error) {
 		idx = append(idx, i)
 	}
 
-	out := Table{Headers: make([]string, len(idx)), Rows: make([][]string, len(t.Rows))}
+	// Column selection leaves the rows where they are, so the dividers
+	// between them still point at the right gaps.
+	out := Table{Headers: make([]string, len(idx)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers, Breaks: t.Breaks}
 	for n, i := range idx {
 		out.Headers[n] = t.Headers[i]
 	}
@@ -78,11 +81,55 @@ func (t Table) SelectColumns(spec string) (Table, error) {
 	return out, nil
 }
 
+// DropEmptyColumns returns a Table without the columns that carry nothing at
+// all -- 2015's Record, say, a season that had no win/loss to report. A column
+// that is empty for some rows and not others stays, since a blank there is
+// data: the team has no record yet.
+//
+// A table with no rows is returned untouched. Every column is empty then, and
+// answering with no columns at all would turn "no results" into a broken
+// header.
+//
+// This is a per-command decision, not a global one: a column a command always
+// prints is part of its contract, and dropping it everywhere would make a
+// table's shape depend on its contents.
+func (t Table) DropEmptyColumns() Table {
+	if len(t.Rows) == 0 {
+		return t
+	}
+	keep := make([]int, 0, len(t.Headers))
+	for i := range t.Headers {
+		for _, row := range t.Rows {
+			if strings.TrimSpace(cellAt(row, i)) != "" {
+				keep = append(keep, i)
+				break
+			}
+		}
+	}
+	if len(keep) == len(t.Headers) {
+		return t
+	}
+
+	out := Table{Headers: make([]string, len(keep)), Rows: make([][]string, len(t.Rows)), Dividers: t.Dividers, Breaks: t.Breaks}
+	for n, i := range keep {
+		out.Headers[n] = t.Headers[i]
+	}
+	for r, row := range t.Rows {
+		cells := make([]string, len(keep))
+		for n, i := range keep {
+			cells[n] = cellAt(row, i)
+		}
+		out.Rows[r] = cells
+	}
+	return out
+}
+
 // SortOrder returns the permutation of row indices that sorts the table by
 // spec, a column reference optionally prefixed with "-" to descend. The sort is
 // stable, so rows that compare equal keep the order the API returned them in,
 // and it is numeric-aware: two cells that both parse as numbers compare as
-// numbers, everything else compares bytewise.
+// numbers, two win-loss-tie records compare number by number, and everything
+// else compares bytewise.
 //
 // The caller gets indices rather than a sorted Table so that the same
 // permutation can be applied to the underlying JSON data.
@@ -101,18 +148,20 @@ func (t Table) SortOrder(spec string) ([]int, error) {
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		cmp := compareCells(cellAt(t.Rows[order[a]], col), cellAt(t.Rows[order[b]], col))
+	slices.SortStableFunc(order, func(a, b int) int {
+		c := compareCells(cellAt(t.Rows[a], col), cellAt(t.Rows[b], col))
 		if desc {
-			return cmp > 0
+			return -c
 		}
-		return cmp < 0
+		return c
 	})
 	return order, nil
 }
 
 // Reorder returns a Table whose rows follow order. Indices outside the table
-// are skipped, so a stale permutation cannot panic.
+// are skipped, so a stale permutation cannot panic. Any dividers are dropped:
+// they mark gaps in the original order, and there is no honest place for them
+// in a re-sorted table.
 func (t Table) Reorder(order []int) Table {
 	rows := make([][]string, 0, len(order))
 	for _, i := range order {
@@ -123,35 +172,48 @@ func (t Table) Reorder(order []int) Table {
 	return Table{Headers: t.Headers, Rows: rows}
 }
 
-// PermuteSlice applies a row permutation to the data behind a table so that
-// JSON output matches the order the table would have been printed in. Data that
-// is not a slice of the same length is returned untouched: --sort then only
-// affects the tabular formats, which is better than reshaping a payload we do
-// not understand.
-func PermuteSlice(data interface{}, order []int) interface{} {
-	if len(order) == 0 {
-		return data
-	}
+// CanPermute reports whether PermuteSlice would actually apply order to data.
+//
+// It is the shape check PermuteSlice makes, exposed separately so that a caller
+// can tell a sorted payload from one that was quietly left alone: a JSON
+// document that is not a list of rows (an object, or a list whose elements are
+// not the table's rows) cannot carry a row order, and the caller usually wants
+// to say so rather than print an unsorted answer.
+func CanPermute(data interface{}, order []int) bool {
 	v := reflect.ValueOf(data)
 	if !v.IsValid() {
-		return data
+		return false
 	}
 	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
-		return data
+		return false
 	}
 	// A []byte (json.RawMessage) is a slice too, but its elements are bytes of
 	// an encoded document, not rows; shuffling them would corrupt the JSON.
 	if v.Type().Elem().Kind() == reflect.Uint8 {
-		return data
+		return false
 	}
 	if v.Len() != len(order) {
-		return data
+		return false
 	}
-	out := make([]interface{}, 0, len(order))
 	for _, i := range order {
 		if i < 0 || i >= v.Len() {
-			return data
+			return false
 		}
+	}
+	return true
+}
+
+// PermuteSlice applies a row permutation to the data behind a table so that
+// JSON output matches the order the table would have been printed in. Data that
+// is not a slice of the same length is returned untouched; callers that care
+// ask CanPermute first.
+func PermuteSlice(data interface{}, order []int) interface{} {
+	if len(order) == 0 || !CanPermute(data, order) {
+		return data
+	}
+	v := reflect.ValueOf(data)
+	out := make([]interface{}, 0, len(order))
+	for _, i := range order {
 		out = append(out, v.Index(i).Interface())
 	}
 	return out
@@ -164,22 +226,72 @@ func cellAt(row []string, i int) string {
 	return row[i]
 }
 
+// wltPattern recognises a win-loss-tie record, with or without the ties:
+// "11-1-0", "9-3".
+var wltPattern = regexp.MustCompile(`^\d+-\d+(-\d+)?$`)
+
 // compareCells orders two cells, preferring a numeric comparison when both
-// sides are numbers so that "10" sorts after "9".
+// sides are numbers so that "10" sorts after "9", and a field-by-field one
+// when both sides are win-loss-tie records.
 func compareCells(a, b string) int {
 	if x, err := parseNumber(a); err == nil {
 		if y, err := parseNumber(b); err == nil {
-			switch {
-			case x < y:
-				return -1
-			case x > y:
-				return 1
-			default:
-				return 0
-			}
+			return compareFloats(x, y)
 		}
 	}
+	if cmp, ok := compareWLT(a, b); ok {
+		return cmp
+	}
 	return strings.Compare(a, b)
+}
+
+// compareWLT orders two win-loss-tie records by wins, then losses, then ties,
+// each as a number. Compared as text, "9-3-0" sorts above "11-1-0" because "9"
+// is bigger than "1", which is not an order anybody wants a season in.
+//
+// The second result is false unless both cells are records, so every other
+// cell falls through to the comparison it would have had.
+func compareWLT(a, b string) (int, bool) {
+	x, okA := parseWLT(a)
+	y, okB := parseWLT(b)
+	if !okA || !okB {
+		return 0, false
+	}
+	for i := range x {
+		if cmp := compareFloats(float64(x[i]), float64(y[i])); cmp != 0 {
+			return cmp, true
+		}
+	}
+	return 0, true
+}
+
+// parseWLT reads a record into wins, losses and ties. A record without ties is
+// read as no ties, which is what a two-part record means.
+func parseWLT(s string) ([3]int, bool) {
+	var out [3]int
+	s = strings.TrimSpace(s)
+	if !wltPattern.MatchString(s) {
+		return out, false
+	}
+	for i, part := range strings.Split(s, "-") {
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+func compareFloats(x, y float64) int {
+	switch {
+	case x < y:
+		return -1
+	case x > y:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func parseNumber(s string) (float64, error) {

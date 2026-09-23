@@ -33,6 +33,31 @@ func TestExitCodeOfTypedErrors(t *testing.T) {
 	}
 }
 
+// main prints every failure but these two: a reader that hung up cannot read
+// the complaint, and "Error: context canceled" after a Ctrl-C reads like a bug
+// rather than an answer.
+func TestSilentFailures(t *testing.T) {
+	cases := []struct {
+		err  error
+		want bool
+	}{
+		{nil, false},
+		{context.Canceled, true},
+		{fmt.Errorf("fetching /status: %w", context.Canceled), true},
+		{syscall.EPIPE, true},
+		{fmt.Errorf("writing: %w", syscall.EPIPE), true},
+		{errors.New("connection refused"), false},
+		{Usage("invalid --format %q", "xml"), false},
+		{Auth("not authenticated"), false},
+		{NotFound("no such team"), false},
+	}
+	for _, c := range cases {
+		if got := Silent(c.err); got != c.want {
+			t.Errorf("Silent(%v) = %v, want %v", c.err, got, c.want)
+		}
+	}
+}
+
 func TestExitCodeSeesThroughWrapping(t *testing.T) {
 	cases := []struct {
 		err  error

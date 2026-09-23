@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
+
+	"github.com/the-blue-alliance/tba-cli/internal/fsutil"
 )
 
 // entriesSubdir namespaces the cache files. Keeping them one level down
@@ -112,27 +115,18 @@ func (c *Cache) Touch(url string) error {
 	return c.write(url, e)
 }
 
+// entryFileMode is the mode of a cache file. The cache sits under the user's
+// home directory and holds whatever they have been looking at, which is
+// nobody else's business.
+const entryFileMode = 0600
+
 // write atomically replaces the cache file for url.
 func (c *Cache) write(url string, e *Entry) error {
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
 		return err
 	}
-	final := c.path(url)
-	tmp, err := os.CreateTemp(c.entriesDir, "tba-cache-*.tmp")
-	if err != nil {
-		return err
-	}
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	return os.Rename(tmp.Name(), final)
+	return fsutil.WriteFileAtomic(c.path(url), b, entryFileMode)
 }
 
 // Clear removes all cache entries. The directory itself is kept, and nothing
@@ -154,6 +148,49 @@ func (c *Cache) Clear() (removed int, err error) {
 		}
 	}
 	return removed, nil
+}
+
+// ForEach calls fn once for every entry in the cache.
+//
+// A file that cannot be read or parsed is skipped rather than reported: a
+// damaged entry is a cache miss, exactly as it is in Get. Only a directory
+// that cannot be listed at all is an error, and a cache that has never been
+// written is not one.
+func (c *Cache) ForEach(fn func(Entry)) error {
+	entries, err := os.ReadDir(c.entriesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, de := range entries {
+		if de.IsDir() || filepath.Ext(de.Name()) != ".json" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(c.entriesDir, de.Name()))
+		if err != nil {
+			continue
+		}
+		var e Entry
+		if err := json.Unmarshal(b, &e); err != nil {
+			continue
+		}
+		fn(e)
+	}
+	return nil
+}
+
+// Entries returns every cache entry with its body, ordered by URL so that
+// callers reading the cache get the same answer every time. List returns the
+// lighter per-entry metadata without bodies.
+func (c *Cache) Entries() ([]Entry, error) {
+	var out []Entry
+	if err := c.ForEach(func(e Entry) { out = append(out, e) }); err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].URL < out[j].URL })
+	return out, nil
 }
 
 // Stats reports the number of cached entries and total bytes on disk.

@@ -5,33 +5,76 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
 // NewRootCmd builds a fresh `tba` command tree. Every command is constructed
 // per call so that flag state is never shared between invocations, which keeps
 // tests independent of each other.
 func NewRootCmd() *cobra.Command {
+	return newRootCmdWithClock(systemClock())
+}
+
+// newRootCmdWithClock builds the tree against a given clock, which is how a
+// test pins "now" without a package-level variable for two tests to fight
+// over. The clock is hung on the context in PersistentPreRunE, so every
+// command reaches it the same way it reaches the settings.
+func newRootCmdWithClock(clk clock) *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:           "tba",
-		Short:         "The Blue Alliance CLI",
-		Long:          "A command-line interface for The Blue Alliance API v3.",
+		Use:   "tba",
+		Short: "The Blue Alliance CLI",
+		Long:  "A command-line interface for The Blue Alliance API v3.",
+		// `tba --help` is where someone lands first, and a list of nouns does
+		// not show what the tool is for. These are the questions people
+		// actually turn up with, in the order they tend to ask them.
+		Example: `  tba team next 177
+  tba event matches 2024cthar --team 177 --upcoming
+  tba event rankings 2024cthar
+  tba team standing 177 2024cthar
+  tba event export 2024cthar --to csv
+  tba event list --week 4 --district ne`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		// Setting Version gives the root a --version flag.
+		Version: version.Resolve().Line(),
 		// Flags are checked once, before any command does work, so that a
 		// contradictory --format is reported without first hitting the API.
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := resolveFormat(cmd)
+			// The clock goes on first, so that resolving the settings — which
+			// works out the default --year, and that means asking what season
+			// it is — already has one.
+			cmd.SetContext(withClock(cmd.Context(), clk))
+			// Resolve flags, environment and config file into one view before
+			// anything reads a setting, then check the ones whose value can be
+			// wrong, so that a bad --format is reported without first hitting
+			// the API.
+			if err := initSettings(cmd); err != nil {
+				return err
+			}
+			if _, err := resolveFormat(cmd); err != nil {
+				return err
+			}
+			if err := checkJQ(cmd); err != nil {
+				return err
+			}
+			_, err := colorMode(cmd)
 			return err
 		},
 	}
 
+	rootCmd.SetVersionTemplate(versionTemplate)
+
 	// Cobra reports a bad flag as a plain error; tag it so main can exit 2.
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		if advice := negativeNumberArg(err); advice != nil {
+			return advice
+		}
 		return clierr.Wrap(clierr.KindUsage, err)
 	})
 
@@ -40,14 +83,19 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().BoolP("raw-output", "r", false, "With --jq, print string results without quotes (like jq -r)")
 	rootCmd.PersistentFlags().String("base-url", "", "Override API base URL (e.g. http://localhost:8080/api/v3)")
 	rootCmd.PersistentFlags().Bool("no-cache", false, "Disable HTTP response cache for this invocation")
+	rootCmd.PersistentFlags().Bool("offline", false, "Never contact the API; answer from the local cache only")
 	rootCmd.PersistentFlags().String("format", "", "Output format: auto, table, json, csv, tsv, markdown (auto: table on TTY, json otherwise)")
 	rootCmd.PersistentFlags().Duration("timeout", api.DefaultTimeout, "Per-request timeout (e.g. 10s, 1m)")
 	rootCmd.PersistentFlags().Int("retries", api.DefaultRetries, "Retry attempts for 429/5xx/network errors; 0 disables")
 	rootCmd.PersistentFlags().Bool("no-headers", false, "Omit the header row from table, csv, tsv and markdown output")
 	rootCmd.PersistentFlags().String("columns", "", "Select and order columns by header name or 1-based index (e.g. --columns key,name)")
-	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (use the --sort=-col form)")
+	// The example is a column every listing has and every format can order
+	// by. It used to be --sort=-opr, which fails the moment the output is
+	// piped: the OPR payload is an object keyed by team, and an object has no
+	// row order to rearrange.
+	rootCmd.PersistentFlags().String("sort", "", "Sort rows by a column; prefix with - to descend (e.g. --sort=name)")
 	rootCmd.PersistentFlags().String("color", "auto", "When to colorize output: auto, always, never")
-	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (alias for --color=never)")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (alias for --color=never; wins over --color)")
 
 	rootCmd.AddCommand(newAuthCmd())
 	rootCmd.AddCommand(newStatusCmd())
@@ -57,8 +105,47 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newDistrictCmd())
 	rootCmd.AddCommand(newInsightCmd())
 	rootCmd.AddCommand(newCacheCmd())
+	rootCmd.AddCommand(newVersionCmd())
+	rootCmd.AddCommand(newDocsCmd())
+	rootCmd.AddCommand(newOpenCmd())
+	rootCmd.AddCommand(newConfigCmd())
+
+	// A command that only groups others must still refuse an unknown one;
+	// applied to the finished tree so a new group cannot forget it.
+	applyGroupArgs(rootCmd)
+
+	// Argument completion is wired onto the finished tree; see completion.go.
+	attachCompletions(rootCmd)
 
 	return rootCmd
+}
+
+// shorthandFlagPattern picks the offending token out of pflag's complaint
+// about a shorthand flag it does not know: "unknown shorthand flag: '5' in -5".
+var shorthandFlagPattern = regexp.MustCompile(`^unknown shorthand flag: '.' in (-[^ ]+)$`)
+
+// negativeNumberArg recognises a team number someone wrote with a minus sign
+// and answers the question they actually have.
+//
+// `tba team view -5` came back as "unknown shorthand flag: '5' in -5", which
+// is about pflag's parser rather than about anything the user typed on
+// purpose: there is no -5 flag and there never will be, because the argument
+// is a team number. It returns nil for anything else, so a real unknown
+// shorthand still gets cobra's own wording.
+func negativeNumberArg(err error) error {
+	match := shorthandFlagPattern.FindStringSubmatch(err.Error())
+	if match == nil {
+		return nil
+	}
+	token := match[1]
+	digits := token[1:]
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return nil
+		}
+	}
+	return clierr.Usage("%q looks like a negative number; team numbers and keys never start with '-' (did you mean %q?)",
+		token, digits)
 }
 
 // Run executes an already-built command tree.
@@ -81,15 +168,38 @@ func Run(ctx context.Context, root *cobra.Command) error {
 	if err == nil {
 		return nil
 	}
+	if cmd == nil {
+		cmd = root
+	}
+	// The line that says what went wrong is printed first, above the usage
+	// hint. It used to come last, below the call shape and the "run --help"
+	// line, so on a small terminal the one line worth reading was the one
+	// that had already scrolled away.
+	//
+	// A closed stdout and a Ctrl-C get no line at all: the reader has already
+	// gone, and the person who pressed Ctrl-C knows they did.
+	if !clierr.Silent(err) {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Error:", err)
+	}
 	if clierr.ExitCode(err) == clierr.ExitUsage {
-		if cmd == nil {
-			cmd = root
-		}
-		w := cmd.ErrOrStderr()
-		fmt.Fprint(w, cmd.UsageString())
-		fmt.Fprintf(w, "Run '%s --help' for usage.\n", cmd.CommandPath())
+		printUsageHint(cmd)
 	}
 	return err
+}
+
+// printUsageHint shows how the command is called and where the rest is.
+//
+// Cobra's full usage block is about twenty-five lines, most of them the global
+// flags, and it pushes the one line that says what went wrong off the top of a
+// small terminal. The call shape is the part that helps in the moment; --help
+// is one keystroke away for everything else.
+func printUsageHint(cmd *cobra.Command) {
+	w := cmd.ErrOrStderr()
+	fmt.Fprintf(w, "Usage:\n  %s\n", cmd.UseLine())
+	if cmd.HasAvailableSubCommands() {
+		fmt.Fprintf(w, "  %s [command]\n", cmd.CommandPath())
+	}
+	fmt.Fprintf(w, "Run '%s --help' for usage.\n", cmd.CommandPath())
 }
 
 // Execute runs the CLI with the process's standard streams.

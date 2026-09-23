@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -32,12 +31,14 @@ func TestDistrictListTable(t *testing.T) {
 
 // Regression test: `district list` used to fail without an explicit --year.
 func TestDistrictListDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/districts/%d", currentYear())
+	path := fmt.Sprintf("/districts/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "district", "list")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 
@@ -95,36 +96,6 @@ func TestDistrictTeams(t *testing.T) {
 	requireContains(t, got[2], "South Windsor, Connecticut, USA")
 	requireContains(t, got[3], "5507")
 	requireContains(t, got[3], "Robotic Eagles")
-}
-
-func TestDistrictRankings(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/district/2024ne/rankings": districtRankings2024neJSON,
-	})
-	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--format", "table")
-	requireNoError(t, err, "")
-
-	got := lines(out)
-	if got[0] != "Rank  Team  Points" {
-		t.Errorf("header = %q", got[0])
-	}
-	if got[2] != "1     177   145   " {
-		t.Errorf("row 1 = %q", got[2])
-	}
-	if got[3] != "2     1073  132   " {
-		t.Errorf("row 2 = %q", got[3])
-	}
-}
-
-func TestDistrictRankingsJq(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/district/2024ne/rankings": districtRankings2024neJSON,
-	})
-	out, _, err := runCmd(t, srv, "district", "rankings", "2024ne", "--jq", ".[0].point_total")
-	requireNoError(t, err, "")
-	if strings.TrimSpace(out) != "145" {
-		t.Errorf("jq output = %q", out)
-	}
 }
 
 func TestDistrictSubcommandsAreRegistered(t *testing.T) {

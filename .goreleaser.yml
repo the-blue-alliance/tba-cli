@@ -1,10 +1,28 @@
 version: 2
 
+# Man pages and completion scripts are generated from the command tree itself,
+# so they can never drift from the flags the binary actually has. They are
+# written outside dist/, which goreleaser insists on owning.
+before:
+  hooks:
+    # --date takes the man page header off the commit rather than the clock,
+    # so rebuilding a tag produces the same archives.
+    - go run ./cmd/tba docs man --dir manpages --date {{ .CommitDate }}
+    - go run ./cmd/tba docs completions --dir completions
+
 builds:
   - main: ./cmd/tba
     binary: tba
     env:
       - CGO_ENABLED=0
+    # Build from the commit timestamp rather than the wall clock, so two builds
+    # of the same tag produce byte-identical binaries.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/the-blue-alliance/tba-cli/internal/version.Version={{ .Version }}
+      - -X github.com/the-blue-alliance/tba-cli/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/the-blue-alliance/tba-cli/internal/version.Date={{ .CommitDate }}
     goos:
       - linux
       - darwin
@@ -19,14 +37,53 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - src: manpages/*
+        dst: man
+      - src: completions/*
+        dst: completions
 
 checksum:
   name_template: "checksums.txt"
 
 changelog:
+  use: github
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\(.+\))??!?:.+$'
+      order: 2
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^chore\(deps\)'
+      - '^ci'
+      - '^test'
+      - '^Merge branch'
+      - '^Merge pull request'
+
+release:
+  footer: |
+    ---
+
+    **Installation.** See the [install instructions](https://github.com/the-blue-alliance/tba-cli#installation).
+    Run `tba version` to check what you have.
 
 announce:
+  # A tag pushed from a fork, or from a repo whose SLACK_WEBHOOK secret has not
+  # been set, used to fail the release *after* it had published — leaving a
+  # good release marked as a failed run. Nothing to announce to is not an
+  # error, so skip the announcement instead.
+  skip: "{{ if .Env.SLACK_WEBHOOK }}false{{ else }}true{{ end }}"
   slack:
     enabled: true
     message_template: |

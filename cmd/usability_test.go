@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // leafCommands returns every runnable command in the tree, excluding the ones
@@ -42,6 +43,69 @@ func TestEveryLeafCommandHasExamples(t *testing.T) {
 			if !strings.HasPrefix(strings.TrimSpace(line), "tba ") {
 				t.Errorf("%q has an example that does not start with tba: %q", c.CommandPath(), line)
 			}
+		}
+	}
+}
+
+// A missing argument should say what is missing and show one, rather than
+// cobra's "accepts 1 arg(s), received 0".
+func TestMissingArgumentsSayWhatIsMissing(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"team", "view"}, "team view needs a team number (e.g. tba team view 177)"},
+		{[]string{"team", "awards"}, "team awards needs a team number"},
+		{[]string{"event", "matches"}, "event matches needs an event key (e.g. tba event matches 2024cthar)"},
+		{[]string{"event", "rankings"}, "event rankings needs an event key"},
+		{[]string{"match", "view"}, "match view needs a match key (e.g. tba match view 2024cthar_qm12)"},
+		{[]string{"district", "teams"}, "district teams needs a district key"},
+		{[]string{"open"}, "open needs a team number, an event key or a match key"},
+		{[]string{"config", "set", "format"}, "config set needs a setting name and a value"},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			err := requireExitCode(t, clierr.ExitUsage, nil, tc.args...)
+			requireErrorContains(t, err, tc.want)
+			if strings.Contains(err.Error(), "arg(s)") {
+				t.Errorf("cobra's own wording leaked out: %v", err)
+			}
+		})
+	}
+}
+
+func TestTooManyArgumentsAreAUsageError(t *testing.T) {
+	err := requireExitCode(t, clierr.ExitUsage, nil, "team", "view", "177", "1073")
+	requireErrorContains(t, err, "team view takes a team number")
+	requireErrorContains(t, err, "but got 2 arguments")
+}
+
+// Every command that takes positional arguments should be using the helper, so
+// that none of them falls back to cobra's wording.
+//
+// TODO: the commands listed here still use cobra's Args validators; swap them
+// for exactArgs (cmd/helpers.go) and delete them from this list.
+func TestNoLeafCommandUsesCobrasArgCountMessage(t *testing.T) {
+	pending := map[string]bool{
+		"tba event export":        true,
+		"tba event insights":      true,
+		"tba event predictions":   true,
+		"tba event team-statuses": true,
+		"tba event watch":         true,
+		"tba team next":           true,
+		"tba team search":         true,
+		"tba team standing":       true,
+	}
+	for _, c := range leafCommands(NewRootCmd()) {
+		if c.Args == nil || !strings.Contains(c.Use, "<") || pending[c.CommandPath()] {
+			continue
+		}
+		err := c.Args(c, nil)
+		if err == nil {
+			continue
+		}
+		if strings.Contains(err.Error(), "arg(s)") {
+			t.Errorf("%q still reports %q", c.CommandPath(), err)
 		}
 	}
 }
@@ -182,9 +246,11 @@ func TestEveryEventSubcommandValidatesItsKey(t *testing.T) {
 		{"event", "matches"},
 		{"event", "rankings"},
 		{"event", "alliances"},
+		{"event", "team-statuses"},
 		{"event", "awards"},
 		{"event", "oprs"},
 		{"event", "district-points"},
+		{"event", "export"},
 		{"event", "predictions"},
 		{"event", "insights"},
 	}

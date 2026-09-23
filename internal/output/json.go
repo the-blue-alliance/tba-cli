@@ -15,6 +15,22 @@ func PrintJSON(w io.Writer, data interface{}) error {
 	return enc.Encode(data)
 }
 
+// ValidateJQ reports whether expr is a jq program at all.
+//
+// It is separate from running the program so that a misspelled expression can
+// be caught before any work is done: an expression that does not parse is a
+// mistake in the command line, while one that fails on the data is a failure of
+// the run, and the two deserve different exit codes.
+func ValidateJQ(expr string) error {
+	if expr == "" {
+		return nil
+	}
+	if _, err := gojq.Parse(expr); err != nil {
+		return fmt.Errorf("invalid jq expression %q: %w", expr, err)
+	}
+	return nil
+}
+
 // PrintJSONWithFilter writes data as JSON, optionally passing it through a jq
 // expression first.
 //

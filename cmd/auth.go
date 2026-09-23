@@ -30,7 +30,15 @@ func newAuthCmd() *cobra.Command {
 func newAuthLoginCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate with TBA API",
+		Short: "Authenticate with the TBA API",
+		Long: `Store a TBA API key for later commands.
+
+Get one at ` + config.APIKeyPage + `: sign in, then create a
+read API key. The key is checked against the API before it is stored, so a
+typo fails here rather than on every later command.
+
+Without --key the key is read from the terminal without echoing it, or from
+stdin when it is piped, so ` + "`tba auth login < key.txt`" + ` works too.`,
 		Example: `  tba auth login
   tba auth login --key abcd1234
   tba auth login --base-url http://localhost:8080/api/v3`,
@@ -149,7 +157,7 @@ func maskKey(key string) string {
 func newAuthLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
-		Short: "Remove stored API key",
+		Short: "Remove the stored API key",
 		Example: `  tba auth logout
   tba auth logout --base-url http://localhost:8080/api/v3`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -77,8 +77,15 @@ func TestExitCodeFourOnHTTP401(t *testing.T) {
 
 func TestExitCodeFiveOnHTTP404(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
-	err := requireExitCode(t, clierr.ExitNotFound, srv, "team", "view", "999999")
-	requireErrorContains(t, err, "404")
+	err := requireExitCode(t, clierr.ExitNotFound, srv, "team", "view", "99999")
+	// The API's own sentence, not the JSON document it arrived in, and said
+	// once: "not found: /team/frc99999 not found" was the news twice over.
+	if got, want := err.Error(), "/team/frc99999 not found"; got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+	if strings.Contains(err.Error(), `{"Error"`) {
+		t.Errorf("the raw body leaked into the message: %v", err)
+	}
 }
 
 func TestExitCodeOneOnServerError(t *testing.T) {
@@ -132,13 +139,31 @@ func TestUsageErrorsPrintUsage(t *testing.T) {
 			if stdout != "" {
 				t.Errorf("usage must not go to stdout, got:\n%s", stdout)
 			}
+			// What went wrong comes first. It used to be printed below the
+			// call shape and the "run --help" line, so on a small terminal
+			// the one line worth reading was the one that scrolled away.
+			got := lines(stderr)
+			if len(got) == 0 || !strings.HasPrefix(got[0], "Error: ") {
+				t.Errorf("stderr should open with the error line:\n%s", stderr)
+			}
+			if !strings.Contains(got[0], err.Error()) {
+				t.Errorf("first line = %q, want it to carry %q", got[0], err.Error())
+			}
+			// Then the call shape and where to find the rest — not the whole
+			// usage block with every global flag in it.
+			if n := len(got); n > 4 {
+				t.Errorf("the error and its hint are %d lines, want at most 4:\n%s", n, stderr)
+			}
+			if strings.Contains(stderr, "Global Flags:") || strings.Contains(stderr, "--no-cache") {
+				t.Errorf("the flag listing belongs in --help, not in the error:\n%s", stderr)
+			}
 		})
 	}
 }
 
 func TestRuntimeErrorsPrintNoUsage(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
-	stdout, stderr, err := runCmd(t, srv, "team", "view", "999999")
+	stdout, stderr, err := runCmd(t, srv, "team", "view", "99999")
 	if err == nil {
 		t.Fatal("want a 404 error")
 	}
@@ -151,6 +176,12 @@ func TestRuntimeErrorsPrintNoUsage(t *testing.T) {
 	if stdout != "" {
 		t.Errorf("nothing should reach stdout, got:\n%s", stdout)
 	}
+	// Reporting moved out of main and into Run, so it has to happen here —
+	// and exactly once, not once in each.
+	if n := strings.Count(stderr, "Error: "); n != 1 {
+		t.Errorf("stderr carries %d error lines, want 1:\n%s", n, stderr)
+	}
+	requireContains(t, stderr, err.Error())
 }
 
 func TestHelpIsNotAnError(t *testing.T) {

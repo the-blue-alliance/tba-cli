@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
@@ -176,14 +177,44 @@ func TestMarkdownAliasMd(t *testing.T) {
 	requireContains(t, out, "| --- | --- | --- |")
 }
 
+// The first page someone sees should show what the tool is for, not only which
+// nouns it knows.
+func TestRootHelpShowsExamples(t *testing.T) {
+	out, _, err := runCmd(t, nil, "--help")
+	requireNoError(t, err, "")
+	requireContains(t, out, "Examples:")
+	for _, want := range []string{
+		"tba team next 177",
+		"tba event matches 2024cthar --team 177 --upcoming",
+		"tba event rankings 2024cthar",
+		"tba team standing 177 2024cthar",
+		"tba event export 2024cthar --to csv",
+		"tba event list --week 4 --district ne",
+	} {
+		requireContains(t, out, want)
+	}
+}
+
+// "status" is the word people reach for when they want their team's standing.
+func TestStatusShortPointsAtTeamStanding(t *testing.T) {
+	out, _, err := runCmd(t, nil, "--help")
+	requireNoError(t, err, "")
+	requireContains(t, out, "tba team standing")
+}
+
 func TestAPIErrorIsSurfaced(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{})
 	_, _, err := runCmd(t, srv, "team", "view", "177")
 	if err == nil {
 		t.Fatal("want an error for an unknown path")
 	}
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("error should mention the status code: %v", err)
+	// A 404 is reported in words rather than by its status code; what matters
+	// is that the failure reaches the caller and says what was missing.
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should say what was not found: %v", err)
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitNotFound {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitNotFound)
 	}
 }
 

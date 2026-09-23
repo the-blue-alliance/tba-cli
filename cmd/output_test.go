@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 // districtsCmd is the smallest command that returns a stable multi-row table,
@@ -50,6 +52,52 @@ func TestNoColorBeatsColorAlways(t *testing.T) {
 	out := districtsCmd(t, "--format", "table", "--color", "always", "--no-color")
 	if strings.Contains(out, "\x1b") {
 		t.Errorf("--no-color must win, got %q", out)
+	}
+}
+
+// no-color wins wherever either setting came from, so a script can export it
+// unconditionally; `tba config list --help` promises exactly this.
+func TestNoColorBeatsColorFromEveryLayer(t *testing.T) {
+	t.Setenv("TBA_COLOR", "always")
+	out := districtsCmd(t, "--format", "table", "--no-color")
+	if strings.Contains(out, "\x1b") {
+		t.Errorf("no-color must win over TBA_COLOR, got %q", out)
+	}
+
+	help, _, err := runCmd(t, nil, "config", "list", "--help")
+	requireNoError(t, err, "")
+	requireContains(t, help, "no-color")
+	requireContains(t, help, "wins")
+}
+
+// A bad --color is still reported when --no-color would have settled the
+// question, so a typo in the config file does not go unnoticed.
+func TestBadColorValueIsReportedEvenWithNoColor(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	_ = requireExitCode(t, clierr.ExitUsage, srv,
+		"district", "list", "--year", "2024", "--color", "sometimes", "--no-color")
+}
+
+func TestSortFlagHelpShowsBothForms(t *testing.T) {
+	out, _, err := runCmd(t, nil, "district", "list", "--help")
+	requireNoError(t, err, "")
+	requireContains(t, out, "prefix with - to descend (e.g. --sort=name)")
+	if strings.Contains(out, "use the --sort=-col form") {
+		t.Errorf("the --sort help still claims only one form works:\n%s", out)
+	}
+	// The example used to be --sort=-opr, which fails as soon as the output
+	// is piped: the OPR payload is an object, not a list of rows.
+	if strings.Contains(out, "--sort=-opr") {
+		t.Errorf("the --sort example does not work in every format:\n%s", out)
+	}
+}
+
+// Both spellings work, so the help must not imply otherwise.
+func TestSortAcceptsASeparateArgument(t *testing.T) {
+	spaced := districtsCmd(t, "--format", "csv", "--sort", "-name")
+	equals := districtsCmd(t, "--format=csv", "--sort=-name")
+	if spaced != equals {
+		t.Errorf("--sort -name = %q but --sort=-name = %q", spaced, equals)
 	}
 }
 
@@ -235,6 +283,209 @@ func TestUnknownSortColumnIsAnError(t *testing.T) {
 	err = districtsCmdErr(t, "--json", "--sort", "nickname")
 	if !strings.Contains(err.Error(), "unknown column") {
 		t.Errorf("error = %v", err)
+	}
+}
+
+// A bad --columns or --sort is a mistake in how the command was invoked, so it
+// has to exit 2 like any other flag error rather than 1.
+func TestBadPresentationFlagsExitTwo(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"unknown column", []string{"--format", "csv", "--columns", "Nope"}},
+		{"column index out of range", []string{"--format", "csv", "--columns", "9"}},
+		{"unknown sort column", []string{"--format", "csv", "--sort", "Nope"}},
+		{"unknown sort column with json", []string{"--json", "--sort", "Nope"}},
+		{"empty sort column", []string{"--format", "csv", "--sort", "-"}},
+		{"columns with json", []string{"--json", "--columns", "key"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+			args := append([]string{"district", "list", "--year", "2024"}, tc.args...)
+			_ = requireExitCode(t, clierr.ExitUsage, srv, args...)
+		})
+	}
+}
+
+// --sort must never be a silent no-op: either it orders the JSON, or it says
+// it cannot.
+func TestSortPermutesAPlainJSONList(t *testing.T) {
+	out := districtsCmd(t, "--json", "--sort", "-key")
+	arr := decodeJSON(t, out).([]any)
+	if len(arr) != 2 {
+		t.Fatalf("want 2 districts, got %d:\n%s", len(arr), out)
+	}
+	if got := arr[0].(map[string]any)["key"]; got != "2024ne" {
+		t.Errorf("first key = %v, want 2024ne (descending)", got)
+	}
+}
+
+func TestSortOnANonListJSONPayloadIsAUsageError(t *testing.T) {
+	// event oprs answers with an object keyed by team, which carries no row
+	// order for --sort to apply.
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "oprs", "2024cthar", "--json", "--sort", "-opr")
+	requireErrorContains(t, err, "--sort cannot reorder this JSON payload")
+
+	// The same command in a tabular format still sorts.
+	out, stderr, runErr := runCmd(t, srv, "event", "oprs", "2024cthar", "--format", "csv", "--sort", "-opr")
+	requireNoError(t, runErr, stderr)
+	if len(lines(out)) < 2 {
+		t.Fatalf("want a sorted csv table, got:\n%s", out)
+	}
+}
+
+// Whether a payload can be reordered has nothing to do with which column was
+// named, so it is answered first. Checking the column first sent people off to
+// pick a different one from a list of valid columns, when every one of them
+// would have been refused for the same reason.
+func TestSortOnANonListJSONPayloadIsReportedBeforeTheColumnName(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	err := requireExitCode(t, clierr.ExitUsage, srv,
+		"event", "oprs", "2024cthar", "--json", "--sort", "nosuchcolumn")
+	requireErrorContains(t, err, "--sort cannot reorder this JSON payload")
+	if strings.Contains(err.Error(), "valid columns") || strings.Contains(err.Error(), "unknown column") {
+		t.Errorf("the column name is beside the point here: %v", err)
+	}
+}
+
+// A tabular format has no such objection, so there the unknown column is
+// exactly what went wrong and is still named.
+func TestSortStillReportsAnUnknownColumnInTabularFormats(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	err := requireExitCode(t, clierr.ExitUsage, srv,
+		"event", "oprs", "2024cthar", "--format", "csv", "--sort", "nosuchcolumn")
+	requireErrorContains(t, err, "nosuchcolumn")
+}
+
+// A jq expression that does not parse is a mistake in the command line, so it
+// exits 2 and costs no request; one that parses but fails on the data is a
+// failure of the run, and stays exit 1.
+func TestMalformedJQIsAUsageError(t *testing.T) {
+	for _, expr := range []string{".[", "{", "..foo", ". |"} {
+		t.Run(expr, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+			err := requireExitCode(t, clierr.ExitUsage, srv, "district", "list", "--year", "2024", "--jq", expr)
+			requireErrorContains(t, err, "invalid jq expression")
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a usage error must not reach the API, got %v", got)
+			}
+		})
+	}
+}
+
+func TestJQRuntimeFailureIsARuntimeError(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	// A valid program that cannot be applied to this data.
+	err := requireExitCode(t, clierr.ExitFailure, srv, "district", "list", "--year", "2024", "--jq", ".[] | .key + 1")
+	if err == nil {
+		t.Fatal("want an error")
+	}
+}
+
+// An empty table is ambiguous: nothing there, or a filter that cancelled
+// itself out, or a mistyped key. The note says which, on stderr, so stdout
+// stays a well-formed empty table.
+func TestEmptyResultsCarryANoteOnStderr(t *testing.T) {
+	cases := []struct {
+		name   string
+		routes map[string]any
+		args   []string
+		want   string
+	}{
+		{
+			"event list with filters",
+			map[string]any{"/events/2024": `[]`},
+			[]string{"event", "list", "--year", "2024", "--district", "ne"},
+			"note: no events match those filters\n",
+		},
+		{
+			"event list without filters",
+			map[string]any{"/events/2024": `[]`},
+			[]string{"event", "list", "--year", "2024"},
+			"note: no events in 2024\n",
+		},
+		{
+			"event teams",
+			map[string]any{"/event/2024cthar/teams": `[]`},
+			[]string{"event", "teams", "2024cthar"},
+			"note: no teams listed for 2024cthar yet\n",
+		},
+		{
+			"team events",
+			map[string]any{"/team/frc9999/events/2024": `[]`},
+			[]string{"team", "events", "9999", "--year", "2024"},
+			"note: no events for team 9999 in 2024\n",
+		},
+		{
+			"team awards",
+			map[string]any{"/team/frc9999/awards": `[]`},
+			[]string{"team", "awards", "9999"},
+			"note: no awards for team 9999\n",
+		},
+		{
+			"team awards by type",
+			map[string]any{"/team/frc9999/awards": `[]`},
+			[]string{"team", "awards", "9999", "--type", "impact"},
+			"note: no Chairman's/Impact awards for team 9999\n",
+		},
+		{
+			"district list",
+			map[string]any{"/districts/2024": `[]`},
+			[]string{"district", "list", "--year", "2024"},
+			"note: no districts in 2024\n",
+		},
+		{
+			"district events",
+			map[string]any{"/district/2024ne/events": `[]`},
+			[]string{"district", "events", "2024ne"},
+			"note: no events in district 2024ne\n",
+		},
+		{
+			"district teams",
+			map[string]any{"/district/2024ne/teams": `[]`},
+			[]string{"district", "teams", "2024ne"},
+			"note: no teams in district 2024ne\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newFakeTBA(t, tc.routes)
+			out, stderr, err := runCmd(t, srv, append(tc.args, "--format", "csv")...)
+			requireNoError(t, err, stderr)
+			if stderr != tc.want {
+				t.Errorf("stderr = %q, want %q", stderr, tc.want)
+			}
+			// stdout is still a table: the header and nothing else.
+			if n := len(lines(out)); n != 1 {
+				t.Errorf("stdout should be the header alone, got %d lines:\n%s", n, out)
+			}
+		})
+	}
+}
+
+// JSON is read by scripts, which want [] and no commentary.
+func TestEmptyResultsAreSilentInJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": `[]`})
+	out, stderr, err := runCmd(t, srv, "district", "list", "--year", "2024", "--json")
+	requireNoError(t, err, stderr)
+	if strings.TrimSpace(out) != "[]" {
+		t.Errorf("stdout = %q, want []", out)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want nothing", stderr)
+	}
+}
+
+// A table with rows has nothing to say.
+func TestNonEmptyResultsCarryNoNote(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	_, stderr, err := runCmd(t, srv, "district", "list", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, stderr)
+	if stderr != "" {
+		t.Errorf("stderr = %q, want nothing", stderr)
 	}
 }
 

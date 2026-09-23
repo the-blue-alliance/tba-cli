@@ -13,6 +13,32 @@ import (
 type Table struct {
 	Headers []string
 	Rows    [][]string
+	// Dividers annotates the gaps between rows: the text at key i is drawn
+	// after Rows[i], on a line of its own and between dashed rules. It is presentation — a district
+	// championship cut line, say — so only the formats a person reads honour
+	// it, and csv, tsv and json ignore it entirely.
+	//
+	// Keys are indices into Rows as the table was built, so a transform that
+	// reorders rows drops them rather than leaving a line stranded in the
+	// middle of a differently-sorted table.
+	Dividers map[int]string
+	// Breaks marks the gaps between rows that are worth a blank line: a break
+	// at key i leaves one after Rows[i]. It says the rows below are a
+	// different kind of thing from the rows above, which is a weaker claim
+	// than a divider's labelled rule and needs no words to make.
+	//
+	// Like Dividers it is presentation, honoured only by the aligned text
+	// table: a blank line in csv or markdown is a broken file, not a pause.
+	Breaks map[int]bool
+}
+
+// dividerAfter returns the text to draw after row i, if any.
+func (t Table) dividerAfter(i int) (string, bool) {
+	if t.Dividers == nil {
+		return "", false
+	}
+	text, ok := t.Dividers[i]
+	return text, ok && text != ""
 }
 
 // RenderOptions controls how a Table is written.
@@ -91,8 +117,18 @@ func renderText(w io.Writer, t Table, noHeaders, color bool) {
 		fmt.Fprintln(w, strings.Join(seps, "  "))
 	}
 
-	for _, row := range t.Rows {
+	for i, row := range t.Rows {
 		fmt.Fprintln(w, joinPadded(row, widths))
+		if text, ok := t.dividerAfter(i); ok {
+			// Drawn whole, on its own line: squeezing it into the first cell
+			// would widen that column by the length of the sentence.
+			fmt.Fprintf(w, "--- %s ---\n", text)
+		}
+		// Not after the last row, where it would only add a trailing blank
+		// line to whatever follows the table.
+		if t.Breaks[i] && i+1 < len(t.Rows) {
+			fmt.Fprintln(w)
+		}
 	}
 }
 
@@ -129,11 +165,21 @@ func renderMarkdown(w io.Writer, t Table, noHeaders bool) {
 		}
 		fmt.Fprintln(w)
 	}
-	for _, row := range t.Rows {
+	for i, row := range t.Rows {
 		fmt.Fprint(w, "|")
 		for _, cell := range row {
 			fmt.Fprintf(w, " %s |", escape(cell))
 		}
 		fmt.Fprintln(w)
+		if text, ok := t.dividerAfter(i); ok {
+			// Markdown has no row that spans the table, so the text goes in
+			// the first cell and the rest are left empty, which reads as one
+			// wide rule.
+			fmt.Fprintf(w, "| --- %s --- |", escape(text))
+			for n := 1; n < len(t.Headers); n++ {
+				fmt.Fprint(w, " |")
+			}
+			fmt.Fprintln(w)
+		}
 	}
 }

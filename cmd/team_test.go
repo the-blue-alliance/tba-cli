@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 )
 
 func TestTeamViewTable(t *testing.T) {
@@ -166,7 +168,7 @@ func TestTeamListMarkdown(t *testing.T) {
 
 // Regression test: --year has a default, so omitting it must work.
 func TestTeamListDefaultsToCurrentYear(t *testing.T) {
-	year := currentYear()
+	year := thisYear()
 	srv := newFakeTBA(t, map[string]any{
 		fmt.Sprintf("/teams/%d/0", year): "[" + teamFRC177JSON + "]",
 		fmt.Sprintf("/teams/%d/1", year): "[]",
@@ -196,13 +198,31 @@ func TestTeamEvents(t *testing.T) {
 	requireContains(t, got[3], "2024necmp")
 }
 
+// The API lists a team's events by key, which puts 2024necmp -- April's
+// district championship -- ahead of the March district events that qualified
+// the team for it. A season is read as a season.
+func TestTeamEventsListsTheSeasonInOrder(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{
+		"/team/frc177/events/2024": teamEvents177In2024JSON,
+	})
+	out, errOut, err := runCmd(t, srv, "team", "events", "177", "--year", "2024", "--format", "csv")
+	requireNoError(t, err, errOut)
+
+	want := []string{"2024ctwat", "2024cthar", "2024necmp"}
+	if got := csvColumn(t, out, 0); !equalStrings(got, want) {
+		t.Errorf("events = %v, want %v (chronological)", got, want)
+	}
+}
+
 func TestTeamEventsDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/team/frc177/events/%d", currentYear())
+	path := fmt.Sprintf("/team/frc177/events/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "events", "177")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 
@@ -217,24 +237,35 @@ func TestTeamMatches(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("want header + separator + 2 rows, got %d:\n%s", len(got), out)
 	}
-	if got[0] != "Key            Level  Winner" {
-		t.Errorf("header = %q", got[0])
+	// A season's listing leads with the event each match belongs to. When is
+	// empty for a listing of played matches, and such a column is left out.
+	for _, want := range append([]string{"Event"}, matchHeaders...) {
+		if want == "When" {
+			continue
+		}
+		requireContains(t, got[0], want)
 	}
-	if got[2] != "2024cthar_qm1  qm     red   " {
-		t.Errorf("row = %q", got[2])
+	if !strings.HasPrefix(got[0], "Event") {
+		t.Errorf("header = %q, want the Event column first", got[0])
 	}
+	requireContains(t, got[2], "2024cthar")
+	requireContains(t, got[2], "Qual 1")
+	requireContains(t, got[2], "2024cthar_qm1")
+	requireContains(t, got[2], "red")
 	requireContains(t, got[3], "2024cthar_qm2")
 	requireContains(t, got[3], "blue")
 }
 
 // Regression test: `team matches` used to fail without an explicit --year.
 func TestTeamMatchesDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/team/frc177/matches/%d", currentYear())
+	path := fmt.Sprintf("/team/frc177/matches/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "matches", "177")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 
@@ -243,11 +274,11 @@ func TestTeamAwardsAllYears(t *testing.T) {
 	out, _, err := runCmd(t, srv, "team", "awards", "177", "--format", "table")
 	requireNoError(t, err, "")
 
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != "/team/frc177/awards" {
+	if got := requestPaths(t, srv); !contains(got, "/team/frc177/awards") {
 		t.Fatalf("requested %v, want the unfiltered awards path", got)
 	}
 	requireContains(t, out, "Regional Chairman's Award")
-	requireContains(t, out, "2007ct")
+	requireContains(t, out, "2007")
 	requireContains(t, out, "2024")
 }
 
@@ -259,8 +290,8 @@ func TestTeamAwardsForOneYear(t *testing.T) {
 	})
 	_, _, err := runCmd(t, srv, "team", "awards", "177", "--year", "2024")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != "/team/frc177/awards/2024" {
-		t.Errorf("requested %v, want [/team/frc177/awards/2024]", got)
+	if got := requestPaths(t, srv); !contains(got, "/team/frc177/awards/2024") {
+		t.Errorf("requested %v, want the 2024 awards path", got)
 	}
 }
 
@@ -269,9 +300,9 @@ func TestTeamAwardsCSV(t *testing.T) {
 	out, _, err := runCmd(t, srv, "team", "awards", "177", "--format", "csv")
 	requireNoError(t, err, "")
 
-	want := "Event,Award,Year\n" +
-		"2007ct,Regional Chairman's Award,2007\n" +
-		"2024cthar,District Event Winner,2024\n"
+	want := "Year,Event,Award,Type,Recipient\n" +
+		"2024,,District Event Winner,Winner,\n" +
+		"2007,,Regional Chairman's Award,Chairman's/Impact,\n"
 	if out != want {
 		t.Errorf("csv =\n%q\nwant\n%q", out, want)
 	}
@@ -290,12 +321,14 @@ func TestTeamMedia(t *testing.T) {
 
 // Regression test: `team media` used to fail without an explicit --year.
 func TestTeamMediaDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/team/frc177/media/%d", currentYear())
+	path := fmt.Sprintf("/team/frc177/media/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "team", "media", "177")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 
@@ -336,6 +369,49 @@ func TestTeamDistricts(t *testing.T) {
 		"| 2024ne | New England | 2024 |\n"
 	if out != want {
 		t.Errorf("markdown =\n%q\nwant\n%q", out, want)
+	}
+}
+
+// A team argument that cannot be a team number is a usage mistake, caught
+// before a request is spent on it.
+func TestBadTeamArgumentIsAUsageErrorAndCostsNoRequest(t *testing.T) {
+	commands := []string{"view", "events", "years", "matches", "awards", "media", "robots", "districts"}
+	for _, sub := range commands {
+		t.Run(sub, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{})
+			err := requireExitCode(t, clierr.ExitUsage, srv, "team", sub, "17x7")
+			requireErrorContains(t, err, `"17x7" is not a team number`)
+			requireErrorContains(t, err, "frc177")
+			if got := requestPaths(t, srv); len(got) != 0 {
+				t.Errorf("a usage error must not reach the API, got %v", got)
+			}
+		})
+	}
+}
+
+func TestTeamArgumentAccepts(t *testing.T) {
+	for _, arg := range []string{"177", "frc177", "FRC177", "00007", "99999"} {
+		if err := validateTeamArg(arg); err != nil {
+			t.Errorf("validateTeamArg(%q) = %v, want it accepted", arg, err)
+		}
+	}
+	// Surrounding space is trimmed, so " 177 " is fine; nothing else is.
+	if err := validateTeamArg(" 177 "); err != nil {
+		t.Errorf("validateTeamArg(%q) = %v, want it accepted", " 177 ", err)
+	}
+	for _, arg := range []string{"", "17x7", "frc", "frc17x7", "177177", "-177", "1 7 7"} {
+		if err := validateTeamArg(arg); err == nil {
+			t.Errorf("validateTeamArg(%q) = nil, want a usage error", arg)
+		}
+	}
+}
+
+func TestEventListRejectsABadTeamFilter(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{})
+	err := requireExitCode(t, clierr.ExitUsage, srv, "event", "list", "--year", "2024", "--team", "17x7")
+	requireErrorContains(t, err, `"17x7" is not a team number`)
+	if got := requestPaths(t, srv); len(got) != 0 {
+		t.Errorf("a usage error must not reach the API, got %v", got)
 	}
 }
 

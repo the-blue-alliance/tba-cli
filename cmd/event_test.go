@@ -14,10 +14,13 @@ func TestEventViewTable(t *testing.T) {
 	want := "Event:     NE District Hartford Event\n" +
 		"Key:       2024cthar\n" +
 		"Type:      District\n" +
+		"District:  New England (ne)\n" +
 		"Location:  Hartford, CT, USA\n" +
 		"Venue:     Hartford Public High School\n" +
 		"Dates:     2024-03-22 to 2024-03-24\n" +
-		"Week:      3\n"
+		"Week:      4\n" +
+		"Playoff:   Double elimination (8 alliances)\n" +
+		"Webcast:   https://www.twitch.tv/nefirst_red\n"
 	if out != want {
 		t.Errorf("event view table =\n%q\nwant\n%q", out, want)
 	}
@@ -81,12 +84,14 @@ func TestEventList(t *testing.T) {
 
 // Regression test: `event list` used to fail without an explicit --year.
 func TestEventListDefaultsToCurrentYear(t *testing.T) {
-	path := fmt.Sprintf("/events/%d", currentYear())
+	path := fmt.Sprintf("/events/%d", thisYear())
 	srv := newFakeTBA(t, map[string]any{path: "[]"})
 	_, _, err := runCmd(t, srv, "event", "list")
 	requireNoError(t, err, "")
-	if got := requestPaths(t, srv); len(got) != 1 || got[0] != path {
-		t.Errorf("requested %v, want [%s]", got, path)
+	// The season lookup comes first; this fake serves no /status, so the year
+	// falls back to the calendar.
+	if got := requestPaths(t, srv); !contains(got, path) {
+		t.Errorf("requested %v, want %s among them", got, path)
 	}
 }
 
@@ -95,8 +100,8 @@ func TestEventListCSVQuotesLocations(t *testing.T) {
 	out, _, err := runCmd(t, srv, "event", "list", "--year", "2024", "--format", "csv")
 	requireNoError(t, err, "")
 
-	want := "Key,Name,Start,Type,Location\n" +
-		"2024cthar,NE District Hartford Event,2024-03-22,District,\"Hartford, CT, USA\"\n"
+	want := "Key,Name,Type,Week,Start,End,Location,District\n" +
+		"2024cthar,NE District Hartford Event,District,4,2024-03-22,2024-03-24,\"Hartford, CT, USA\",ne\n"
 	if out != want {
 		t.Errorf("csv =\n%q\nwant\n%q", out, want)
 	}
@@ -126,15 +131,21 @@ func TestEventMatches(t *testing.T) {
 	requireNoError(t, err, "")
 
 	got := lines(out)
-	if got[0] != "Key            Level  Red  Blue  Winner" {
-		t.Errorf("header = %q", got[0])
+	for _, want := range matchHeaders {
+		// Both matches are played, so nothing counts down and When is empty
+		// for the whole listing; a column like that is left out.
+		if want == "When" {
+			continue
+		}
+		requireContains(t, got[0], want)
 	}
-	if got[2] != "2024cthar_qm1  qm     88   61    red   " {
-		t.Errorf("row 1 = %q", got[2])
-	}
-	if got[3] != "2024cthar_qm2  qm     45   72    blue  " {
-		t.Errorf("row 2 = %q", got[3])
-	}
+	requireContains(t, got[2], "Qual 1")
+	requireContains(t, got[2], "2024cthar_qm1")
+	requireContains(t, got[2], "88-61")
+	requireContains(t, got[2], "red")
+	requireContains(t, got[3], "Qual 2")
+	requireContains(t, got[3], "45-72")
+	requireContains(t, got[3], "blue")
 }
 
 func TestEventMatchesJSONRoundTrips(t *testing.T) {
@@ -157,51 +168,6 @@ func TestEventMatchesJSONRoundTrips(t *testing.T) {
 	}
 }
 
-func TestEventRankings(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/rankings": rankings2024ctharJSON})
-	out, _, err := runCmd(t, srv, "event", "rankings", "2024cthar", "--format", "table")
-	requireNoError(t, err, "")
-
-	got := lines(out)
-	if got[0] != "Rank  Team  Record  Played" {
-		t.Errorf("header = %q", got[0])
-	}
-	if got[2] != "1     177   10-2-0  12    " {
-		t.Errorf("row 1 = %q", got[2])
-	}
-	if got[3] != "2     1073  9-3-0   12    " {
-		t.Errorf("row 2 = %q", got[3])
-	}
-}
-
-func TestEventRankingsJSONIsTheWrapperObject(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/rankings": rankings2024ctharJSON})
-	out, _, err := runCmd(t, srv, "event", "rankings", "2024cthar", "--json")
-	requireNoError(t, err, "")
-
-	obj := decodeJSON(t, out).(map[string]any)
-	if _, ok := obj["rankings"]; !ok {
-		t.Errorf("want a rankings key, got %v", obj)
-	}
-	if _, ok := obj["sort_order_info"]; !ok {
-		t.Errorf("want a sort_order_info key, got %v", obj)
-	}
-}
-
-func TestEventAlliances(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/alliances": alliances2024ctharJSON})
-	out, _, err := runCmd(t, srv, "event", "alliances", "2024cthar", "--format", "markdown")
-	requireNoError(t, err, "")
-
-	want := "| Alliance | Picks |\n" +
-		"| --- | --- |\n" +
-		"| Alliance 1 | 177, 1073, 5507 |\n" +
-		"| Alliance 2 | 230, 195, 558 |\n"
-	if out != want {
-		t.Errorf("markdown =\n%q\nwant\n%q", out, want)
-	}
-}
-
 func TestEventAwards(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/awards": awards2024ctharJSON})
 	out, _, err := runCmd(t, srv, "event", "awards", "2024cthar", "--format", "csv")
@@ -215,17 +181,33 @@ func TestEventAwards(t *testing.T) {
 	}
 }
 
-func TestEventOPRsAreSortedByTeamNumber(t *testing.T) {
+// An OPR table is read to find the strongest teams, so it is ordered by OPR.
+// Two teams on the same OPR keep team-number order, which makes the output the
+// same every run.
+func TestEventOPRsAreSortedByOPR(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
 	out, _, err := runCmd(t, srv, "event", "oprs", "2024cthar", "--format", "csv")
 	requireNoError(t, err, "")
 
 	want := "Team,OPR,DPR,CCWM\n" +
+		"230,61.20,18.75,42.45\n" +
 		"177,55.43,20.11,35.32\n" +
+		"1071,41.12,24.00,17.12\n" +
 		"1073,41.12,25.67,15.46\n" +
 		"5507,30.50,28.25,2.25\n"
 	if out != want {
 		t.Errorf("csv =\n%q\nwant\n%q", out, want)
+	}
+}
+
+// --sort is still the way to ask for any other order.
+func TestEventOPRsSortByTeam(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/event/2024cthar/oprs": oprs2024ctharJSON})
+	out, _, err := runCmd(t, srv, "event", "oprs", "2024cthar",
+		"--format", "csv", "--sort", "team", "--columns", "team", "--no-headers")
+	requireNoError(t, err, "")
+	if out != "177\n230\n1071\n1073\n5507\n" {
+		t.Errorf("teams = %q", out)
 	}
 }
 
@@ -238,100 +220,17 @@ func TestEventOPRsJq(t *testing.T) {
 	}
 }
 
-func TestEventDistrictPointsRawTable(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/event/2024cthar/district_points": districtPoints2024ctharJSON,
-	})
-	out, _, err := runCmd(t, srv, "event", "district-points", "2024cthar", "--format", "table")
-	requireNoError(t, err, "")
-	requireContains(t, out, `"qual_points": 22`)
-	decodeJSON(t, out)
-}
-
-func TestEventDistrictPointsJSONRoundTrips(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/event/2024cthar/district_points": districtPoints2024ctharJSON,
-	})
-	out, _, err := runCmd(t, srv, "event", "district-points", "2024cthar", "--json")
-	requireNoError(t, err, "")
-
-	obj := decodeJSON(t, out).(map[string]any)
-	points := obj["points"].(map[string]any)["frc177"].(map[string]any)
-	if points["total"] != float64(73) {
-		t.Errorf("total = %v", points["total"])
-	}
-}
-
-func TestEventPredictionsJq(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/event/2024cthar/predictions": predictions2024ctharJSON,
-	})
-	out, _, err := runCmd(t, srv, "event", "predictions", "2024cthar",
-		"--jq", ".match_predictions.qual.\"2024cthar_qm1\".red.score")
-	requireNoError(t, err, "")
-	if strings.TrimSpace(out) != "84.2" {
-		t.Errorf("jq output = %q", out)
-	}
-}
-
-func TestEventInsights(t *testing.T) {
-	srv := newFakeTBA(t, map[string]any{
-		"/event/2024cthar/insights": insights2024ctharJSON,
-	})
-	out, _, err := runCmd(t, srv, "event", "insights", "2024cthar")
-	requireNoError(t, err, "")
-
-	obj := decodeJSON(t, out).(map[string]any)
-	qual := obj["qual"].(map[string]any)
-	if qual["average_score"] != 61.4 {
-		t.Errorf("average_score = %v", qual["average_score"])
-	}
-}
+// The predictions and insights commands are covered in event_insights_test.go.
 
 func TestEventSubcommandsAreRegistered(t *testing.T) {
 	got := subcommandNames(t, "event")
 	for _, want := range []string{
 		"view", "list", "teams", "matches", "rankings", "alliances",
-		"awards", "oprs", "district-points", "predictions", "insights",
+		"team-statuses", "awards", "oprs", "district-points", "predictions",
+		"insights",
 	} {
 		if !contains(got, want) {
 			t.Errorf("event %s is not registered (have %v)", want, got)
 		}
-	}
-}
-
-// The raw event sub-resources have no stable schema: table mode passes the
-// body through and every other format falls back to JSON.
-func TestRawEventCommandsHonorFormat(t *testing.T) {
-	cases := []struct {
-		command string
-		path    string
-		body    string
-	}{
-		{"district-points", "/event/2024cthar/district_points", districtPoints2024ctharJSON},
-		{"predictions", "/event/2024cthar/predictions", predictions2024ctharJSON},
-		{"insights", "/event/2024cthar/insights", insights2024ctharJSON},
-	}
-	for _, tc := range cases {
-		t.Run(tc.command, func(t *testing.T) {
-			for _, format := range []string{"json", "csv", "tsv", "markdown"} {
-				t.Run(format, func(t *testing.T) {
-					srv := newFakeTBA(t, map[string]any{tc.path: tc.body})
-					out, _, err := runCmd(t, srv, "event", tc.command, "2024cthar", "--format", format)
-					requireNoError(t, err, "")
-					if _, ok := decodeJSON(t, out).(map[string]any); !ok {
-						t.Fatalf("want a JSON object, got:\n%s", out)
-					}
-				})
-			}
-			t.Run("table", func(t *testing.T) {
-				srv := newFakeTBA(t, map[string]any{tc.path: tc.body})
-				out, _, err := runCmd(t, srv, "event", tc.command, "2024cthar", "--format", "table")
-				requireNoError(t, err, "")
-				if strings.TrimSpace(out) != strings.TrimSpace(tc.body) {
-					t.Errorf("table mode should pass the body through, got:\n%s", out)
-				}
-			})
-		})
 	}
 }

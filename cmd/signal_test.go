@@ -26,11 +26,18 @@ func slowServer(t *testing.T) *httptest.Server {
 // runCtx is runCmd with a caller-supplied context, for cancellation tests.
 func runCtx(t *testing.T, ctx context.Context, baseURL string, args ...string) (string, string, error) {
 	t.Helper()
+	return runCtxWith(t, ctx, systemClock(), baseURL, args...)
+}
+
+// runCtxWith is runCtx against a clock of the caller's own making, for the one
+// test that needs both a cancellable context and a clock it can drive.
+func runCtxWith(t *testing.T, ctx context.Context, clk clock, baseURL string, args ...string) (string, string, error) {
+	t.Helper()
 	t.Setenv("TBA_AUTH_KEY", "test-key")
 	t.Setenv("TBA_CACHE_DIR", t.TempDir())
 	t.Setenv("TBA_CONFIG_DIR", t.TempDir())
 
-	root := NewRootCmd()
+	root := newRootCmdWithClock(clk)
 	var outBuf, errBuf bytes.Buffer
 	root.SetOut(&outBuf)
 	root.SetErr(&errBuf)
@@ -91,6 +98,29 @@ func TestAlreadyCancelledContextMakesNoRequest(t *testing.T) {
 	}
 	if got := requestPaths(t, srv); len(got) != 0 {
 		t.Errorf("no request should have been sent, got %v", got)
+	}
+}
+
+// Ctrl-C is not a failure to explain: the person who pressed it knows what
+// happened, and "Error: context canceled" reads like a bug in the tool.
+func TestInterruptIsReportedSilently(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	stdout, stderr, err := runCtx(t, ctx, srv.URL, "status")
+	if err == nil {
+		t.Fatal("want an error for a cancelled context")
+	}
+	if !clierr.Silent(err) {
+		t.Errorf("an interrupt should not be printed, but %v is not silent", err)
+	}
+	if got := clierr.ExitCode(err); got != clierr.ExitInterrupt {
+		t.Errorf("exit code = %d, want %d", got, clierr.ExitInterrupt)
+	}
+	if stdout != "" || stderr != "" {
+		t.Errorf("nothing should be written: stdout %q, stderr %q", stdout, stderr)
 	}
 }
 

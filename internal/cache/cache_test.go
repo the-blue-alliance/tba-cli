@@ -486,3 +486,94 @@ func TestNewFailsWithoutAHomeDirectory(t *testing.T) {
 		t.Error("New created .cache in the working directory")
 	}
 }
+
+func TestEntriesReturnsEveryEntryOrderedByURL(t *testing.T) {
+	c, _ := newTestCache(t)
+	for _, u := range []string{"https://example.test/c", "https://example.test/a", "https://example.test/b"} {
+		if err := c.Put(u, "etag-"+u, "", []byte(`{"n":1}`)); err != nil {
+			t.Fatalf("Put %s: %v", u, err)
+		}
+	}
+
+	entries, err := c.Entries()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("List returned %d entries, want 3", len(entries))
+	}
+	for i, want := range []string{"https://example.test/a", "https://example.test/b", "https://example.test/c"} {
+		if entries[i].URL != want {
+			t.Errorf("entries[%d].URL = %q, want %q", i, entries[i].URL, want)
+		}
+	}
+	if got := compact(t, entries[0].Body); got != `{"n":1}` {
+		t.Errorf("body = %s", got)
+	}
+	if entries[0].ETag != "etag-https://example.test/a" {
+		t.Errorf("etag = %q", entries[0].ETag)
+	}
+	if entries[0].FetchedAt.IsZero() {
+		t.Error("FetchedAt was not preserved")
+	}
+}
+
+func TestEntriesOnAnEmptyCache(t *testing.T) {
+	c, _ := newTestCache(t)
+	entries, err := c.Entries()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("List = %v, want nothing", entries)
+	}
+}
+
+func TestEntriesToleratesAMissingEntriesDirectory(t *testing.T) {
+	c, _ := newTestCacheWithRoot(t)
+	if err := os.RemoveAll(c.EntriesDir()); err != nil {
+		t.Fatalf("RemoveAll: %v", err)
+	}
+	entries, err := c.Entries()
+	if err != nil || len(entries) != 0 {
+		t.Errorf("List = (%v, %v), want (nothing, nil)", entries, err)
+	}
+}
+
+func TestEntriesSkipsDamagedAndForeignFiles(t *testing.T) {
+	c, entriesDir := newTestCache(t)
+	if err := c.Put("https://example.test/good", "", "", []byte(`{"n":1}`)); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(entriesDir, "broken.json"), []byte("{not json"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(entriesDir, "notes.txt"), []byte("hello"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	entries, err := c.Entries()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 1 || entries[0].URL != "https://example.test/good" {
+		t.Errorf("List = %v, want only the readable entry", entries)
+	}
+}
+
+func TestForEachVisitsEveryEntry(t *testing.T) {
+	c, _ := newTestCache(t)
+	for _, u := range []string{"https://example.test/a", "https://example.test/b"} {
+		if err := c.Put(u, "", "", []byte(`{}`)); err != nil {
+			t.Fatalf("Put %s: %v", u, err)
+		}
+	}
+
+	seen := map[string]bool{}
+	if err := c.ForEach(func(e Entry) { seen[e.URL] = true }); err != nil {
+		t.Fatalf("ForEach: %v", err)
+	}
+	if len(seen) != 2 || !seen["https://example.test/a"] || !seen["https://example.test/b"] {
+		t.Errorf("ForEach saw %v", seen)
+	}
+}

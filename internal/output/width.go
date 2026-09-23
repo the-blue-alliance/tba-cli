@@ -9,8 +9,12 @@ import (
 // StringWidth reports how many terminal cells s occupies. It is grapheme aware,
 // so combining marks, emoji sequences and East Asian wide runes are measured the
 // way a terminal draws them rather than by byte or rune count.
+//
+// ANSI escapes are not counted, since they are instructions to the terminal
+// rather than something it draws. Without that, a colored cell would reserve
+// nine cells it never uses and push every column after it out of line.
 func StringWidth(s string) int {
-	return uniseg.StringWidth(s)
+	return uniseg.StringWidth(StripANSI(s))
 }
 
 // padRight pads s with spaces so that it occupies width cells. Cells wider than

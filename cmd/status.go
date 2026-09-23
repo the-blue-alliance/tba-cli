@@ -10,8 +10,10 @@ import (
 
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
-		Short: "Show TBA API status",
+		Use: "status",
+		// "status" is a word people arrive at looking for their team's
+		// standing at an event, so the one-liner points them onwards.
+		Short: "Show TBA API status (for a team's standing see 'tba team standing')",
 		Example: `  tba status
   tba status --format json
   tba status --jq .current_season`,
