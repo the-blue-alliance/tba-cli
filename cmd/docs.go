@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -34,7 +37,7 @@ func newDocsCmd() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 	}
-	docsCmd.AddCommand(newDocsManCmd(), newDocsMarkdownCmd(), newDocsCompletionsCmd())
+	docsCmd.AddCommand(newDocsManCmd(), newDocsMarkdownCmd(), newDocsCompletionsCmd(), newDocsReadmeTableCmd())
 	return docsCmd
 }
 
@@ -203,4 +206,110 @@ func disableAutoGenTag(cmd *cobra.Command) {
 	for _, c := range cmd.Commands() {
 		disableAutoGenTag(c)
 	}
+}
+
+// readmeTableHeader is the two-line markdown header the README's command
+// reference carries. It is part of the generated block, so the test that
+// compares the two can find where the table starts.
+const readmeTableHeader = "| Command | Description |\n|---------|-------------|\n"
+
+// newDocsReadmeTableCmd prints the README's command reference table.
+//
+// The table used to be maintained by hand, and drifted the moment two branches
+// documented the same command: `event predictions` and `event insights` each
+// ended up with a second row saying what an existing one already said.
+// Generating it from the command tree makes the tree the only place a command
+// is described, and a test compares the README against a fresh generation so
+// that CI notices when the two part company.
+func newDocsReadmeTableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "readme-table",
+		Short: "Print the README's command reference table",
+		Long: "Print the `| Command | Description |` table the README carries under\n" +
+			"\"Command reference\": one row per command that does something, built from\n" +
+			"each command's own use line and short description.\n\n" +
+			"Hidden commands are left out, including this one.",
+		Example: `  tba docs readme-table
+  tba docs readme-table > commands.md`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := io.WriteString(cmd.OutOrStdout(), readmeCommandTable())
+			return err
+		},
+	}
+}
+
+// readmeRow is one line of the command reference.
+type readmeRow struct {
+	command     string
+	description string
+}
+
+// readmeCommandTable renders the whole block, header included, with a trailing
+// newline: exactly the bytes the README holds.
+func readmeCommandTable() string {
+	var b strings.Builder
+	b.WriteString(readmeTableHeader)
+	for _, row := range readmeCommandRows(docsTree()) {
+		fmt.Fprintf(&b, "| %s | %s |\n",
+			markdownCell("`"+row.command+"`"), markdownCell(row.description))
+	}
+	return b.String()
+}
+
+// readmeCommandRows collects every command worth listing, in alphabetical
+// order by the words you would type.
+//
+// Only leaves are listed: a group such as `tba team` is a heading rather than
+// something to run, and its subcommands say what it is for. Hidden commands
+// are left out wholesale -- `tba docs` and everything under it exists for the
+// release pipeline -- as is cobra's own `help`, which is not part of the
+// interface this table describes.
+//
+// Alphabetical order is the point rather than a detail: a hand-maintained
+// table grows by appending, which is how the same command came to be listed
+// twice, and a generated one has to put a new command where a reader will
+// look for it.
+func readmeCommandRows(root *cobra.Command) []readmeRow {
+	// `tba completion <shell>` is cobra's, and cobra only attaches it on the
+	// way into Execute, which a tree built for inspection never reaches. It is
+	// a command users run and the README has always listed, so it is attached
+	// here rather than left out of a table that claims to be complete.
+	root.InitDefaultCompletionCmd()
+
+	var out []readmeRow
+	var walk func(parent *cobra.Command)
+	walk = func(parent *cobra.Command) {
+		for _, c := range parent.Commands() {
+			if c.Hidden || c.Name() == "help" {
+				continue
+			}
+			if c.HasSubCommands() {
+				walk(c)
+				continue
+			}
+			out = append(out, readmeRow{command: readmeUseLine(c), description: c.Short})
+		}
+	}
+	walk(root)
+	slices.SortFunc(out, func(a, b readmeRow) int { return strings.Compare(a.command, b.command) })
+	return out
+}
+
+// readmeUseLine is how a command is invoked: its full path followed by the
+// argument shape its use line declares. cobra's own UseLine would append
+// "[flags]", which every command accepts and no reader needs telling.
+func readmeUseLine(c *cobra.Command) string {
+	line := c.CommandPath()
+	if rest := strings.TrimSpace(strings.TrimPrefix(c.Use, c.Name())); rest != "" {
+		line += " " + rest
+	}
+	return line
+}
+
+// markdownCell escapes the one character a markdown table cell cannot hold: a
+// pipe ends the cell even inside a code span, so `--to csv|tsv|json` has to be
+// written `--to csv\|tsv\|json`.
+func markdownCell(s string) string {
+	return strings.ReplaceAll(s, "|", `\|`)
 }

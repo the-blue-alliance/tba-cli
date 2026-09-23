@@ -13,10 +13,6 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
-// nowFunc is the clock the commands read, so a test can pin "now" and get the
-// same countdown every run.
-var nowFunc = time.Now
-
 // tbaWebBase is the public site a match, team or event can be linked to.
 const tbaWebBase = "https://www.thebluealliance.com"
 
@@ -78,7 +74,7 @@ constants, the thresholds a bonus is measured against; --full keeps every one.`,
 					color:       color,
 					mode:        mode,
 					full:        full,
-					now:         nowFunc(),
+					now:         nowOf(cmd),
 				})
 			})
 		},

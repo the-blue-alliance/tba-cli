@@ -1,7 +1,8 @@
 package frc
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"time"
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
@@ -131,28 +132,10 @@ func LabelDependsOnPlayoffType(m api.Match) bool {
 	return CompLevelOrder(m.CompLevel) == CompLevelOrder(LevelSemiFinal)
 }
 
-// SortEvents puts a season's events in the order they are played, earliest
-// start first, in place. It is the order anyone reading a list of events
-// expects, and the API returns them in neither that order nor any other.
-//
-// Events with the same start date, and events whose start_date is missing or
-// malformed, fall back to their key, which keeps the order total and
-// reproducible. The dates are compared as calendar days, so the machine's time
-// zone cannot reorder two events a day apart.
+// SortEvents puts a season's events in the order they are played, in place.
+// See CompareEvents for what that order is.
 func SortEvents(events []api.Event) {
-	sort.SliceStable(events, func(i, j int) bool {
-		a, aok := ParseDate(events[i].StartDate, time.UTC)
-		b, bok := ParseDate(events[j].StartDate, time.UTC)
-		if aok != bok {
-			// A dated event is placed before an undated one, which is not a
-			// real season but is a real API answer.
-			return aok
-		}
-		if aok && !a.Equal(b) {
-			return a.Before(b)
-		}
-		return events[i].Key < events[j].Key
-	})
+	slices.SortStableFunc(events, CompareEvents)
 }
 
 // EventOrder ranks a team's events chronologically, so a season's worth of
@@ -184,23 +167,23 @@ func EventOrder(events []api.Event) map[string]int {
 // by key, which is what a listing falls back to when the team's event list
 // could not be fetched.
 func GroupByEvent(matches []api.Match, order map[string]int) {
-	rank := func(m api.Match) (int, bool) {
-		n, ok := order[m.EventKey]
-		return n, ok
-	}
-	sort.SliceStable(matches, func(i, j int) bool {
-		a, b := matches[i].EventKey, matches[j].EventKey
-		if a == b {
-			return false
+	slices.SortStableFunc(matches, func(a, b api.Match) int {
+		if a.EventKey == b.EventKey {
+			return 0
 		}
-		ra, aok := rank(matches[i])
-		rb, bok := rank(matches[j])
+		ra, aok := order[a.EventKey]
+		rb, bok := order[b.EventKey]
 		if aok != bok {
-			return aok
+			if aok {
+				return -1
+			}
+			return 1
 		}
-		if aok && ra != rb {
-			return ra < rb
+		if aok {
+			if c := cmp.Compare(ra, rb); c != 0 {
+				return c
+			}
 		}
-		return a < b
+		return cmp.Compare(a.EventKey, b.EventKey)
 	})
 }

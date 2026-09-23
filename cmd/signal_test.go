@@ -26,11 +26,18 @@ func slowServer(t *testing.T) *httptest.Server {
 // runCtx is runCmd with a caller-supplied context, for cancellation tests.
 func runCtx(t *testing.T, ctx context.Context, baseURL string, args ...string) (string, string, error) {
 	t.Helper()
+	return runCtxWith(t, ctx, systemClock(), baseURL, args...)
+}
+
+// runCtxWith is runCtx against a clock of the caller's own making, for the one
+// test that needs both a cancellable context and a clock it can drive.
+func runCtxWith(t *testing.T, ctx context.Context, clk clock, baseURL string, args ...string) (string, string, error) {
+	t.Helper()
 	t.Setenv("TBA_AUTH_KEY", "test-key")
 	t.Setenv("TBA_CACHE_DIR", t.TempDir())
 	t.Setenv("TBA_CONFIG_DIR", t.TempDir())
 
-	root := NewRootCmd()
+	root := newRootCmdWithClock(clk)
 	var outBuf, errBuf bytes.Buffer
 	root.SetOut(&outBuf)
 	root.SetErr(&errBuf)

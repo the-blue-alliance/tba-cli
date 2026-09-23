@@ -126,7 +126,7 @@ func TestNewFollowsTheCacheDirectory(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TBA_CACHE_DIR", dir)
 
-	s, err := New()
+	s, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

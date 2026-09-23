@@ -30,15 +30,22 @@ type watchClock struct {
 	onWait func(c *watchClock)
 }
 
-// fakeWatchClock installs a pinned clock for the duration of a test.
+// fakeWatchClock builds a clock pinned at start. It is handed to one command
+// tree, so nothing about it is shared with any other test.
 func fakeWatchClock(t *testing.T, start time.Time) *watchClock {
 	t.Helper()
-	c := &watchClock{now: start}
-	previousNow, previousSleep := nowFunc, watchSleep
-	nowFunc = c.Now
-	watchSleep = c.Sleep
-	t.Cleanup(func() { nowFunc, watchSleep = previousNow, previousSleep })
-	return c
+	return &watchClock{now: start}
+}
+
+// clock is the fake as the commands see it.
+func (c *watchClock) clock() clock {
+	return clock{now: c.Now, sleep: c.Sleep}
+}
+
+// runWatchCmd runs a command against this fake clock.
+func (c *watchClock) runWatchCmd(t *testing.T, srv *httptest.Server, args ...string) (string, string, error) {
+	t.Helper()
+	return runCmdWith(t, srv, c.clock(), &bytes.Buffer{}, args...)
 }
 
 func (c *watchClock) Now() time.Time {
@@ -209,13 +216,13 @@ func jsonLines(t *testing.T, out string) []map[string]any {
 // cannot show here — this event has matches still to come, so every column
 // carries something — and the test below pins the case where it does.
 func TestEventWatchFirstPollPrintsTheSameTableAsEventMatches(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	srv := watchServer(t)
 
-	watched, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	watched, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
 	requireNoError(t, err, errOut)
 
-	listed, _, err := runCmd(t, srv, "event", "matches", watchEventKey, "--format", "table")
+	listed, _, err := clk.runWatchCmd(t, srv, "event", "matches", watchEventKey, "--format", "table")
 	requireNoError(t, err, "")
 
 	if watched != listed {
@@ -231,7 +238,7 @@ func TestEventWatchFirstPollPrintsTheSameTableAsEventMatches(t *testing.T) {
 // is a listing that is finished the moment it is printed, and drops the column
 // nothing filled.
 func TestEventWatchKeepsAColumnTheListingDrops(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 22, 18, 0, 0, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 18, 0, 0, 0, time.Local))
 	srv := watchServer(t)
 	// Every match played: nothing counts down, so When is empty throughout.
 	watchSetBody(t, srv, watchMatchesPath, []api.Match{
@@ -239,9 +246,9 @@ func TestEventWatchKeepsAColumnTheListingDrops(t *testing.T) {
 		watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000),
 	})
 
-	watched, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	watched, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
 	requireNoError(t, err, errOut)
-	listed, _, err := runCmd(t, srv, "event", "matches", watchEventKey, "--format", "table")
+	listed, _, err := clk.runWatchCmd(t, srv, "event", "matches", watchEventKey, "--format", "table")
 	requireNoError(t, err, "")
 
 	if !strings.Contains(lines(watched)[0], "When") {
@@ -253,10 +260,10 @@ func TestEventWatchKeepsAColumnTheListingDrops(t *testing.T) {
 }
 
 func TestEventWatchFirstPollPrintsTheSnapshotAsOneJSONLine(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	srv := watchServer(t)
 
-	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--max-polls", "1")
+	out, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--max-polls", "1")
 	requireNoError(t, err, errOut)
 
 	got := jsonLines(t, out)
@@ -284,16 +291,16 @@ func TestEventWatchFirstPollPrintsTheSnapshotAsOneJSONLine(t *testing.T) {
 // runWatch drives a watch whose API changes between polls.
 func runWatch(t *testing.T, srv *httptest.Server, change func(), args ...string) (string, string, error) {
 	t.Helper()
-	clock := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	once := false
-	clock.onWait = func(*watchClock) {
+	clk.onWait = func(*watchClock) {
 		if once || change == nil {
 			return
 		}
 		once = true
 		change()
 	}
-	return runCmd(t, srv, append([]string{"event", "watch", watchEventKey}, args...)...)
+	return clk.runWatchCmd(t, srv, append([]string{"event", "watch", watchEventKey}, args...)...)
 }
 
 func TestEventWatchLaterPollPrintsOnlyTheChangedRow(t *testing.T) {
@@ -613,11 +620,11 @@ func TestEventWatchStopsAfterMaxPolls(t *testing.T) {
 // would look broken.
 func TestEventWatchPollsImmediately(t *testing.T) {
 	srv := watchServer(t)
-	clock := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
-	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--max-polls", "2", "--interval", "30s")
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--max-polls", "2", "--interval", "30s")
 	requireNoError(t, err, errOut)
 
-	if got := clock.sleptFor(); len(got) != 1 || got[0] != 30*time.Second {
+	if got := clk.sleptFor(); len(got) != 1 || got[0] != 30*time.Second {
 		t.Errorf("waits = %v, want one wait of 30s between two polls", got)
 	}
 }
@@ -626,12 +633,12 @@ func TestEventWatchPollsImmediately(t *testing.T) {
 
 func TestEventWatchInterruptedWhileWaitingExits130(t *testing.T) {
 	srv := watchServer(t)
-	clock := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	clock.onWait = func(*watchClock) { cancel() }
+	clk.onWait = func(*watchClock) { cancel() }
 
-	_, errOut, err := runCtx(t, ctx, srv.URL, "event", "watch", watchEventKey)
+	_, errOut, err := runCtxWith(t, ctx, clk.clock(), srv.URL, "event", "watch", watchEventKey)
 	if got := clierr.ExitCode(err); got != clierr.ExitInterrupt {
 		t.Fatalf("exit code = %d (%v), want %d", got, err, clierr.ExitInterrupt)
 	}
@@ -644,7 +651,8 @@ func TestEventWatchInterruptedWhileWaitingExits130(t *testing.T) {
 // not be swallowed by the retry-at-next-interval path.
 func TestEventWatchInterruptedMidPollExits130(t *testing.T) {
 	srv := watchServer(t)
-	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	// No fake clock: the context is already cancelled, so the first poll fails
+	// and the loop returns without ever asking the time or waiting.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -851,11 +859,11 @@ func watchMarked() []api.Match {
 // The legend explains the marks once for the whole table, not once per row:
 // the first poll used to print it again for every marked match it built.
 func TestEventWatchPrintsTheLegendOnceForTheFirstTable(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	srv := watchServer(t)
 	watchSetBody(t, srv, watchMatchesPath, watchMarked())
 
-	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	out, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
 	requireNoError(t, err, errOut)
 
 	if n := strings.Count(errOut, frc.Legend); n != 1 {
@@ -889,9 +897,9 @@ func TestEventWatchPrintsTheLegendOnceWhenAPollIntroducesAMark(t *testing.T) {
 
 // No marks, nothing to explain.
 func TestEventWatchOmitsTheLegendWithoutMarks(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	srv := watchServer(t)
-	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
+	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--format", "table", "--max-polls", "1")
 	requireNoError(t, err, errOut)
 	if strings.Contains(errOut, "surrogate") {
 		t.Errorf("stderr = %q, want no legend", errOut)
@@ -913,11 +921,11 @@ func watchAllPlayed() []api.Match {
 // to wait for, and polling a shared API once a minute for two hours to be told
 // so is nobody's idea of a good time.
 func TestEventWatchStopsOnAFinishedEvent(t *testing.T) {
-	clock := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
 	srv := watchServer(t)
 	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
 
-	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	out, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
 	requireNoError(t, err, errOut)
 
 	if want := "note: 2024cthar ended 2024-03-24; nothing left to watch\n"; errOut != want {
@@ -928,7 +936,7 @@ func TestEventWatchStopsOnAFinishedEvent(t *testing.T) {
 	if n := pollCount(t, srv); n != 1 {
 		t.Errorf("polls = %d, want 1", n)
 	}
-	if waits := clock.sleptFor(); len(waits) != 0 {
+	if waits := clk.sleptFor(); len(waits) != 0 {
 		t.Errorf("waited %v, want no waiting at all", waits)
 	}
 }
@@ -936,11 +944,11 @@ func TestEventWatchStopsOnAFinishedEvent(t *testing.T) {
 // During the event there is everything to watch, even with every match so far
 // played: that is what a lunch break looks like.
 func TestEventWatchKeepsWatchingDuringTheEvent(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 23, 12, 0, 0, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 23, 12, 0, 0, 0, time.Local))
 	srv := watchServer(t)
 	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
 
-	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey,
 		"--format", "table", "--max-polls", "2")
 	requireNoError(t, err, errOut)
 
@@ -955,10 +963,10 @@ func TestEventWatchKeepsWatchingDuringTheEvent(t *testing.T) {
 // After the event but with a match still unplayed, the schedule is not the
 // whole story — a scoring correction is exactly what someone is waiting for.
 func TestEventWatchKeepsWatchingAnEndedEventWithAnUnplayedMatch(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
 	srv := watchServer(t)
 
-	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey,
 		"--format", "table", "--max-polls", "2")
 	requireNoError(t, err, errOut)
 	if strings.Contains(errOut, "nothing left to watch") {
@@ -969,10 +977,10 @@ func TestEventWatchKeepsWatchingAnEndedEventWithAnUnplayedMatch(t *testing.T) {
 // Without the event there is no end date, so there is nothing to conclude and
 // the watch runs its course.
 func TestEventWatchKeepsWatchingWithoutTheEvent(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{watchMatchesPath: watchAllPlayed()})
 
-	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey,
+	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey,
 		"--format", "table", "--max-polls", "2")
 	requireNoError(t, err, errOut)
 	if strings.Contains(errOut, "nothing left to watch") {
@@ -983,11 +991,11 @@ func TestEventWatchKeepsWatchingWithoutTheEvent(t *testing.T) {
 // The stream form stops too, and its last line is still a snapshot rather than
 // an error.
 func TestEventWatchStopsOnAFinishedEventInJSON(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
 	srv := watchServer(t)
 	watchSetBody(t, srv, watchMatchesPath, watchAllPlayed())
 
-	out, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey)
+	out, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey)
 	requireNoError(t, err, errOut)
 	requireContains(t, errOut, "nothing left to watch")
 
@@ -1017,11 +1025,11 @@ func withStdoutHangUp(t *testing.T, from int) {
 // The descriptor is asked instead, and the watch stops with exit 141 and no
 // message — the reader has already left.
 func TestEventWatchStopsWhenStdoutHangsUp(t *testing.T) {
-	clock := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	withStdoutHangUp(t, 2)
 	srv := watchServer(t)
 
-	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
 	if got := clierr.ExitCode(err); got != clierr.ExitBrokenPipe {
 		t.Errorf("exit code = %d, want %d (broken pipe)", got, clierr.ExitBrokenPipe)
 	}
@@ -1031,18 +1039,18 @@ func TestEventWatchStopsWhenStdoutHangsUp(t *testing.T) {
 	if n := pollCount(t, srv); n != 1 {
 		t.Errorf("polls = %d, want 1: the watch should not poll again", n)
 	}
-	if waits := clock.sleptFor(); len(waits) != 0 {
+	if waits := clk.sleptFor(); len(waits) != 0 {
 		t.Errorf("waited %v, want the watch to stop before the interval", waits)
 	}
 }
 
 // Hung up before the first poll, nothing is fetched at all.
 func TestEventWatchMakesNoRequestWhenStdoutIsAlreadyGone(t *testing.T) {
-	fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
+	clk := fakeWatchClock(t, time.Date(2024, 3, 22, 14, 31, 7, 0, time.Local))
 	withStdoutHangUp(t, 1)
 	srv := watchServer(t)
 
-	_, errOut, err := runCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
+	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey, "--format", "table")
 	if got := clierr.ExitCode(err); got != clierr.ExitBrokenPipe {
 		t.Errorf("exit code = %d, want %d", got, clierr.ExitBrokenPipe)
 	}

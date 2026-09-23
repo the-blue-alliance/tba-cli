@@ -185,8 +185,8 @@ func TestTeamSearchLimitDefaultsTo20(t *testing.T) {
 	if n != 20 {
 		t.Errorf("--limit default = %d, want 20", n)
 	}
-	if pages, _ := c.Flags().GetInt("max-pages"); pages != 30 {
-		t.Errorf("--max-pages default = %d, want 30", pages)
+	if pages, _ := c.Flags().GetInt("max-pages"); pages != defaultMaxPages {
+		t.Errorf("--max-pages default = %d, want %d", pages, defaultMaxPages)
 	}
 }
 

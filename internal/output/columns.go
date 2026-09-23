@@ -5,7 +5,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -148,12 +148,12 @@ func (t Table) SortOrder(spec string) ([]int, error) {
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		cmp := compareCells(cellAt(t.Rows[order[a]], col), cellAt(t.Rows[order[b]], col))
+	slices.SortStableFunc(order, func(a, b int) int {
+		c := compareCells(cellAt(t.Rows[a], col), cellAt(t.Rows[b], col))
 		if desc {
-			return cmp > 0
+			return -c
 		}
-		return cmp < 0
+		return c
 	})
 	return order, nil
 }

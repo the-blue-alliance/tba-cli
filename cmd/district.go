@@ -1,13 +1,15 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/the-blue-alliance/tba-cli/internal/api"
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
+	"github.com/the-blue-alliance/tba-cli/internal/frc"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
@@ -151,14 +153,14 @@ is. The JSON is the API's own answer either way.`,
 			if err := client.Get(cmd.Context(), fmt.Sprintf("/district/%s/rankings", args[0]), &rankings); err != nil {
 				return err
 			}
-			sort.SliceStable(rankings, func(i, j int) bool { return rankings[i].Rank < rankings[j].Rank })
+			slices.SortStableFunc(rankings, frc.CompareDistrictRankings)
 
 			preDCMP, _ := cmd.Flags().GetBool("pre-dcmp")
 			if preDCMP {
 				// Sorted in place: JSON output is handed the same slice, and
 				// the two should agree on the order.
-				sort.SliceStable(rankings, func(i, j int) bool {
-					return preDCMPTotal(rankings[i]) > preDCMPTotal(rankings[j])
+				slices.SortStableFunc(rankings, func(a, b api.DistrictRanking) int {
+					return cmp.Compare(preDCMPTotal(b), preDCMPTotal(a))
 				})
 			}
 

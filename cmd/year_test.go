@@ -19,7 +19,7 @@ import (
 
 // otherSeason is a season that is not the calendar year, so that a test can
 // tell "the API told us" apart from "we guessed from the clock".
-func otherSeason() int { return currentYear() - 1 }
+func otherSeason() int { return thisYear() - 1 }
 
 // statusWithSeason is a /status body naming a season.
 func statusWithSeason(year int) string {
@@ -31,7 +31,7 @@ func statusWithSeason(year int) string {
 func eventsFake(t *testing.T, season int, years ...int) *httptest.Server {
 	t.Helper()
 	routes := map[string]any{"/status": statusWithSeason(season)}
-	for _, y := range append([]int{season, currentYear()}, years...) {
+	for _, y := range append([]int{season, thisYear()}, years...) {
 		routes[fmt.Sprintf("/events/%d", y)] = "[]"
 	}
 	return newFakeTBA(t, routes)
@@ -49,7 +49,7 @@ func TestYearDefaultsToTheSeasonTheAPIReports(t *testing.T) {
 	if !contains(got, want) {
 		t.Errorf("requested %v, want %s (the season /status reported)", got, want)
 	}
-	if contains(got, fmt.Sprintf("/events/%d", currentYear())) {
+	if contains(got, fmt.Sprintf("/events/%d", thisYear())) {
 		t.Error("the calendar year was used even though /status answered")
 	}
 }
@@ -62,7 +62,7 @@ func TestYearFallsBackToTheCalendarWhenStatusFails(t *testing.T) {
 	_, _, err := runCmd(t, srv, "event", "list", "--retries", "0")
 	requireNoError(t, err, "")
 
-	want := fmt.Sprintf("/events/%d", currentYear())
+	want := fmt.Sprintf("/events/%d", thisYear())
 	if got := requestPaths(t, srv); !contains(got, want) {
 		t.Errorf("requested %v, want the calendar year %s", got, want)
 	}
@@ -80,7 +80,7 @@ func TestYearFallsBackToTheCalendarWhenTheServerIsUnreachable(t *testing.T) {
 	_, _, err := runCmd(t, nil, "event", "list", "--base-url", url, "--retries", "0")
 	// The command itself fails (there is no server), but it failed asking for
 	// the calendar year rather than failing to work out a year at all.
-	requireErrorContains(t, err, fmt.Sprintf("%d", currentYear()))
+	requireErrorContains(t, err, fmt.Sprintf("%d", thisYear()))
 }
 
 func TestYearComesFromTheEnvironment(t *testing.T) {
@@ -148,14 +148,14 @@ func TestYearRejectsAYearThatIsNotASeason(t *testing.T) {
 		{"before the first season", "1800"},
 		{"the year before the first season", "1991"},
 		{"far in the future", "3000"},
-		{"two years out", strconv.Itoa(currentYear() + 2)},
+		{"two years out", strconv.Itoa(thisYear() + 2)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			srv := eventsFake(t, otherSeason())
 			_, _, err := runCmd(t, srv, "event", "list", "--year", c.year)
 
-			want := fmt.Sprintf("--year %s is not an FRC season (1992-%d)", c.year, currentYear()+1)
+			want := fmt.Sprintf("--year %s is not an FRC season (1992-%d)", c.year, thisYear()+1)
 			if err == nil || err.Error() != want {
 				t.Errorf("error = %v, want %q", err, want)
 			}
@@ -173,7 +173,7 @@ func TestYearRejectsAYearThatIsNotASeason(t *testing.T) {
 // is named after the year it ends in, so from kickoff in January the coming
 // season already has events in it.
 func TestYearAcceptsNextSeason(t *testing.T) {
-	next := currentYear() + 1
+	next := thisYear() + 1
 	srv := eventsFake(t, otherSeason(), next)
 
 	_, _, err := runCmd(t, srv, "event", "list", "--year", strconv.Itoa(next))

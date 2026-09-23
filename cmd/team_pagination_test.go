@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -71,10 +72,10 @@ func TestTeamListMaxPagesDefaultsTo30(t *testing.T) {
 	if err != nil {
 		t.Fatalf("max-pages flag: %v", err)
 	}
-	if n != 30 {
-		t.Errorf("--max-pages default = %d, want 30", n)
+	if n != defaultMaxPages {
+		t.Errorf("--max-pages default = %d, want %d", n, defaultMaxPages)
 	}
-	if usage := c.Flags().Lookup("max-pages").Usage; usage != "Stop after this many pages of 500 teams" {
+	if usage := c.Flags().Lookup("max-pages").Usage; usage != "Stop after this many pages of 500 teams; the walk ends at the first empty page anyway" {
 		t.Errorf("--max-pages usage = %q", usage)
 	}
 }
@@ -100,5 +101,5 @@ func TestTeamListHelpDocumentsMaxPages(t *testing.T) {
 	requireNoError(t, err, "")
 	requireContains(t, out, "--max-pages int")
 	requireContains(t, out, "Stop after this many pages of 500 teams")
-	requireContains(t, out, "(default 30)")
+	requireContains(t, out, fmt.Sprintf("(default %d)", defaultMaxPages))
 }

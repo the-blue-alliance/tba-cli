@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -646,7 +646,7 @@ func exportTeamsTable(_ *exporter, raw json.RawMessage) (output.Table, error) {
 	if err := json.Unmarshal(raw, &teams); err != nil {
 		return output.Table{}, err
 	}
-	sort.SliceStable(teams, func(i, j int) bool { return teams[i].TeamNumber < teams[j].TeamNumber })
+	slices.SortStableFunc(teams, func(a, b api.Team) int { return cmp.Compare(a.TeamNumber, b.TeamNumber) })
 	return eventTeamsTable(teams), nil
 }
 
@@ -673,11 +673,11 @@ func exportAwardsTable(_ *exporter, raw json.RawMessage) (output.Table, error) {
 	}
 	// Award type is the order FIRST lists awards in, and it is the same every
 	// season; the recipient breaks a tie where one award has several winners.
-	sort.SliceStable(awards, func(i, j int) bool {
-		if awards[i].AwardType != awards[j].AwardType {
-			return awards[i].AwardType < awards[j].AwardType
+	slices.SortStableFunc(awards, func(a, b api.Award) int {
+		if c := cmp.Compare(a.AwardType, b.AwardType); c != 0 {
+			return c
 		}
-		return awardSortKey(awards[i]) < awardSortKey(awards[j])
+		return strings.Compare(awardSortKey(a), awardSortKey(b))
 	})
 	return eventAwardsTable(awards), nil
 }

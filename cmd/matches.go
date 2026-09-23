@@ -60,14 +60,14 @@ const validMatchLevels = "qm, playoff, ef, qf, sf, f"
 // playoffTypeFor supplies the bracket format a match's labels depend on. It is
 // a function rather than a value because `team matches` for a whole season
 // spans events that may have run different brackets.
-func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, scope string) error {
+func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, scope string, now time.Time) error {
 	listing := matchListing{scope: scope, hadMatches: len(matches) > 0}
 	matches, err := filterMatches(cmd, matches)
 	if err != nil {
 		return err
 	}
 	orderMatches(cmd, matches)
-	return printMatchListing(cmd, matches, playoffTypeFor, listing)
+	return printMatchListing(cmd, matches, playoffTypeFor, listing, now)
 }
 
 // renderSeasonMatches prints a listing that spans a whole season. A team plays
@@ -80,7 +80,7 @@ func renderMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(
 // order ranks the event keys (see frc.EventOrder). A nil or partial order —
 // the team's event list could not be fetched — still groups the listing, by
 // event key.
-func renderSeasonMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, order map[string]int, scope string) error {
+func renderSeasonMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, order map[string]int, scope string, now time.Time) error {
 	listing := matchListing{scope: scope, hadMatches: len(matches) > 0, withEvent: true}
 	matches, err := filterMatches(cmd, matches)
 	if err != nil {
@@ -88,7 +88,7 @@ func renderSeasonMatches(cmd *cobra.Command, matches []api.Match, playoffTypeFor
 	}
 	orderMatches(cmd, matches)
 	frc.GroupByEvent(matches, order)
-	return printMatchListing(cmd, matches, playoffTypeFor, listing)
+	return printMatchListing(cmd, matches, playoffTypeFor, listing, now)
 }
 
 // matchListing is what a listing needs in order to explain itself when it
@@ -121,14 +121,14 @@ func orderMatches(cmd *cobra.Command, matches []api.Match) {
 
 // printMatchTable renders matches in the order given. Callers that have
 // already chosen an order — the next-match listing, say — use it directly.
-func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, listing matchListing) error {
-	return printMatchListing(cmd, matches, playoffTypeFor, listing)
+func printMatchTable(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, listing matchListing, now time.Time) error {
+	return printMatchListing(cmd, matches, playoffTypeFor, listing, now)
 }
 
 // printMatchListing renders the shared match table, optionally with the Event
 // column a season-wide listing needs, and says on stderr why it is empty when
 // it is.
-func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, listing matchListing) error {
+func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor func(api.Match) *int, listing matchListing, now time.Time) error {
 	format, err := resolveFormat(cmd)
 	if err != nil {
 		return err
@@ -138,9 +138,6 @@ func printMatchListing(cmd *cobra.Command, matches []api.Match, playoffTypeFor f
 		return err
 	}
 
-	// The clock is read once, here at the command layer, and handed down;
-	// the row builders never consult it themselves.
-	now := nowFunc()
 	headers := matchHeaders
 	rows, marked := matchTableRows(matches, playoffTypeFor, color, now)
 	if listing.withEvent {

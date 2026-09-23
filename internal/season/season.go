@@ -34,13 +34,19 @@ type record struct {
 	FetchedAt     time.Time `json:"fetched_at"`
 }
 
-// New returns the store in the usual cache directory.
-func New() (*Store, error) {
+// New returns the store in the usual cache directory, reading the clock
+// through now. A nil now means the wall clock; a caller that has a clock of
+// its own passes it, so that "is this record still fresh" is answered against
+// the same time as everything else it is doing.
+func New(now func() time.Time) (*Store, error) {
 	c, err := cache.New()
 	if err != nil {
 		return nil, err
 	}
-	return &Store{path: filepath.Join(c.Dir(), fileName), now: time.Now}, nil
+	if now == nil {
+		now = time.Now
+	}
+	return &Store{path: filepath.Join(c.Dir(), fileName), now: now}, nil
 }
 
 // NewAt returns a store over an explicit file with an explicit clock.

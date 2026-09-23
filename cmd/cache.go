@@ -70,7 +70,7 @@ func newCacheInfoCmd() *cobra.Command {
 				Bytes:     bytes,
 				Size:      cache.FormatSize(bytes),
 			}
-			now := time.Now()
+			now := nowOf(cmd)
 			for i, e := range entries {
 				if i == 0 || e.FetchedAt.Before(*report.OldestFetchedAt) {
 					t := e.FetchedAt
@@ -140,7 +140,7 @@ func newCacheListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			now := time.Now()
+			now := nowOf(cmd)
 			rows := make([][]string, 0, len(entries))
 			data := make([]cacheListRow, 0, len(entries))
 			for _, e := range entries {
@@ -235,7 +235,7 @@ func newCachePruneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			res, err := c.Prune(time.Now().Add(-age), dryRun)
+			res, err := c.Prune(nowOf(cmd).Add(-age), dryRun)
 			if err != nil {
 				return err
 			}

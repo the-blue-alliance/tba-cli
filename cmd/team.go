@@ -1,8 +1,9 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -104,7 +105,7 @@ func newTeamListCmd() *cobra.Command {
 		},
 	}
 	addYearFlag(c)
-	c.Flags().Int("max-pages", 30, "Stop after this many pages of 500 teams")
+	c.Flags().Int("max-pages", defaultMaxPages, "Stop after this many pages of 500 teams; the walk ends at the first empty page anyway")
 	return c
 }
 
@@ -174,7 +175,7 @@ to drive a loop over a team's whole history.`,
 				return err
 			}
 			// Newest first: the recent seasons are the ones people look up.
-			sort.Sort(sort.Reverse(sort.IntSlice(years)))
+			slices.SortFunc(years, func(a, b int) int { return cmp.Compare(b, a) })
 			rows := make([][]string, len(years))
 			for i, y := range years {
 				rows[i] = []string{strconv.Itoa(y)}
@@ -219,7 +220,7 @@ match table.`,
 				if err := client.Get(cmd.Context(), path, &matches); err != nil {
 					return err
 				}
-				return renderMatches(cmd, matches, constantPlayoffType(eventPlayoffType(cmd, client, eventKey)), eventKey)
+				return renderMatches(cmd, matches, constantPlayoffType(eventPlayoffType(cmd, client, eventKey)), eventKey, nowOf(cmd))
 			}
 
 			year, err := resolveYear(cmd, client)
@@ -234,7 +235,7 @@ match table.`,
 			// different playoff brackets; the labels then fall back to a guess
 			// from each match's own season.
 			scope := fmt.Sprintf("team %s in %d", output.TeamNumberFromKey(team), year)
-			return renderSeasonMatches(cmd, matches, constantPlayoffType(nil), teamEventOrder(cmd, client, team, year), scope)
+			return renderSeasonMatches(cmd, matches, constantPlayoffType(nil), teamEventOrder(cmd, client, team, year), scope, nowOf(cmd))
 		},
 	}
 	addYearFlag(c)
@@ -356,11 +357,11 @@ func filterAwardsByType(awards []api.Award, awardType int) []api.Award {
 // sortTeamAwards puts the most recent season first, with the event key
 // grouping a season's awards together and keeping the order reproducible.
 func sortTeamAwards(awards []api.Award) {
-	sort.SliceStable(awards, func(i, j int) bool {
-		if awards[i].Year != awards[j].Year {
-			return awards[i].Year > awards[j].Year
+	slices.SortStableFunc(awards, func(a, b api.Award) int {
+		if c := cmp.Compare(b.Year, a.Year); c != 0 {
+			return c
 		}
-		return awards[i].EventKey < awards[j].EventKey
+		return strings.Compare(a.EventKey, b.EventKey)
 	})
 }
 

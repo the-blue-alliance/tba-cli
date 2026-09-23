@@ -1,10 +1,11 @@
 package cmd
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -138,31 +139,6 @@ func eventMatchesByKey(cmd *cobra.Command, client *api.Client, key string) map[s
 	return byKey
 }
 
-// matchFromKey rebuilds enough of a match from its key to label it, for the
-// matches a prediction document mentions but the match list does not carry.
-func matchFromKey(key string) api.Match {
-	m := api.Match{Key: key}
-	i := strings.LastIndex(key, "_")
-	if i < 0 {
-		return m
-	}
-	m.EventKey = key[:i]
-	parts := matchKeySuffixPattern.FindStringSubmatch(key[i+1:])
-	if parts == nil {
-		return m
-	}
-	m.CompLevel = parts[1]
-	first, _ := strconv.Atoi(parts[2])
-	if parts[3] == "" {
-		// A qualification key carries only the match number.
-		m.SetNumber, m.MatchNumber = 1, first
-		return m
-	}
-	m.SetNumber = first
-	m.MatchNumber, _ = strconv.Atoi(parts[3])
-	return m
-}
-
 // matchPredictionTable lists every predicted match, qualification rounds first
 // and then the playoff bracket, each in play order. byKey supplies the labels
 // and team lists and may be nil or incomplete.
@@ -182,7 +158,7 @@ func matchPredictionTable(rounds *api.MatchPredictionRounds, byKey map[string]ap
 			p := round[k]
 			m, ok := byKey[k]
 			if !ok {
-				m = matchFromKey(k)
+				m = frc.MatchFromKey(k)
 			}
 			winner, confidence := allianceLabel(p.WinningAlliance), formatConfidence(p.Prob)
 			if unmodelled(p) || tied(p) {
@@ -268,12 +244,11 @@ func rankingPredictionTable(predictions []api.RankingPrediction) ([]string, [][]
 	headers := []string{"Team", "Predicted Rank", "Range"}
 	ordered := make([]api.RankingPrediction, len(predictions))
 	copy(ordered, predictions)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		a, b := predictedRank(ordered[i]), predictedRank(ordered[j])
-		if a != b {
-			return a < b
+	slices.SortStableFunc(ordered, func(a, b api.RankingPrediction) int {
+		if c := cmp.Compare(predictedRank(a), predictedRank(b)); c != 0 {
+			return c
 		}
-		return teamNumber(ordered[i].TeamKey) < teamNumber(ordered[j].TeamKey)
+		return frc.CompareTeamKeys(a.TeamKey, b.TeamKey)
 	})
 
 	rows := make([][]string, 0, len(ordered))

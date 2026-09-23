@@ -525,7 +525,7 @@ state is Connecticut.
 | `--fields` | Which fields to search, comma-separated: `nickname`, `name`, `location`, `number` (all of them by default). `name` is the full sponsor-and-school name, `location` is city, state/province and country. An unknown value is a usage error listing the valid ones. |
 | `--limit N` | Show at most N matches (default 20); `0` shows every match. |
 | `--year` | The season to search (defaults to the current season). |
-| `--max-pages` | Stop after this many pages of 500 teams (default 30). |
+| `--max-pages` | Stop after this many pages of 500 teams (default 100). |
 
 Results are ranked: an exact nickname first, then a nickname the query starts,
 then a nickname that contains it, then the teams that matched on some other
@@ -1126,10 +1126,10 @@ API error 503 after 4 attempts: {"Error": "temporarily unavailable"}
 
 **Rate limiting.** Requests are paced client-side at 10 per second with a burst of 10, so a paging command such as `team list` stays a polite API citizen.
 
-**Paging.** `team list` and `team search` walk pages of 500 teams. `--max-pages` (default 30) bounds how many they will fetch; when one stops early it says so on stderr:
+**Paging.** `team list` and `team search` walk pages of 500 teams, stopping at the first empty page. `--max-pages` (default 100, enough for team numbers up to 50,000) is the ceiling on that walk rather than what it usually costs; when one stops early it says so on stderr:
 
 ```
-note: stopped after 30 pages; raise --max-pages to fetch more
+note: stopped after 100 pages; raise --max-pages to fetch more
 ```
 
 ## Scripting
@@ -1282,6 +1282,18 @@ go vet ./...           # vet
 gofmt -l .             # must print nothing
 ```
 
+The [Command reference](#command-reference) table is generated rather than
+written. Regenerate it after adding, renaming or re-describing a command:
+
+```
+go run ./cmd/tba docs readme-table    # print the table
+```
+
+Paste the output over the table in this file, between the
+`| Command | Description |` header and the blank line after the last row. A
+test regenerates the table and compares it with the one here, so CI fails if
+the two drift apart.
+
 Tests are pure Go with no network access: `cmd` builds a fresh command tree per
 test with `cmd.NewRootCmd()` and points `--base-url` at an `httptest` server, so
 commands can be exercised end to end against canned TBA responses.
@@ -1299,6 +1311,10 @@ Every command carries examples, so `tba event matches --help` shows what a real
 invocation looks like. The group commands also answer to their plurals:
 `teams`, `events`, `matches`, `districts`, `insights`.
 
+The table below is generated from the command tree by `tba docs readme-table`
+and checked by a test, so it cannot disagree with the CLI; see
+[Development](#development). Each command's own flags are in its `--help`.
+
 | Command | Description |
 |---------|-------------|
 | `tba auth login` | Authenticate with the TBA API |
@@ -1307,8 +1323,11 @@ invocation looks like. The group commands also answer to their plurals:
 | `tba cache clear` | Remove all cached responses |
 | `tba cache info` | Show the cache directory, size and entry ages |
 | `tba cache list` | List cached responses |
-| `tba cache prune` | Remove cache entries older than a given age (`--older-than`, default 30d) |
-| `tba completion <shell>` | Generate the completion script for bash, zsh, fish or powershell |
+| `tba cache prune` | Remove cache entries older than a given age |
+| `tba completion bash` | Generate the autocompletion script for bash |
+| `tba completion fish` | Generate the autocompletion script for fish |
+| `tba completion powershell` | Generate the autocompletion script for powershell |
+| `tba completion zsh` | Generate the autocompletion script for zsh |
 | `tba config get <key>` | Print one setting's effective value |
 | `tba config list` | Show every setting with its effective value and source |
 | `tba config path` | Print the path of the config file |
@@ -1316,46 +1335,43 @@ invocation looks like. The group commands also answer to their plurals:
 | `tba config unset <key>` | Remove a setting from the config file |
 | `tba district events <key>` | List a district's events |
 | `tba district list` | List a season's districts |
-| `tba district rankings <key>` | Show a district's season rankings (`--cutoff N`, `--pre-dcmp`, `--detail`) |
+| `tba district rankings <key>` | Show a district's season rankings |
 | `tba district teams <key>` | List a district's teams |
-| `tba docs completions` | Write bash, zsh and fish completion scripts (hidden) |
-| `tba docs man` | Write man pages for every command (hidden) |
-| `tba docs markdown` | Write markdown documentation for every command (hidden) |
 | `tba event alliances <key>` | Show playoff alliances |
 | `tba event awards <key>` | Show an event's awards |
-| `tba event district-points <key>` | Show the district points an event awarded (`--tiebreakers`) |
-| `tba event export <key> --to csv\|tsv\|json` | Export an event's data to files (`--dir`, `--only`, `--prefix`, `--force`, `--dry-run`) |
-| `tba event insights <key>` | Show the statistics TBA computed for an event (`--level qual\|playoff`) |
-| `tba event list` | List a season's events (`--week`, `--type`, `--district`, `--state`, `--country`, `--team`) |
-| `tba event matches <key>` | List an event's matches (`--team`, `--level`, `--upcoming`) |
+| `tba event district-points <key>` | Show the district points an event awarded |
+| `tba event export <key>` | Export an event's data to files |
+| `tba event insights <key>` | Show the statistics TBA computed for an event |
+| `tba event list` | List a season's events |
+| `tba event matches <key>` | List an event's matches |
 | `tba event oprs <key>` | Show OPR, DPR and CCWM for each team |
-| `tba event predictions <key>` | Show TBA's match predictions (`--rankings`, `--stats`) |
+| `tba event predictions <key>` | Show TBA's match predictions |
 | `tba event rankings <key>` | Show qualification rankings |
-| `tba event team-statuses <key>` | Show where every team at an event stands (`--overall`) |
+| `tba event team-statuses <key>` | Show where every team at an event stands |
 | `tba event teams <key>` | List the teams at an event |
 | `tba event view <key>` | Show an event's details |
-| `tba event watch <key>` | Follow an event's matches as they are played (`--interval`, `--for`, `--max-polls`, `--rankings`, `--team`) |
-| `tba insight leaderboards` | Show a season's leaderboards (`--board`, `--limit N`, `--expand`) |
-| `tba insight notables` | Show a season's notable teams (`--board`) |
-| `tba match view <key>` | Show one match in full (`--full`) |
-| `tba open <target>` | Open a team, event or match on thebluealliance.com (`--print`) |
-| `tba status` | Show TBA API status |
-| `tba team awards <number>` | List a team's awards (`--year`, `--type`) |
+| `tba event watch <key>` | Follow an event's matches as they are played |
+| `tba insight leaderboards` | Show a season's leaderboards |
+| `tba insight notables` | Show a season's notable teams |
+| `tba match view <key>` | Show one match in full |
+| `tba open <team\|event\|match>` | Open a team, event or match on thebluealliance.com |
+| `tba status` | Show TBA API status (for a team's standing see 'tba team standing') |
+| `tba team awards <number>` | List a team's awards |
 | `tba team districts <number>` | List a team's districts |
 | `tba team events <number>` | List a team's events |
 | `tba team list` | List a season's teams |
-| `tba team matches <number>` | List a team's matches (`--event`, `--level`, `--upcoming`) |
+| `tba team matches <number>` | List a team's matches |
 | `tba team media <number>` | List a team's media |
-| `tba team next <number> [event]` | Show a team's next match (`--all`) |
+| `tba team next <number> [event]` | Show a team's next match |
 | `tba team robots <number>` | List a team's robots |
-| `tba team search <query>...` | Search a season's teams by nickname, name, location or number (`--fields`, `--limit`) |
+| `tba team search <query>...` | Search a season's teams by nickname, name, location or number |
 | `tba team standing <number> [event]` | Show how a team stands at an event |
 | `tba team view <number>` | Show a team's details |
 | `tba team years <number>` | List the seasons a team has competed in |
 | `tba version` | Show the tba version |
 
 `tba docs` is hidden from `tba --help`: it exists to generate the man pages,
-markdown reference and completion scripts that a release archive ships, and it
+markdown reference, completion scripts and the table above, and it
 is documented under [Shell completion and man pages](#shell-completion-and-man-pages).
 
 ## License

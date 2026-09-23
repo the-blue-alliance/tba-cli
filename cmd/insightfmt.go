@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"math"
-	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -145,47 +145,9 @@ func flattenInsightStats(prefix string, stats map[string]interface{}) [][2]strin
 	return out
 }
 
-// matchKeySuffixPattern splits the part of a match key after the event:
-// "qm12" or, for a playoff match, "sf3m1".
-var matchKeySuffixPattern = regexp.MustCompile(`^(qm|ef|qf|sf|f)([0-9]+)(?:m([0-9]+))?$`)
-
-// matchKeyOrder ranks a match key for play order: competition level first, then
-// set number, then match number. A key that does not parse sorts last, so the
-// comparison stays total whatever the API sends.
-func matchKeyOrder(key string) (level, set, match int, ok bool) {
-	suffix := key
-	if i := strings.LastIndex(key, "_"); i >= 0 {
-		suffix = key[i+1:]
-	}
-	m := matchKeySuffixPattern.FindStringSubmatch(suffix)
-	if m == nil {
-		return frc.UnknownCompLevel, 0, 0, false
-	}
-	level = frc.CompLevelOrder(m[1])
-	first, _ := strconv.Atoi(m[2])
-	if m[3] == "" {
-		// A qualification key carries only the match number.
-		return level, 0, first, true
-	}
-	second, _ := strconv.Atoi(m[3])
-	return level, first, second, true
-}
-
-// sortMatchKeys puts match keys in play order: qm before ef, qf, sf and f, then
-// by set and match number. Unparseable keys keep a stable place at the end.
+// sortMatchKeys puts match keys in play order. An insight names its matches by
+// key alone, with no match objects to hand, so it orders them with the same
+// rule the match listings use: see frc.CompareMatchKeys.
 func sortMatchKeys(keys []string) {
-	sort.SliceStable(keys, func(i, j int) bool {
-		li, si, mi, _ := matchKeyOrder(keys[i])
-		lj, sj, mj, _ := matchKeyOrder(keys[j])
-		switch {
-		case li != lj:
-			return li < lj
-		case si != sj:
-			return si < sj
-		case mi != mj:
-			return mi < mj
-		default:
-			return keys[i] < keys[j]
-		}
-	})
+	slices.SortStableFunc(keys, frc.CompareMatchKeys)
 }

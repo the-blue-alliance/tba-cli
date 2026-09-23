@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,15 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/clierr"
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
+
+// defaultMaxPages bounds the page walk `team list` and `team search` do.
+//
+// The walk already stops at the first empty page, so this is not how many
+// requests they make: it is a ceiling on what a wrong year or a broken API
+// could cost. 2026 needs 24 pages of 500 for a highest team number of 11527,
+// so 30 was within a season or two of being a cap people hit; 100 covers team
+// numbers up to 50,000, which is decades away.
+const defaultMaxPages = 100
 
 // fetchTeamPages walks /teams/{year}/{page} until the API runs out of teams or
 // the page budget is spent. The returned cappedAt is 0 when the list ended on
@@ -281,12 +291,11 @@ func searchTeams(teams []api.Team, query string, fields map[string]bool) []api.T
 	for _, t := range matches {
 		ranks[t.Key] = searchRank(t, query, fields)
 	}
-	sort.SliceStable(matches, func(i, j int) bool {
-		a, b := ranks[matches[i].Key], ranks[matches[j].Key]
-		if a != b {
-			return a < b
+	slices.SortStableFunc(matches, func(a, b api.Team) int {
+		if c := cmp.Compare(ranks[a.Key], ranks[b.Key]); c != 0 {
+			return c
 		}
-		return matches[i].TeamNumber < matches[j].TeamNumber
+		return cmp.Compare(a.TeamNumber, b.TeamNumber)
 	})
 	return matches
 }
@@ -379,7 +388,7 @@ because it would repeat that walk for every season.`,
 		},
 	}
 	addYearFlag(c)
-	c.Flags().Int("max-pages", 30, "Stop after this many pages of 500 teams")
+	c.Flags().Int("max-pages", defaultMaxPages, "Stop after this many pages of 500 teams; the walk ends at the first empty page anyway")
 	c.Flags().Int("limit", 20, "Show at most this many matches (0 for all)")
 	c.Flags().String("fields", strings.Join(searchFieldNames, ","), "Fields to search: "+validSearchFields)
 	// Offered only so that asking for it gets an explanation rather than

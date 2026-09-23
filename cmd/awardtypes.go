@@ -1,8 +1,9 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -190,7 +191,7 @@ func nearestAwardTypes(want string) []string {
 			candidates = append(candidates, scored{t.name, n})
 		}
 	}
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].score > candidates[j].score })
+	slices.SortStableFunc(candidates, func(a, b scored) int { return cmp.Compare(b.score, a.score) })
 
 	const suggestions = 4
 	out := make([]string, 0, suggestions)

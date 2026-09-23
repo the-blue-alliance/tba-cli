@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,23 +49,6 @@ const (
 	watchChangeRescheduled = "rescheduled"
 )
 
-// watchSleep waits d, or until the context is cancelled. It is a variable so
-// that tests can drive the loop instantly, advancing a pinned nowFunc instead
-// of the wall clock.
-var watchSleep = func(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return ctx.Err()
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
-}
-
 func newEventWatchCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "watch <key>",
@@ -95,7 +78,7 @@ piped into a reader that has gone away stops at the next.`,
   tba event watch 2024cthar --format json --jq 'select(.type=="match") | .key' -r`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runEventWatch(cmd, args[0])
+			return runEventWatch(cmd, args[0], clockOf(cmd))
 		},
 	}
 	c.Flags().Duration("interval", defaultWatchInterval, "Time between polls (minimum 15s)")
@@ -154,7 +137,13 @@ func watchOptionsFrom(cmd *cobra.Command, key string) (watchOptions, error) {
 	return opts, nil
 }
 
-func runEventWatch(cmd *cobra.Command, key string) error {
+// runEventWatch polls until it is told to stop.
+//
+// It takes the whole clock rather than one instant, because it is the one
+// command whose answer is not about a single moment: it reads the time again
+// at every poll, and waits in between. A test drives it by advancing a fake
+// clock from its sleep, which is why the two arrive together.
+func runEventWatch(cmd *cobra.Command, key string, clk clock) error {
 	opts, err := watchOptionsFrom(cmd, key)
 	if err != nil {
 		return err
@@ -178,14 +167,14 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 
 	errw := cmd.ErrOrStderr()
 	state := &watchState{}
-	start := nowFunc()
+	start := clk.now()
 
 	// A zero --for means "until Ctrl-C", which is a deadline of never.
 	var deadline time.Time
 	if opts.forFor > 0 {
 		deadline = start.Add(opts.forFor)
 	}
-	expired := func() bool { return !deadline.IsZero() && !nowFunc().Before(deadline) }
+	expired := func() bool { return !deadline.IsZero() && !clk.now().Before(deadline) }
 	stopFor := func() error {
 		fmt.Fprintf(errw, "note: stopped after %s (--for)\n", opts.forFor)
 		return nil
@@ -219,13 +208,13 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 			fmt.Fprintf(errw, "note: poll %d failed: %v; retrying at next interval\n", poll, err)
 		default:
 			failures = 0
-			if err := state.emit(sink, poll, nowFunc(), matches, rankings); err != nil {
+			if err := state.emit(sink, poll, clk.now(), matches, rankings); err != nil {
 				return err
 			}
 			// An event that is over is not going to change again. Polling it
 			// for the rest of --for costs a shared API a request a minute to
 			// be told the same thing every time.
-			if watchIsOver(event, matches, nowFunc()) {
+			if watchIsOver(event, matches, clk.now()) {
 				fmt.Fprintf(errw, "note: %s ended %s; nothing left to watch\n", opts.eventKey, event.EndDate)
 				return nil
 			}
@@ -251,11 +240,11 @@ func runEventWatch(cmd *cobra.Command, key string) error {
 
 		wait := opts.interval
 		if !deadline.IsZero() {
-			if remaining := deadline.Sub(nowFunc()); remaining < wait {
+			if remaining := deadline.Sub(clk.now()); remaining < wait {
 				wait = remaining
 			}
 		}
-		if err := watchSleep(ctx, wait); err != nil {
+		if err := clk.sleep(ctx, wait); err != nil {
 			return err
 		}
 		if expired() {
@@ -301,9 +290,7 @@ func watchPoll(ctx context.Context, client *api.Client, opts watchOptions) ([]ap
 	if err := client.Get(ctx, fmt.Sprintf("/event/%s/rankings", opts.eventKey), &rankings); err != nil {
 		return nil, nil, err
 	}
-	sort.SliceStable(rankings.Rankings, func(i, j int) bool {
-		return rankings.Rankings[i].Rank < rankings.Rankings[j].Rank
-	})
+	slices.SortStableFunc(rankings.Rankings, frc.CompareRankings)
 	return matches, &rankings, nil
 }
 

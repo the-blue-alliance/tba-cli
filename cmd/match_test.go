@@ -9,18 +9,9 @@ import (
 	"github.com/the-blue-alliance/tba-cli/internal/output"
 )
 
-// withNow pins the clock, so a countdown or a "2h ago" is the same every run.
-func withNow(t *testing.T, at time.Time) {
-	t.Helper()
-	previous := nowFunc
-	nowFunc = func() time.Time { return at }
-	t.Cleanup(func() { nowFunc = previous })
-}
-
 func TestMatchViewTable(t *testing.T) {
-	withNow(t, time.Unix(1711130820+7200, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm12": matchViewQM12JSON})
-	out, _, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table")
+	out, _, err := runCmdAt(t, srv, time.Unix(1711130820+7200, 0), "match", "view", "2024cthar_qm12", "--format", "table")
 	requireNoError(t, err, "")
 
 	want := "Match:       Qual 12\n" +
@@ -53,9 +44,8 @@ func TestMatchViewTable(t *testing.T) {
 // Friday. It follows the listing's rule now: the date unless the match is
 // today, and the year too when the match is not in this one.
 func TestMatchViewDatesAMatchFromAnotherSeason(t *testing.T) {
-	withNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm12": matchViewQM12JSON})
-	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local), "match", "view", "2024cthar_qm12", "--format", "table")
 	requireNoError(t, err, errOut)
 
 	want := time.Unix(1711130820, 0).In(time.Local).Format(frc.YearTimeLayout)
@@ -64,9 +54,8 @@ func TestMatchViewDatesAMatchFromAnotherSeason(t *testing.T) {
 
 // A match earlier this season needs the date but not the year.
 func TestMatchViewDatesAMatchEarlierThisSeason(t *testing.T) {
-	withNow(t, time.Date(2024, 5, 1, 12, 0, 0, 0, time.Local))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm12": matchViewQM12JSON})
-	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Date(2024, 5, 1, 12, 0, 0, 0, time.Local), "match", "view", "2024cthar_qm12", "--format", "table")
 	requireNoError(t, err, errOut)
 
 	want := time.Unix(1711130820, 0).In(time.Local).Format(frc.DatedTimeLayout)
@@ -78,9 +67,8 @@ func TestMatchViewDatesAMatchEarlierThisSeason(t *testing.T) {
 // constants say nothing about the match either, and both columns always agree
 // on them.
 func TestMatchViewDropsNoneRowsAndSeasonConstants(t *testing.T) {
-	withNow(t, time.Unix(1774531500+3600, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2026cthar_qm7": matchView2026JSON})
-	out, errOut, err := runCmd(t, srv, "match", "view", "2026cthar_qm7", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Unix(1774531500+3600, 0), "match", "view", "2026cthar_qm7", "--format", "table")
 	requireNoError(t, err, errOut)
 
 	for _, gone := range []string{"Auto Tower Robot 1", "Auto Tower Robot 2", "Threshold"} {
@@ -94,9 +82,8 @@ func TestMatchViewDropsNoneRowsAndSeasonConstants(t *testing.T) {
 
 // --full is the escape hatch: everything the API sent, thresholds included.
 func TestMatchViewFullKeepsNoneRowsAndSeasonConstants(t *testing.T) {
-	withNow(t, time.Unix(1774531500+3600, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2026cthar_qm7": matchView2026JSON})
-	out, errOut, err := runCmd(t, srv, "match", "view", "2026cthar_qm7", "--full", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Unix(1774531500+3600, 0), "match", "view", "2026cthar_qm7", "--full", "--format", "table")
 	requireNoError(t, err, errOut)
 
 	for _, want := range []string{"Auto Tower Robot 1", "Coopertition Threshold", "Ensemble Bonus Threshold"} {
@@ -107,9 +94,8 @@ func TestMatchViewFullKeepsNoneRowsAndSeasonConstants(t *testing.T) {
 // The scoring summary and the game's own detail are two different readings of
 // the same table, and a blank line is enough to say so.
 func TestMatchViewSeparatesThePointsBandFromTheDetail(t *testing.T) {
-	withNow(t, time.Unix(1774531500+3600, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2026cthar_qm7": matchView2026JSON})
-	out, errOut, err := runCmd(t, srv, "match", "view", "2026cthar_qm7", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Unix(1774531500+3600, 0), "match", "view", "2026cthar_qm7", "--format", "table")
 	requireNoError(t, err, errOut)
 
 	want := "Total Points     96      74  \n" +
@@ -160,9 +146,8 @@ func TestMatchViewLabelsASemifinalWithoutTheEvent(t *testing.T) {
 
 // An unplayed match has no score to show and no result to relate.
 func TestMatchViewOfAnUnplayedMatch(t *testing.T) {
-	withNow(t, time.Unix(1711221000-1080, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm40": matchViewUnplayedJSON})
-	out, _, err := runCmd(t, srv, "match", "view", "2024cthar_qm40", "--format", "table")
+	out, _, err := runCmdAt(t, srv, time.Unix(1711221000-1080, 0), "match", "view", "2024cthar_qm40", "--format", "table")
 	requireNoError(t, err, "")
 
 	want := "Match:       Qual 40\n" +
@@ -183,9 +168,8 @@ func TestMatchViewOfAnUnplayedMatch(t *testing.T) {
 // A match with no score breakdown and no videos simply has no such sections,
 // which is every match before 2015.
 func TestMatchViewWithoutBreakdownOrVideos(t *testing.T) {
-	withNow(t, time.Unix(1427464800, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2015ctwat_qm7": match2015ctwatQM7JSON})
-	out, _, err := runCmd(t, srv, "match", "view", "2015ctwat_qm7", "--format", "table")
+	out, _, err := runCmdAt(t, srv, time.Unix(1427464800, 0), "match", "view", "2015ctwat_qm7", "--format", "table")
 	requireNoError(t, err, "")
 
 	if strings.Contains(out, "Score breakdown") {
@@ -208,9 +192,8 @@ func TestMatchViewLinksNonYouTubeVideosToTBA(t *testing.T) {
 }
 
 func TestMatchViewColorsTheAllianceLabels(t *testing.T) {
-	withNow(t, time.Unix(1711130820, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm12": matchViewQM12JSON})
-	out, _, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table", "--color", "always")
+	out, _, err := runCmdAt(t, srv, time.Unix(1711130820, 0), "match", "view", "2024cthar_qm12", "--format", "table", "--color", "always")
 	requireNoError(t, err, "")
 
 	for _, want := range []string{"\x1b[31mRed\x1b[0m:", "\x1b[34mBlue\x1b[0m:", "\x1b[31mred\x1b[0m"} {
@@ -222,11 +205,10 @@ func TestMatchViewColorsTheAllianceLabels(t *testing.T) {
 
 // Color must not push the values out of line.
 func TestMatchViewColorDoesNotChangeAlignment(t *testing.T) {
-	withNow(t, time.Unix(1711130820, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm12": matchViewQM12JSON})
-	plain, _, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table", "--color", "never")
+	plain, _, err := runCmdAt(t, srv, time.Unix(1711130820, 0), "match", "view", "2024cthar_qm12", "--format", "table", "--color", "never")
 	requireNoError(t, err, "")
-	colored, _, err := runCmd(t, srv, "match", "view", "2024cthar_qm12", "--format", "table", "--color", "always")
+	colored, _, err := runCmdAt(t, srv, time.Unix(1711130820, 0), "match", "view", "2024cthar_qm12", "--format", "table", "--color", "always")
 	requireNoError(t, err, "")
 	if got := output.StripANSI(colored); got != plain {
 		t.Errorf("colored view draws as\n%s\nwant\n%s", got, plain)
@@ -294,9 +276,8 @@ func TestMatchViewRequiresAKey(t *testing.T) {
 // breakdown is read: the total, the ranking points, the scoring columns, the
 // penalties, then the detail.
 func TestMatchViewBreakdownIsSideBySide(t *testing.T) {
-	withNow(t, time.Unix(1711136640, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm18": matchViewBreakdown2024JSON})
-	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Unix(1711136640, 0), "match", "view", "2024cthar_qm18", "--format", "table")
 	requireNoError(t, err, errOut)
 
 	body := out[strings.Index(out, "Score breakdown"):]
@@ -344,10 +325,9 @@ func breakdownRow(t *testing.T, body, label string) []string {
 // Most of a 2024 breakdown is zero on both sides. Those rows are dropped, and
 // --full brings them back.
 func TestMatchViewBreakdownDropsEmptyRowsUnlessFull(t *testing.T) {
-	withNow(t, time.Unix(1711136640, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm18": matchViewBreakdown2024JSON})
 
-	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18", "--format", "table")
+	out, errOut, err := runCmdAt(t, srv, time.Unix(1711136640, 0), "match", "view", "2024cthar_qm18", "--format", "table")
 	requireNoError(t, err, errOut)
 	for _, gone := range []string{"Trap Center Stage", "Adjust Points", "Tech Foul Count", "G424 Penalty"} {
 		if strings.Contains(out, gone) {
@@ -355,7 +335,7 @@ func TestMatchViewBreakdownDropsEmptyRowsUnlessFull(t *testing.T) {
 		}
 	}
 
-	full, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18", "--format", "table", "--full")
+	full, errOut, err := runCmdAt(t, srv, time.Unix(1711136640, 0), "match", "view", "2024cthar_qm18", "--format", "table", "--full")
 	requireNoError(t, err, errOut)
 	for _, want := range []string{"Trap Center Stage", "Adjust Points", "Tech Foul Count", "G424 Penalty"} {
 		requireContains(t, full, want)
@@ -363,9 +343,8 @@ func TestMatchViewBreakdownDropsEmptyRowsUnlessFull(t *testing.T) {
 }
 
 func TestMatchViewBreakdownColorsTheAllianceColumns(t *testing.T) {
-	withNow(t, time.Unix(1711136640, 0))
 	srv := newFakeTBA(t, map[string]any{"/match/2024cthar_qm18": matchViewBreakdown2024JSON})
-	out, errOut, err := runCmd(t, srv, "match", "view", "2024cthar_qm18",
+	out, errOut, err := runCmdAt(t, srv, time.Unix(1711136640, 0), "match", "view", "2024cthar_qm18",
 		"--format", "table", "--color", "always")
 	requireNoError(t, err, errOut)
 

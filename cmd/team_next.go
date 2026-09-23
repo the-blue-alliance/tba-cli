@@ -31,7 +31,7 @@ func newTeamNextCmd() *cobra.Command {
 				return err
 			}
 			team := teamKey(args[0])
-			now := nowFunc()
+			now := nowOf(cmd)
 
 			named := ""
 			if len(args) == 2 {
@@ -70,7 +70,7 @@ func newTeamNextCmd() *cobra.Command {
 					hadMatches:   len(matches) > 0,
 					onlyUpcoming: true,
 				}
-				return printMatchTable(cmd, upcoming, playoffTypeFor, listing)
+				return printMatchTable(cmd, upcoming, playoffTypeFor, listing, now)
 			}
 			if len(upcoming) == 0 {
 				return printNoResult(cmd, noMatchNote(cmd, client, team, event, now))
