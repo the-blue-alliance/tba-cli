@@ -37,7 +37,7 @@ func newDocsCmd() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 	}
-	docsCmd.AddCommand(newDocsManCmd(), newDocsMarkdownCmd(), newDocsCompletionsCmd(), newDocsReadmeTableCmd())
+	docsCmd.AddCommand(newDocsManCmd(), newDocsMarkdownCmd(), newDocsCompletionsCmd(), newDocsCommandTableCmd())
 	return docsCmd
 }
 
@@ -208,12 +208,12 @@ func disableAutoGenTag(cmd *cobra.Command) {
 	}
 }
 
-// readmeTableHeader is the two-line markdown header the README's command
+// commandTableHeader is the two-line markdown header the README's command
 // reference carries. It is part of the generated block, so the test that
 // compares the two can find where the table starts.
-const readmeTableHeader = "| Command | Description |\n|---------|-------------|\n"
+const commandTableHeader = "| Command | Description |\n|---------|-------------|\n"
 
-// newDocsReadmeTableCmd prints the README's command reference table.
+// newDocsCommandTableCmd prints the command reference table.
 //
 // The table used to be maintained by hand, and drifted the moment two branches
 // documented the same command: `event predictions` and `event insights` each
@@ -221,16 +221,16 @@ const readmeTableHeader = "| Command | Description |\n|---------|-------------|\
 // Generating it from the command tree makes the tree the only place a command
 // is described, and a test compares the README against a fresh generation so
 // that CI notices when the two part company.
-func newDocsReadmeTableCmd() *cobra.Command {
+func newDocsCommandTableCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "readme-table",
-		Short: "Print the README's command reference table",
-		Long: "Print the `| Command | Description |` table the README carries under\n" +
+		Use:   "command-table",
+		Short: "Print the command reference table (docs/commands.md)",
+		Long: "Print the `| Command | Description |` table that docs/commands.md carries,\n" +
 			"\"Command reference\": one row per command that does something, built from\n" +
 			"each command's own use line and short description.\n\n" +
 			"Hidden commands are left out, including this one.",
-		Example: `  tba docs readme-table
-  tba docs readme-table > commands.md`,
+		Example: `  tba docs command-table
+  tba docs command-table > docs/commands.md`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := io.WriteString(cmd.OutOrStdout(), readmeCommandTable())
@@ -249,7 +249,7 @@ type readmeRow struct {
 // newline: exactly the bytes the README holds.
 func readmeCommandTable() string {
 	var b strings.Builder
-	b.WriteString(readmeTableHeader)
+	b.WriteString(commandTableHeader)
 	for _, row := range readmeCommandRows(docsTree()) {
 		fmt.Fprintf(&b, "| %s | %s |\n",
 			markdownCell("`"+row.command+"`"), markdownCell(row.description))
