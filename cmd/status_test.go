@@ -70,3 +70,15 @@ func TestStatusRequestsStatusPath(t *testing.T) {
 		t.Errorf("requested %v, want [/status]", got)
 	}
 }
+
+// A terminal gets the human table without asking for it. This walks the real
+// path through Run, whose stdout recorder must not hide the terminal.
+func TestStatusDefaultsToTableOnATerminal(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/status": apiStatusJSON})
+	out, errOut, err := runCmdTTY(t, srv, "status")
+	requireNoError(t, err, errOut)
+	if strings.HasPrefix(strings.TrimSpace(out), "{") {
+		t.Fatalf("a terminal should get the table, got JSON:\n%s", out)
+	}
+	requireContains(t, out, "Current Season:")
+}

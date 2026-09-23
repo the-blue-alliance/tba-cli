@@ -12,8 +12,9 @@ import (
 
 func newEventCmd() *cobra.Command {
 	eventCmd := &cobra.Command{
-		Use:   "event",
-		Short: "Work with events",
+		Use:     "event",
+		Aliases: []string{"events"},
+		Short:   "Work with events",
 	}
 	eventCmd.AddCommand(newEventViewCmd())
 	eventCmd.AddCommand(newEventListCmd())
@@ -33,14 +34,19 @@ func newEventViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <key>",
 		Short: "View event info",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba event view 2024cthar
+  tba event view 2024necmp --format json`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var event api.Event
-			if err := client.Get(fmt.Sprintf("/event/%s", args[0]), &event); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s", args[0]), &event); err != nil {
 				return err
 			}
 			return outputData(cmd, event, func() {
@@ -66,6 +72,8 @@ func newEventListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
 		Short: "List events for a year",
+		Example: `  tba event list --year 2024
+  tba events list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -73,7 +81,7 @@ func newEventListCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var events []api.Event
-			if err := client.Get(fmt.Sprintf("/events/%d", year), &events); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/events/%d", year), &events); err != nil {
 				return err
 			}
 			rows := make([][]string, len(events))
@@ -91,14 +99,19 @@ func newEventTeamsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "teams <key>",
 		Short: "List teams at event",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba event teams 2024cthar
+  tba event teams 2024cthar --format csv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var teams []api.Team
-			if err := client.Get(fmt.Sprintf("/event/%s/teams", args[0]), &teams); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/teams", args[0]), &teams); err != nil {
 				return err
 			}
 			rows := make([][]string, len(teams))
@@ -114,14 +127,19 @@ func newEventMatchesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "matches <key>",
 		Short: "List matches at event",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba event matches 2024cthar --format csv
+  tba event matches 2024cthar --jq '.[].key' -r`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var matches []api.Match
-			if err := client.Get(fmt.Sprintf("/event/%s/matches", args[0]), &matches); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/matches", args[0]), &matches); err != nil {
 				return err
 			}
 			rows := make([][]string, len(matches))
@@ -144,14 +162,19 @@ func newEventRankingsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rankings <key>",
 		Short: "Show event rankings",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba event rankings 2024cthar
+  tba event rankings 2024cthar --format markdown`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var rankings api.EventRankings
-			if err := client.Get(fmt.Sprintf("/event/%s/rankings", args[0]), &rankings); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/rankings", args[0]), &rankings); err != nil {
 				return err
 			}
 			rows := make([][]string, len(rankings.Rankings))
@@ -171,14 +194,19 @@ func newEventAlliancesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "alliances <key>",
 		Short: "Show event alliances",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba event alliances 2024cthar
+  tba event alliances 2024cthar --format json`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var alliances []api.EventAlliance
-			if err := client.Get(fmt.Sprintf("/event/%s/alliances", args[0]), &alliances); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/alliances", args[0]), &alliances); err != nil {
 				return err
 			}
 			rows := make([][]string, len(alliances))
@@ -205,14 +233,19 @@ func newEventAwardsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "awards <key>",
 		Short: "Show event awards",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba event awards 2024cthar
+  tba event awards 2024cthar --format csv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var awards []api.Award
-			if err := client.Get(fmt.Sprintf("/event/%s/awards", args[0]), &awards); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/awards", args[0]), &awards); err != nil {
 				return err
 			}
 			rows := make([][]string, len(awards))
@@ -241,14 +274,19 @@ func newEventOPRsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "oprs <key>",
 		Short: "Show event OPRs",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba event oprs 2024cthar
+  tba event oprs 2024cthar --format csv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var oprs api.EventOPRs
-			if err := client.Get(fmt.Sprintf("/event/%s/oprs", args[0]), &oprs); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/event/%s/oprs", args[0]), &oprs); err != nil {
 				return err
 			}
 			teamKeys := make([]string, 0, len(oprs.OPRs))
@@ -279,30 +317,40 @@ func newEventOPRsCmd() *cobra.Command {
 }
 
 func newEventDistrictPointsCmd() *cobra.Command {
-	return newRawEventCmd("district-points", "Show event district points", "district_points")
+	return newRawEventCmd("district-points", "Show event district points", "district_points",
+		`  tba event district-points 2024cthar
+  tba event district-points 2024cthar --jq '.points.frc177.total'`)
 }
 
 func newEventPredictionsCmd() *cobra.Command {
-	return newRawEventCmd("predictions", "Show event predictions", "predictions")
+	return newRawEventCmd("predictions", "Show event predictions", "predictions",
+		`  tba event predictions 2024cthar
+  tba event predictions 2024cthar --format json`)
 }
 
 func newEventInsightsCmd() *cobra.Command {
-	return newRawEventCmd("insights", "Show event insights", "insights")
+	return newRawEventCmd("insights", "Show event insights", "insights",
+		`  tba event insights 2024cthar
+  tba event insights 2024cthar --jq .qual.high_score`)
 }
 
 // newRawEventCmd builds a command that passes an event sub-resource through
 // untouched, since these endpoints have no stable schema.
-func newRawEventCmd(use, short, resource string) *cobra.Command {
+func newRawEventCmd(use, short, resource, example string) *cobra.Command {
 	return &cobra.Command{
-		Use:   use + " <key>",
-		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Use:     use + " <key>",
+		Short:   short,
+		Example: example,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateEventKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
-			raw, err := client.GetRaw(fmt.Sprintf("/event/%s/%s", args[0], resource))
+			raw, err := client.GetRaw(cmd.Context(), fmt.Sprintf("/event/%s/%s", args[0], resource))
 			if err != nil {
 				return err
 			}

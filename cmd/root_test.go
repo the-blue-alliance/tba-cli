@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/the-blue-alliance/tba-cli/internal/version"
 )
 
 func TestRootHelpListsAllTopLevelCommands(t *testing.T) {
@@ -45,8 +47,9 @@ func TestSendsAuthAndUserAgentHeaders(t *testing.T) {
 	if got := reqs[0].Headers.Get("X-TBA-Auth-Key"); got != "test-key" {
 		t.Errorf("X-TBA-Auth-Key = %q, want test-key", got)
 	}
-	if got := reqs[0].Headers.Get("User-Agent"); got != "tba-cli" {
-		t.Errorf("User-Agent = %q, want tba-cli", got)
+	wantUA := "tba-cli/" + version.Version
+	if got := reqs[0].Headers.Get("User-Agent"); got != wantUA {
+		t.Errorf("User-Agent = %q, want %q", got, wantUA)
 	}
 	if reqs[0].Method != "GET" {
 		t.Errorf("method = %q, want GET", reqs[0].Method)
@@ -67,24 +70,77 @@ func TestDefaultFormatIsJSONWhenNotATTY(t *testing.T) {
 	}
 }
 
-func TestFormatFlagBeatsJSONFlag(t *testing.T) {
+func TestJSONFlagWithConflictingFormatIsAnError(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
-	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--json", "--format", "csv")
-	requireNoError(t, err, "")
-
-	if !strings.HasPrefix(out, "Key,Name,Abbreviation\n") {
-		t.Errorf("--format should win over --json, got:\n%s", out)
+	_, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--json", "--format", "csv")
+	if err == nil {
+		t.Fatal("want an error for --json with --format csv")
+	}
+	if got, want := err.Error(), "--json requires JSON output; drop --format csv or use --format json"; got != want {
+		t.Errorf("error = %q, want %q", got, want)
 	}
 }
 
-func TestFormatFlagBeatsJqFlag(t *testing.T) {
+func TestJSONFlagWithFormatJSONIsAccepted(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
-	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[].key", "--format", "table")
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--json", "--format", "json")
 	requireNoError(t, err, "")
-
-	if !strings.HasPrefix(out, "Key ") {
-		t.Errorf("--format should win over --jq, got:\n%s", out)
+	if _, ok := decodeJSON(t, out).([]any); !ok {
+		t.Errorf("want a JSON array, got:\n%s", out)
 	}
+}
+
+func TestJqWithNonJSONFormatIsAnError(t *testing.T) {
+	for _, format := range []string{"table", "csv", "tsv", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+			_, _, err := runCmd(t, srv, "district", "list", "--year", "2024",
+				"--jq", ".[].key", "--format", format)
+			if err == nil {
+				t.Fatalf("want an error for --jq with --format %s", format)
+			}
+			want := "--jq requires JSON output; drop --format " + format + " or use --format json"
+			if err.Error() != want {
+				t.Errorf("error = %q, want %q", err.Error(), want)
+			}
+		})
+	}
+}
+
+func TestJqWithFormatJSONIsAccepted(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024",
+		"--jq", ".[].key", "--format", "json")
+	requireNoError(t, err, "")
+	if out != "\"2024ne\"\n\"2024fim\"\n" {
+		t.Errorf("jq output = %q", out)
+	}
+}
+
+func TestFormatAutoIsAcceptedExplicitly(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	// The test writer is not a TTY, so auto means JSON.
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--format", "auto")
+	requireNoError(t, err, "")
+	if _, ok := decodeJSON(t, out).([]any); !ok {
+		t.Errorf("--format auto should produce JSON off a TTY, got:\n%s", out)
+	}
+}
+
+func TestFormatAutoStillHonorsJqAndJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024",
+		"--format", "auto", "--jq", ".[].key")
+	requireNoError(t, err, "")
+	if out != "\"2024ne\"\n\"2024fim\"\n" {
+		t.Errorf("jq output = %q", out)
+	}
+}
+
+func TestFormatHelpListsAuto(t *testing.T) {
+	out, _, err := runCmd(t, nil, "--help")
+	requireNoError(t, err, "")
+	requireContains(t, out, "auto, table, json, csv, tsv, markdown")
 }
 
 func TestJqFlagImpliesJSONFormat(t *testing.T) {
@@ -175,5 +231,58 @@ func TestCompletionUnknownShellShowsSupportedShells(t *testing.T) {
 	}
 	if strings.Contains(out, "tcsh") {
 		t.Errorf("tcsh should not be offered as a shell:\n%s", out)
+	}
+}
+
+func TestJqMultipleResultsAreOnePerLine(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[].key")
+	requireNoError(t, err, "")
+	if got := lines(out); len(got) != 2 || got[0] != `"2024ne"` || got[1] != `"2024fim"` {
+		t.Errorf("jq output = %q", out)
+	}
+}
+
+func TestJqRawOutputDropsQuotes(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[].key", "-r")
+	requireNoError(t, err, "")
+	if out != "2024ne\n2024fim\n" {
+		t.Errorf("jq -r output = %q", out)
+	}
+}
+
+func TestJqRawOutputLongFlag(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024",
+		"--jq", ".[0].key", "--raw-output")
+	requireNoError(t, err, "")
+	if out != "2024ne\n" {
+		t.Errorf("jq --raw-output = %q", out)
+	}
+}
+
+func TestJqSingleObjectResultIsPrettyPrinted(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[0]")
+	requireNoError(t, err, "")
+	if !strings.Contains(out, "\n  \"key\": \"2024ne\"") {
+		t.Errorf("a single result should stay indented, got:\n%s", out)
+	}
+}
+
+func TestJqMultipleObjectResultsAreNDJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/districts/2024": districts2024JSON})
+	out, _, err := runCmd(t, srv, "district", "list", "--year", "2024", "--jq", ".[]")
+	requireNoError(t, err, "")
+	got := lines(out)
+	if len(got) != 2 {
+		t.Fatalf("want 2 NDJSON lines, got %d:\n%s", len(got), out)
+	}
+	for _, line := range got {
+		if strings.Contains(line, "\n") || !strings.HasPrefix(line, "{") {
+			t.Errorf("line is not compact JSON: %q", line)
+		}
+		decodeJSON(t, line)
 	}
 }

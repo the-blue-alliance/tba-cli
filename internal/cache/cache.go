@@ -13,8 +13,14 @@ import (
 	"time"
 )
 
+// entriesSubdir namespaces the cache files. Keeping them one level down
+// means Clear only ever touches files this tool wrote, even when
+// TBA_CACHE_DIR points at a directory that holds something else.
+const entriesSubdir = "v1"
+
 type Cache struct {
-	dir string
+	dir        string
+	entriesDir string
 }
 
 type Entry struct {
@@ -22,29 +28,41 @@ type Entry struct {
 	ETag         string          `json:"etag,omitempty"`
 	LastModified string          `json:"last_modified,omitempty"`
 	FetchedAt    time.Time       `json:"fetched_at"`
+	ValidatedAt  time.Time       `json:"validated_at,omitempty"`
 	Body         json.RawMessage `json:"body"`
 }
 
-func defaultDir() string {
+func defaultDir() (string, error) {
 	if d := os.Getenv("TBA_CACHE_DIR"); d != "" {
-		return d
+		return d, nil
 	}
 	if d := os.Getenv("XDG_CACHE_HOME"); d != "" {
-		return filepath.Join(d, "tba")
+		return filepath.Join(d, "tba"), nil
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "tba")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine your home directory (%w); set TBA_CACHE_DIR to choose where tba keeps its cache", err)
+	}
+	return filepath.Join(home, ".cache", "tba"), nil
 }
 
 func New() (*Cache, error) {
-	dir := defaultDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	dir, err := defaultDir()
+	if err != nil {
 		return nil, err
 	}
-	return &Cache{dir: dir}, nil
+	entriesDir := filepath.Join(dir, entriesSubdir)
+	if err := os.MkdirAll(entriesDir, 0700); err != nil {
+		return nil, err
+	}
+	return &Cache{dir: dir, entriesDir: entriesDir}, nil
 }
 
+// Dir returns the configured cache directory.
 func (c *Cache) Dir() string { return c.dir }
+
+// EntriesDir returns the directory that actually holds the cache files.
+func (c *Cache) EntriesDir() string { return c.entriesDir }
 
 func keyFor(url string) string {
 	sum := sha256.Sum256([]byte(url))
@@ -52,7 +70,7 @@ func keyFor(url string) string {
 }
 
 func (c *Cache) path(url string) string {
-	return filepath.Join(c.dir, keyFor(url)+".json")
+	return filepath.Join(c.entriesDir, keyFor(url)+".json")
 }
 
 // Get returns the cached entry for url, or nil if there is no entry.
@@ -76,14 +94,32 @@ func (c *Cache) Put(url string, etag, lastModified string, body []byte) error {
 		ETag:         etag,
 		LastModified: lastModified,
 		FetchedAt:    time.Now().UTC(),
+		ValidatedAt:  time.Now().UTC(),
 		Body:         json.RawMessage(body),
 	}
-	b, err := json.MarshalIndent(&e, "", "  ")
+	return c.write(url, &e)
+}
+
+// Touch records that a cached entry was revalidated (a 304 answer) without
+// rewriting its body. A missing entry is not an error: there is nothing to
+// record.
+func (c *Cache) Touch(url string) error {
+	e := c.Get(url)
+	if e == nil {
+		return nil
+	}
+	e.ValidatedAt = time.Now().UTC()
+	return c.write(url, e)
+}
+
+// write atomically replaces the cache file for url.
+func (c *Cache) write(url string, e *Entry) error {
+	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
 		return err
 	}
 	final := c.path(url)
-	tmp, err := os.CreateTemp(c.dir, "tba-cache-*.tmp")
+	tmp, err := os.CreateTemp(c.entriesDir, "tba-cache-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -99,17 +135,21 @@ func (c *Cache) Put(url string, etag, lastModified string, body []byte) error {
 	return os.Rename(tmp.Name(), final)
 }
 
-// Clear removes all cache entries. The directory itself is kept.
+// Clear removes all cache entries. The directory itself is kept, and nothing
+// outside the entries subdirectory is touched.
 func (c *Cache) Clear() (removed int, err error) {
-	entries, err := os.ReadDir(c.dir)
+	entries, err := os.ReadDir(c.entriesDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
 		return 0, err
 	}
 	for _, e := range entries {
 		if filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
-		if err := os.Remove(filepath.Join(c.dir, e.Name())); err == nil {
+		if err := os.Remove(filepath.Join(c.entriesDir, e.Name())); err == nil {
 			removed++
 		}
 	}
@@ -118,8 +158,11 @@ func (c *Cache) Clear() (removed int, err error) {
 
 // Stats reports the number of cached entries and total bytes on disk.
 func (c *Cache) Stats() (count int, bytes int64, err error) {
-	entries, err := os.ReadDir(c.dir)
+	entries, err := os.ReadDir(c.entriesDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
 		return 0, 0, err
 	}
 	for _, e := range entries {

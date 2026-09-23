@@ -103,3 +103,42 @@ func TestInsightSubcommandsAreRegistered(t *testing.T) {
 		}
 	}
 }
+
+// Insights have no stable schema, so the tabular formats fall back to JSON
+// rather than failing or silently printing the raw body.
+func TestInsightLeaderboardsFallsBackToJSONForTabularFormats(t *testing.T) {
+	for _, format := range []string{"csv", "tsv", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			srv := newFakeTBA(t, map[string]any{
+				"/insights/leaderboards/2024": leaderboards2024JSON,
+			})
+			out, _, err := runCmd(t, srv, "insight", "leaderboards", "--year", "2024", "--format", format)
+			requireNoError(t, err, "")
+			arr, ok := decodeJSON(t, out).([]any)
+			if !ok {
+				t.Fatalf("want a JSON array, got:\n%s", out)
+			}
+			if arr[0].(map[string]any)["name"] != "typed_leaderboard_blue_banners" {
+				t.Errorf("unexpected payload:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestInsightNotablesHonorsFormatJSON(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/insights/notables/2024": notables2024JSON})
+	out, _, err := runCmd(t, srv, "insight", "notables", "--year", "2024", "--format", "json")
+	requireNoError(t, err, "")
+	if _, ok := decodeJSON(t, out).([]any); !ok {
+		t.Fatalf("want a JSON array, got:\n%s", out)
+	}
+}
+
+func TestInsightNotablesRawWhenTable(t *testing.T) {
+	srv := newFakeTBA(t, map[string]any{"/insights/notables/2024": notables2024JSON})
+	out, _, err := runCmd(t, srv, "insight", "notables", "--year", "2024", "--format", "table")
+	requireNoError(t, err, "")
+	if strings.TrimSpace(out) != strings.TrimSpace(notables2024JSON) {
+		t.Errorf("raw output =\n%s", out)
+	}
+}

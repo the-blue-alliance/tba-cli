@@ -11,8 +11,9 @@ import (
 
 func newTeamCmd() *cobra.Command {
 	teamCmd := &cobra.Command{
-		Use:   "team",
-		Short: "Work with teams",
+		Use:     "team",
+		Aliases: []string{"teams"},
+		Short:   "Work with teams",
 	}
 	teamCmd.AddCommand(newTeamViewCmd())
 	teamCmd.AddCommand(newTeamListCmd())
@@ -29,14 +30,17 @@ func newTeamViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <number>",
 		Short: "View team info",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba team view 177
+  tba team view frc177 --format json
+  tba team view 1073 --jq .nickname -r`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var team api.Team
-			if err := client.Get(fmt.Sprintf("/team/frc%s", args[0]), &team); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s", teamKey(args[0])), &team); err != nil {
 				return err
 			}
 			return outputData(cmd, team, func() {
@@ -56,17 +60,25 @@ func newTeamListCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "list",
 		Short: "List teams",
+		Example: `  tba team list --year 2024
+  tba teams list --year 2024 --format csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			year, _ := cmd.Flags().GetInt("year")
+			maxPages, _ := cmd.Flags().GetInt("max-pages")
 			var allTeams []api.Team
+			var cappedAt int
 			for page := 0; ; page++ {
+				if maxPages > 0 && page >= maxPages {
+					cappedAt = maxPages
+					break
+				}
 				var teams []api.Team
 				path := fmt.Sprintf("/teams/%d/%d", year, page)
-				if err := client.Get(path, &teams); err != nil {
+				if err := client.Get(cmd.Context(), path, &teams); err != nil {
 					return err
 				}
 				if len(teams) == 0 {
@@ -82,10 +94,17 @@ func newTeamListCmd() *cobra.Command {
 					output.FormatLocation(t.City, t.StateProv, t.Country),
 				}
 			}
-			return outputTable(cmd, allTeams, []string{"Number", "Name", "Location"}, rows)
+			if err := outputTable(cmd, allTeams, []string{"Number", "Name", "Location"}, rows); err != nil {
+				return err
+			}
+			if cappedAt > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "note: stopped after %d pages; raise --max-pages to fetch more\n", cappedAt)
+			}
+			return nil
 		},
 	}
 	c.Flags().Int("year", currentYear(), "Season year (default: current year)")
+	c.Flags().Int("max-pages", 30, "Stop after this many pages of 500 teams")
 	return c
 }
 
@@ -93,7 +112,9 @@ func newTeamEventsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "events <number>",
 		Short: "List team events",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba team events 177 --year 2024
+  tba team events frc177 --year 2024 --format csv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -101,7 +122,7 @@ func newTeamEventsCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var events []api.Event
-			if err := client.Get(fmt.Sprintf("/team/frc%s/events/%d", args[0], year), &events); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/events/%d", teamKey(args[0]), year), &events); err != nil {
 				return err
 			}
 			rows := make([][]string, len(events))
@@ -119,7 +140,9 @@ func newTeamMatchesCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "matches <number>",
 		Short: "List team matches for a year",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba team matches 177 --year 2024
+  tba team matches frc177 --year 2024 --format tsv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -127,7 +150,7 @@ func newTeamMatchesCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var matches []api.Match
-			if err := client.Get(fmt.Sprintf("/team/frc%s/matches/%d", args[0], year), &matches); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/matches/%d", teamKey(args[0]), year), &matches); err != nil {
 				return err
 			}
 			rows := make([][]string, len(matches))
@@ -145,19 +168,21 @@ func newTeamAwardsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "awards <number>",
 		Short: "List team awards",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba team awards 177
+  tba team awards frc177 --year 2024 --format markdown`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			year, _ := cmd.Flags().GetInt("year")
-			path := fmt.Sprintf("/team/frc%s/awards", args[0])
+			path := fmt.Sprintf("/team/%s/awards", teamKey(args[0]))
 			if year > 0 {
-				path = fmt.Sprintf("/team/frc%s/awards/%d", args[0], year)
+				path = fmt.Sprintf("/team/%s/awards/%d", teamKey(args[0]), year)
 			}
 			var awards []api.Award
-			if err := client.Get(path, &awards); err != nil {
+			if err := client.Get(cmd.Context(), path, &awards); err != nil {
 				return err
 			}
 			rows := make([][]string, len(awards))
@@ -175,7 +200,9 @@ func newTeamMediaCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "media <number>",
 		Short: "List team media",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba team media 177 --year 2024
+  tba team media frc177 --year 2024 --jq '.[].view_url' -r`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -183,7 +210,7 @@ func newTeamMediaCmd() *cobra.Command {
 			}
 			year, _ := cmd.Flags().GetInt("year")
 			var media []api.Media
-			if err := client.Get(fmt.Sprintf("/team/frc%s/media/%d", args[0], year), &media); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/media/%d", teamKey(args[0]), year), &media); err != nil {
 				return err
 			}
 			rows := make([][]string, len(media))
@@ -201,14 +228,16 @@ func newTeamRobotsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "robots <number>",
 		Short: "List team robots",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba team robots 177
+  tba team robots frc177 --format csv`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var robots []api.Robot
-			if err := client.Get(fmt.Sprintf("/team/frc%s/robots", args[0]), &robots); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/robots", teamKey(args[0])), &robots); err != nil {
 				return err
 			}
 			rows := make([][]string, len(robots))
@@ -224,14 +253,16 @@ func newTeamDistrictsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "districts <number>",
 		Short: "List team districts",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba team districts 177
+  tba team districts frc177 --format json`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var districts []api.District
-			if err := client.Get(fmt.Sprintf("/team/frc%s/districts", args[0]), &districts); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/team/%s/districts", teamKey(args[0])), &districts); err != nil {
 				return err
 			}
 			rows := make([][]string, len(districts))

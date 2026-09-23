@@ -2,14 +2,17 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // recordedRequest captures what a command actually sent to the API.
@@ -27,6 +30,8 @@ type fakeState struct {
 	mu       sync.Mutex
 	bodies   map[string][]byte
 	etags    map[string]string
+	statuses map[string]int
+	delays   map[string]time.Duration
 	requests []recordedRequest
 }
 
@@ -46,8 +51,10 @@ func newFakeTBA(t *testing.T, routes map[string]any) *httptest.Server {
 	t.Helper()
 
 	st := &fakeState{
-		bodies: make(map[string][]byte, len(routes)),
-		etags:  make(map[string]string),
+		bodies:   make(map[string][]byte, len(routes)),
+		etags:    make(map[string]string),
+		statuses: make(map[string]int),
+		delays:   make(map[string]time.Duration),
 	}
 	for path, v := range routes {
 		st.bodies[path] = toJSONBytes(t, v)
@@ -63,9 +70,24 @@ func newFakeTBA(t *testing.T, routes map[string]any) *httptest.Server {
 		})
 		body, ok := st.bodies[r.URL.Path]
 		etag := st.etags[r.URL.Path]
+		status := st.statuses[r.URL.Path]
+		delay := st.delays[r.URL.Path]
 		st.mu.Unlock()
 
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-r.Context().Done():
+				return
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
+		if status != 0 {
+			w.WriteHeader(status)
+			_, _ = io.WriteString(w, `{"Error":"status `+strconv.Itoa(status)+`"}`)
+			return
+		}
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"Error":"`+r.URL.Path+` not found"}`)
@@ -136,6 +158,27 @@ func setETag(t *testing.T, srv *httptest.Server, path, etag string) {
 	st.etags[path] = etag
 }
 
+// setStatus makes the fake answer path with an HTTP status instead of a body,
+// so tests can exercise the retry and error paths.
+func setStatus(t *testing.T, srv *httptest.Server, path string, code int) {
+	t.Helper()
+	st := stateFor(t, srv)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.statuses[path] = code
+}
+
+// setDelay makes the fake hold a request for d before answering, or until the
+// client gives up, which is how the --timeout tests trip the per-request
+// deadline.
+func setDelay(t *testing.T, srv *httptest.Server, path string, d time.Duration) {
+	t.Helper()
+	st := stateFor(t, srv)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.delays[path] = d
+}
+
 // requestsTo returns every request the fake has received so far.
 func requestsTo(t *testing.T, srv *httptest.Server) []recordedRequest {
 	t.Helper()
@@ -168,6 +211,27 @@ func runCmd(t *testing.T, srv *httptest.Server, args ...string) (stdout, stderr 
 // runCmdStdin is runCmd with a canned stdin, for commands that prompt.
 func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
+	return runCmdOn(t, srv, &bytes.Buffer{}, stdin, args...)
+}
+
+// terminalBuffer is a buffer that claims to be a terminal, so tests can walk
+// the code paths a real user at a terminal gets: table by default, color on.
+type terminalBuffer struct{ bytes.Buffer }
+
+func (*terminalBuffer) IsTerminal() bool { return true }
+
+// runCmdTTY is runCmd with stdout pretending to be a terminal.
+func runCmdTTY(t *testing.T, srv *httptest.Server, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	return runCmdOn(t, srv, &terminalBuffer{}, "", args...)
+}
+
+// runCmdOn runs a fresh command tree with out as its stdout.
+func runCmdOn(t *testing.T, srv *httptest.Server, out interface {
+	io.Writer
+	String() string
+}, stdin string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
 
 	// Each run gets throwaway auth/cache/config state. A test that needs the
 	// same directory across two runs (e.g. cache revalidation) can set the
@@ -177,8 +241,8 @@ func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...strin
 	setEnvUnlessSet(t, "TBA_CONFIG_DIR", t.TempDir())
 
 	root := NewRootCmd()
-	var outBuf, errBuf bytes.Buffer
-	root.SetOut(&outBuf)
+	var errBuf bytes.Buffer
+	root.SetOut(out)
 	root.SetErr(&errBuf)
 	root.SetIn(strings.NewReader(stdin))
 
@@ -188,8 +252,8 @@ func runCmdStdin(t *testing.T, srv *httptest.Server, stdin string, args ...strin
 	}
 	root.SetArgs(full)
 
-	err = root.Execute()
-	return outBuf.String(), errBuf.String(), err
+	err = Run(context.Background(), root)
+	return out.String(), errBuf.String(), err
 }
 
 func setEnvUnlessSet(t *testing.T, key, value string) {
@@ -246,6 +310,17 @@ func subcommandNames(t *testing.T, parent string) []string {
 	}
 	t.Fatalf("no top-level command named %q", parent)
 	return nil
+}
+
+// requireErrorContains checks an error message without pinning its wording.
+func requireErrorContains(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("want an error mentioning %q, got nil", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not mention %q", err.Error(), want)
+	}
 }
 
 func requireContains(t *testing.T, got, want string) {

@@ -15,9 +15,15 @@ func PrintJSON(w io.Writer, data interface{}) error {
 	return enc.Encode(data)
 }
 
-// PrintJSONWithFilter writes data as indented JSON, optionally passing it
-// through a jq expression first. Each jq result is written on its own line.
-func PrintJSONWithFilter(w io.Writer, data interface{}, jqExpr string) error {
+// PrintJSONWithFilter writes data as JSON, optionally passing it through a jq
+// expression first.
+//
+// Without a jq expression the data is pretty-printed. With one, a single
+// result stays pretty-printed and several results are written one compact
+// result per line (NDJSON), so the output stays line-oriented. rawOutput is
+// jq's -r: string results lose their quotes, and other values are written
+// compactly on a single line.
+func PrintJSONWithFilter(w io.Writer, data interface{}, jqExpr string, rawOutput bool) error {
 	if jqExpr == "" {
 		return PrintJSON(w, data)
 	}
@@ -37,6 +43,7 @@ func PrintJSONWithFilter(w io.Writer, data interface{}, jqExpr string) error {
 		return err
 	}
 
+	var results []interface{}
 	iter := query.Run(v)
 	for {
 		val, ok := iter.Next()
@@ -46,7 +53,24 @@ func PrintJSONWithFilter(w io.Writer, data interface{}, jqExpr string) error {
 		if err, ok := val.(error); ok {
 			return err
 		}
-		out, err := json.MarshalIndent(val, "", "  ")
+		results = append(results, val)
+	}
+
+	compact := rawOutput || len(results) > 1
+	for _, val := range results {
+		if s, ok := val.(string); ok && rawOutput {
+			fmt.Fprintln(w, s)
+			continue
+		}
+		var (
+			out []byte
+			err error
+		)
+		if compact {
+			out, err = json.Marshal(val)
+		} else {
+			out, err = json.MarshalIndent(val, "", "  ")
+		}
 		if err != nil {
 			return err
 		}

@@ -11,8 +11,9 @@ import (
 
 func newMatchCmd() *cobra.Command {
 	matchCmd := &cobra.Command{
-		Use:   "match",
-		Short: "Work with matches",
+		Use:     "match",
+		Aliases: []string{"matches"},
+		Short:   "Work with matches",
 	}
 	matchCmd.AddCommand(newMatchViewCmd())
 	return matchCmd
@@ -22,14 +23,19 @@ func newMatchViewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <key>",
 		Short: "View match info",
-		Args:  cobra.ExactArgs(1),
+		Example: `  tba match view 2024cthar_qm12
+  tba match view 2024cthar_sf3m1 --format json`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateMatchKey(args[0]); err != nil {
+				return err
+			}
 			client, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			var match api.Match
-			if err := client.Get(fmt.Sprintf("/match/%s", args[0]), &match); err != nil {
+			if err := client.Get(cmd.Context(), fmt.Sprintf("/match/%s", args[0]), &match); err != nil {
 				return err
 			}
 			return outputData(cmd, match, func() {

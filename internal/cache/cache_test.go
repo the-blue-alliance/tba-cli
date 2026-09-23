@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // compact normalises JSON so tests compare values rather than whitespace.
@@ -19,7 +20,16 @@ func compact(t *testing.T, b []byte) string {
 	return buf.String()
 }
 
+// newTestCache returns a cache and the directory its entry files live in,
+// which is one level below the configured cache directory.
 func newTestCache(t *testing.T) (*Cache, string) {
+	t.Helper()
+	c, _ := newTestCacheWithRoot(t)
+	return c, c.EntriesDir()
+}
+
+// newTestCacheWithRoot also hands back the configured TBA_CACHE_DIR.
+func newTestCacheWithRoot(t *testing.T) (*Cache, string) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("TBA_CACHE_DIR", dir)
@@ -313,5 +323,166 @@ func TestFormatSize(t *testing.T) {
 		if got := FormatSize(c.in); got != c.want {
 			t.Errorf("FormatSize(%d) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestEntriesLiveUnderAVersionedSubdirectory(t *testing.T) {
+	c, root := newTestCacheWithRoot(t)
+	if want := filepath.Join(root, "v1"); c.EntriesDir() != want {
+		t.Errorf("EntriesDir() = %q, want %q", c.EntriesDir(), want)
+	}
+	if err := c.Put("https://example.test/a", "", "", []byte(`{}`)); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	entries, err := os.ReadDir(c.EntriesDir())
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry under v1/, got %d", len(entries))
+	}
+	rootEntries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, e := range rootEntries {
+		if !e.IsDir() {
+			t.Errorf("cache wrote %s into the cache root", e.Name())
+		}
+	}
+}
+
+func TestClearLeavesForeignJSONInTheCacheRootAlone(t *testing.T) {
+	c, root := newTestCacheWithRoot(t)
+	if err := c.Put("https://example.test/a", "", "", []byte(`{}`)); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	foreign := filepath.Join(root, "important.json")
+	if err := os.WriteFile(foreign, []byte(`{"keep":true}`), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	removed, err := c.Clear()
+	if err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+	if removed != 1 {
+		t.Errorf("Clear removed %d, want 1", removed)
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Errorf("Clear deleted a file it did not write: %v", err)
+	}
+}
+
+func TestStatsIgnoresForeignJSONInTheCacheRoot(t *testing.T) {
+	c, root := newTestCacheWithRoot(t)
+	if err := os.WriteFile(filepath.Join(root, "important.json"), []byte(`{}`), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	count, _, err := c.Stats()
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("count = %d, want 0", count)
+	}
+}
+
+func TestClearAndStatsTolerateAMissingEntriesDirectory(t *testing.T) {
+	c, _ := newTestCacheWithRoot(t)
+	if err := os.RemoveAll(c.EntriesDir()); err != nil {
+		t.Fatalf("RemoveAll: %v", err)
+	}
+	removed, err := c.Clear()
+	if err != nil || removed != 0 {
+		t.Errorf("Clear = (%d, %v), want (0, nil)", removed, err)
+	}
+	count, bytes, err := c.Stats()
+	if err != nil || count != 0 || bytes != 0 {
+		t.Errorf("Stats = (%d, %d, %v), want (0, 0, nil)", count, bytes, err)
+	}
+}
+
+func TestPutRecordsValidatedAt(t *testing.T) {
+	c, _ := newTestCache(t)
+	if err := c.Put("https://example.test/a", "", "", []byte(`{}`)); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	e := c.Get("https://example.test/a")
+	if e == nil {
+		t.Fatal("entry is missing")
+	}
+	if e.ValidatedAt.IsZero() {
+		t.Error("Put should set ValidatedAt")
+	}
+	if e.ValidatedAt.Before(e.FetchedAt) {
+		t.Errorf("ValidatedAt %v is before FetchedAt %v", e.ValidatedAt, e.FetchedAt)
+	}
+}
+
+func TestTouchUpdatesValidatedAtAndKeepsTheBody(t *testing.T) {
+	c, _ := newTestCache(t)
+	url := "https://example.test/a"
+	if err := c.Put(url, `"etag"`, "", []byte(`{"a":1}`)); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	before := c.Get(url)
+
+	// Rewind the stored timestamps so the update is unambiguous.
+	before.ValidatedAt = before.ValidatedAt.Add(-time.Hour)
+	before.FetchedAt = before.FetchedAt.Add(-time.Hour)
+	if err := c.write(url, before); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := c.Touch(url); err != nil {
+		t.Fatalf("Touch: %v", err)
+	}
+	after := c.Get(url)
+	if after == nil {
+		t.Fatal("entry vanished")
+	}
+	if !after.ValidatedAt.After(before.ValidatedAt) {
+		t.Errorf("ValidatedAt = %v, want later than %v", after.ValidatedAt, before.ValidatedAt)
+	}
+	if !after.FetchedAt.Equal(before.FetchedAt) {
+		t.Errorf("Touch changed FetchedAt: %v -> %v", before.FetchedAt, after.FetchedAt)
+	}
+	if compact(t, after.Body) != `{"a":1}` {
+		t.Errorf("body = %s", after.Body)
+	}
+	if after.ETag != `"etag"` {
+		t.Errorf("ETag = %q", after.ETag)
+	}
+}
+
+func TestTouchOnAMissingEntryIsANoOp(t *testing.T) {
+	c, _ := newTestCache(t)
+	if err := c.Touch("https://example.test/absent"); err != nil {
+		t.Errorf("Touch on a miss = %v, want nil", err)
+	}
+	if got := c.Get("https://example.test/absent"); got != nil {
+		t.Errorf("Touch should not create an entry, got %+v", got)
+	}
+}
+
+func TestNewFailsWithoutAHomeDirectory(t *testing.T) {
+	t.Setenv("TBA_CACHE_DIR", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("home", "")
+
+	c, err := New()
+	if err == nil {
+		t.Fatalf("New() = %q, want an error rather than a cache in the working directory", c.Dir())
+	}
+	if !strings.Contains(err.Error(), "TBA_CACHE_DIR") {
+		t.Errorf("the error should name the way out: %v", err)
+	}
+	if _, statErr := os.Stat(".cache"); statErr == nil {
+		t.Error("New created .cache in the working directory")
 	}
 }

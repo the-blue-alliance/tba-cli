@@ -19,17 +19,28 @@ func configEnv(t *testing.T) string {
 	return dir
 }
 
+// mustAuthFile is AuthFile for the many tests that have a config dir set and
+// so cannot fail.
+func mustAuthFile(t *testing.T) string {
+	t.Helper()
+	path, err := AuthFile()
+	if err != nil {
+		t.Fatalf("AuthFile: %v", err)
+	}
+	return path
+}
+
 func writeLegacyAuthFile(t *testing.T, key string) {
 	t.Helper()
-	if err := os.WriteFile(AuthFile(), []byte("api_key: "+key+"\n"), 0600); err != nil {
+	if err := os.WriteFile(mustAuthFile(t), []byte("api_key: "+key+"\n"), 0600); err != nil {
 		t.Fatalf("writing legacy auth file: %v", err)
 	}
 }
 
 func TestAuthFileFollowsTBAConfigDir(t *testing.T) {
 	dir := configEnv(t)
-	if want := filepath.Join(dir, "auth.yaml"); AuthFile() != want {
-		t.Errorf("AuthFile() = %q, want %q", AuthFile(), want)
+	if want := filepath.Join(dir, "auth.yaml"); mustAuthFile(t) != want {
+		t.Errorf("AuthFile() = %q, want %q", mustAuthFile(t), want)
 	}
 }
 
@@ -219,7 +230,7 @@ func TestSaveMigratesTheLegacyKey(t *testing.T) {
 		t.Errorf("local key = %q (%v)", local, err)
 	}
 
-	b, err := os.ReadFile(AuthFile())
+	b, err := os.ReadFile(mustAuthFile(t))
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
@@ -253,7 +264,7 @@ func TestAuthFileIsMode0600AfterSave(t *testing.T) {
 	if err := SaveAPIKey("prod-key", DefaultBaseURL); err != nil {
 		t.Fatalf("SaveAPIKey: %v", err)
 	}
-	fi, err := os.Stat(AuthFile())
+	fi, err := os.Stat(mustAuthFile(t))
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
@@ -276,7 +287,7 @@ func TestAuthFileIsMode0600AfterRemove(t *testing.T) {
 	if err := RemoveAPIKey(localURL); err != nil {
 		t.Fatalf("RemoveAPIKey: %v", err)
 	}
-	fi, err := os.Stat(AuthFile())
+	fi, err := os.Stat(mustAuthFile(t))
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
@@ -291,14 +302,14 @@ func TestGetTightensWidePermissionsOnLegacyFiles(t *testing.T) {
 	}
 	configEnv(t)
 	writeLegacyAuthFile(t, "legacy-key")
-	if err := os.Chmod(AuthFile(), 0644); err != nil {
+	if err := os.Chmod(mustAuthFile(t), 0644); err != nil {
 		t.Fatalf("Chmod: %v", err)
 	}
 
 	if _, err := GetAPIKey(DefaultBaseURL); err != nil {
 		t.Fatalf("GetAPIKey: %v", err)
 	}
-	fi, err := os.Stat(AuthFile())
+	fi, err := os.Stat(mustAuthFile(t))
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
@@ -318,5 +329,63 @@ func TestSaveCreatesTheConfigDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "auth.yaml")); err != nil {
 		t.Errorf("auth file was not created: %v", err)
+	}
+}
+
+// clearHome removes every variable os.UserHomeDir consults, so that it fails
+// the way it does for a user with no home directory.
+func clearHome(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("home", "")
+}
+
+func TestAuthFileFailsWithoutAHomeDirectory(t *testing.T) {
+	t.Setenv("TBA_CONFIG_DIR", "")
+	t.Setenv("TBA_AUTH_KEY", "")
+	clearHome(t)
+
+	path, err := AuthFile()
+	if err == nil {
+		t.Fatalf("AuthFile() = %q, want an error rather than a path relative to the working directory", path)
+	}
+	if !strings.Contains(err.Error(), "TBA_CONFIG_DIR") {
+		t.Errorf("the error should name the way out: %v", err)
+	}
+}
+
+func TestGetAPIKeyFailsWithoutAHomeDirectory(t *testing.T) {
+	t.Setenv("TBA_CONFIG_DIR", "")
+	t.Setenv("TBA_AUTH_KEY", "")
+	clearHome(t)
+
+	if _, err := GetAPIKey(""); err == nil {
+		t.Fatal("want an error when the home directory cannot be found")
+	}
+}
+
+func TestSaveAPIKeyFailsWithoutAHomeDirectory(t *testing.T) {
+	t.Setenv("TBA_CONFIG_DIR", "")
+	t.Setenv("TBA_AUTH_KEY", "")
+	clearHome(t)
+
+	if err := SaveAPIKey("k", ""); err == nil {
+		t.Fatal("want an error rather than a config file in the working directory")
+	}
+	if _, err := os.Stat("auth.yaml"); err == nil {
+		t.Error("SaveAPIKey wrote auth.yaml into the working directory")
+	}
+}
+
+func TestRemoveAPIKeyFailsWithoutAHomeDirectory(t *testing.T) {
+	t.Setenv("TBA_CONFIG_DIR", "")
+	t.Setenv("TBA_AUTH_KEY", "")
+	clearHome(t)
+
+	if err := RemoveAPIKey(""); err == nil {
+		t.Fatal("want an error when the home directory cannot be found")
 	}
 }

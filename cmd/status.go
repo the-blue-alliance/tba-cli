@@ -12,6 +12,9 @@ func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show TBA API status",
+		Example: `  tba status
+  tba status --format json
+  tba status --jq .current_season`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := newClient(cmd)
 			if err != nil {
@@ -19,7 +22,7 @@ func newStatusCmd() *cobra.Command {
 			}
 
 			var status api.APIStatus
-			if err := client.Get("/status", &status); err != nil {
+			if err := client.Get(cmd.Context(), "/status", &status); err != nil {
 				return err
 			}
 
