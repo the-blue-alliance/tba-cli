@@ -23,7 +23,9 @@ func readmeTableFromFile(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("reading the README: %v", err)
 	}
-	body := string(b)
+	// A Windows checkout may carry CRLF line endings; the table is compared
+	// line by line, so fold them before looking for it.
+	body := strings.ReplaceAll(string(b), "\r\n", "\n")
 	start := strings.Index(body, readmeTableHeader)
 	if start < 0 {
 		t.Fatalf("no %q table in the README", strings.SplitN(readmeTableHeader, "\n", 2)[0])
