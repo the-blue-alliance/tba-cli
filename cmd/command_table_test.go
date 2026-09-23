@@ -10,29 +10,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// readmePath is the README the command reference lives in, from the cmd
+// commandTablePath is the file the command reference lives in, from the cmd
 // package's own directory.
-func readmePath() string { return filepath.Join("..", "README.md") }
+func commandTablePath() string { return filepath.Join("..", "docs", "commands.md") }
 
-// readmeTableFromFile pulls the command reference out of the README: the
+// commandTableFromFile pulls the command reference out of docs/commands.md: the
 // header line, and every table row under it up to the first line that is not
 // one.
-func readmeTableFromFile(t *testing.T) string {
+func commandTableFromFile(t *testing.T) string {
 	t.Helper()
-	b, err := os.ReadFile(readmePath())
+	b, err := os.ReadFile(commandTablePath())
 	if err != nil {
-		t.Fatalf("reading the README: %v", err)
+		t.Fatalf("reading docs/commands.md: %v", err)
 	}
 	// A Windows checkout may carry CRLF line endings; the table is compared
 	// line by line, so fold them before looking for it.
 	body := strings.ReplaceAll(string(b), "\r\n", "\n")
-	start := strings.Index(body, readmeTableHeader)
+	start := strings.Index(body, commandTableHeader)
 	if start < 0 {
-		t.Fatalf("no %q table in the README", strings.SplitN(readmeTableHeader, "\n", 2)[0])
+		t.Fatalf("no %q table in docs/commands.md", strings.SplitN(commandTableHeader, "\n", 2)[0])
 	}
-	rest := body[start+len(readmeTableHeader):]
+	rest := body[start+len(commandTableHeader):]
 	var out strings.Builder
-	out.WriteString(readmeTableHeader)
+	out.WriteString(commandTableHeader)
 	for _, line := range strings.Split(rest, "\n") {
 		if !strings.HasPrefix(line, "|") {
 			break
@@ -43,18 +43,18 @@ func readmeTableFromFile(t *testing.T) string {
 	return out.String()
 }
 
-// TestReadmeCommandTableMatchesTheREADME is the contract the generator exists
-// for: the table in the README is the table the command tree describes, byte
+// TestCommandTableMatchesTheDocsFile is the contract the generator exists
+// for: the table in docs/commands.md is the table the command tree describes, byte
 // for byte. A command added, renamed or re-described without regenerating
 // fails here rather than quietly documenting something that is no longer true.
-func TestReadmeCommandTableMatchesTheREADME(t *testing.T) {
+func TestCommandTableMatchesTheDocsFile(t *testing.T) {
 	want := readmeCommandTable()
-	got := readmeTableFromFile(t)
+	got := commandTableFromFile(t)
 	if got == want {
 		return
 	}
-	t.Errorf("the README's command table is out of date; regenerate it with\n"+
-		"    go run ./cmd/tba docs readme-table\n\n%s", tableDiff(got, want))
+	t.Errorf("the command table in docs/commands.md is out of date; regenerate it with\n"+
+		"    go run ./cmd/tba docs command-table\n\n%s", tableDiff(got, want))
 }
 
 // tableDiff reports the rows that differ between two tables, which is far
@@ -64,7 +64,7 @@ func tableDiff(got, want string) string {
 	var b strings.Builder
 	for _, row := range gotRows {
 		if !contains(wantRows, row) {
-			b.WriteString("README only: " + row + "\n")
+			b.WriteString("docs/commands.md only: " + row + "\n")
 		}
 	}
 	for _, row := range wantRows {
@@ -78,14 +78,14 @@ func tableDiff(got, want string) string {
 	return b.String()
 }
 
-func TestDocsReadmeTablePrintsTheTable(t *testing.T) {
-	out, _, err := runCmd(t, nil, "docs", "readme-table")
+func TestDocsCommandTablePrintsTheTable(t *testing.T) {
+	out, _, err := runCmd(t, nil, "docs", "command-table")
 	requireNoError(t, err, "")
 	if out != readmeCommandTable() {
-		t.Errorf("`docs readme-table` did not print the table it generates:\n%s", out)
+		t.Errorf("`docs command-table` did not print the table it generates:\n%s", out)
 	}
 	// Reproducible like every other generator: the clock never gets in.
-	second, _, err := runCmd(t, nil, "docs", "readme-table")
+	second, _, err := runCmd(t, nil, "docs", "command-table")
 	requireNoError(t, err, "")
 	if second != out {
 		t.Error("two generations of the table differ")
@@ -187,12 +187,12 @@ func TestMarkdownCellEscapesPipes(t *testing.T) {
 	}
 }
 
-func TestDocsReadmeTableIsUnderTheHiddenGenerators(t *testing.T) {
+func TestDocsCommandTableIsUnderTheHiddenGenerators(t *testing.T) {
 	out, _, err := runCmd(t, nil, "docs", "--help")
 	requireNoError(t, err, "")
-	requireContains(t, out, "readme-table")
+	requireContains(t, out, "command-table")
 
-	if !contains(subcommandNames(t, "docs"), "readme-table") {
-		t.Error("docs has no readme-table subcommand")
+	if !contains(subcommandNames(t, "docs"), "command-table") {
+		t.Error("docs has no command-table subcommand")
 	}
 }
