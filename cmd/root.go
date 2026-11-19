@@ -99,6 +99,7 @@ func newRootCmdWithClock(clk clock) *cobra.Command {
 
 	rootCmd.AddCommand(newAuthCmd())
 	rootCmd.AddCommand(newStatusCmd())
+	rootCmd.AddCommand(newSponsorsCmd())
 	rootCmd.AddCommand(newTeamCmd())
 	rootCmd.AddCommand(newEventCmd())
 	rootCmd.AddCommand(newMatchCmd())

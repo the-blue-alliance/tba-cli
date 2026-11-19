@@ -55,6 +55,7 @@ var flagContractCommands = map[string]flagContractCase{
 	"tba event teams":           {args: []string{"event", "teams", "2024cthar"}},
 	"tba insight leaderboards":  {args: []string{"insight", "leaderboards", "--year", "2024"}},
 	"tba insight notables":      {args: []string{"insight", "notables", "--year", "2024"}},
+	"tba sponsors":              {args: []string{"sponsors"}},
 	"tba team awards":           {args: []string{"team", "awards", "177"}},
 	"tba team districts":        {args: []string{"team", "districts", "177"}},
 	"tba team events":           {args: []string{"team", "events", "177", "--year", "2024"}},
@@ -233,6 +234,7 @@ func flagContractRoutes() map[string]any {
 		"/status": apiStatusJSON,
 
 		"/districts/2024":            districts2024JSON,
+		"/sponsors":                  sponsorsJSON,
 		"/district/2024ne/events":    "[" + event2024ctharJSON + "]",
 		"/district/2024ne/rankings":  districtRankings2024neJSON,
 		"/district/2024ne/teams":     "[" + teamFRC177JSON + "]",

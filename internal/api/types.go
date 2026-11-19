@@ -337,3 +337,17 @@ type EventInsights struct {
 	Qual    map[string]interface{} `json:"qual"`
 	Playoff map[string]interface{} `json:"playoff"`
 }
+
+// SponsorsList is /sponsors: TBA's platinum sponsors in display order.
+type SponsorsList struct {
+	Sponsors []Sponsor `json:"sponsors"`
+}
+
+// Sponsor is one platinum sponsor. The logo URLs are null when there is no logo.
+type Sponsor struct {
+	Name        string  `json:"name"`
+	URL         string  `json:"url"`
+	LogoStyle   string  `json:"logo_style"`
+	LogoURL     *string `json:"logo_url"`
+	LogoURLDark *string `json:"logo_url_dark"`
+}
