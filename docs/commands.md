@@ -38,6 +38,7 @@
 | `tba insight notables` | Show a season's notable teams |
 | `tba match view <key>` | Show one match in full |
 | `tba open <team\|event\|match>` | Open a team, event or match on thebluealliance.com |
+| `tba sponsors` | List TBA's platinum sponsors |
 | `tba status` | Show TBA API status (for a team's standing see 'tba team standing') |
 | `tba team awards <number>` | List a team's awards |
 | `tba team districts <number>` | List a team's districts |
