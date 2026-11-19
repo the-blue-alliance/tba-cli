@@ -1,0 +1,6 @@
+# api_v3.json is vendored unmodified from The Blue Alliance server repository.
+# Do not edit it by hand; refresh it with: go generate ./internal/apispec
+source: https://raw.githubusercontent.com/the-blue-alliance/the-blue-alliance/main/src/backend/web/static/swagger/api_v3.json
+commit: 8691d82257bffcf5503e7ddd289481e92c4584ea
+version: 3.29.0
+sha256: 44ce1a5ff59f7a2444797a35404bbb403867ab0ec21ee7121653276e43a6e19f
