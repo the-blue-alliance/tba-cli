@@ -20,7 +20,13 @@ const teamEvents177In2024JSON = `[
     "event_type_string": "District Championship",
     "week": 6,
     "webcasts": [],
-    "playoff_type": 10
+    "playoff_type": 10,
+    "district": {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+    "address": null, "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null,
+    "lng": null, "location_name": null, "timezone": null, "website": null,
+    "first_event_id": null, "first_event_code": null, "division_keys": [],
+    "parent_event_key": null, "playoff_type_string": "Double Elimination Bracket (8 Alliances)",
+    "remap_teams": null
   },
   {
     "key": "2024cthar",
@@ -37,7 +43,13 @@ const teamEvents177In2024JSON = `[
     "event_type_string": "District",
     "week": 3,
     "webcasts": [],
-    "playoff_type": 10
+    "playoff_type": 10,
+    "district": {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+    "address": null, "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null,
+    "lng": null, "location_name": null, "timezone": null, "website": null,
+    "first_event_id": null, "first_event_code": null, "division_keys": [],
+    "parent_event_key": null, "playoff_type_string": "Double Elimination Bracket (8 Alliances)",
+    "remap_teams": null
   },
   {
     "key": "2024ctwat",
@@ -54,7 +66,13 @@ const teamEvents177In2024JSON = `[
     "event_type_string": "District",
     "week": 1,
     "webcasts": [],
-    "playoff_type": 10
+    "playoff_type": 10,
+    "district": {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+    "address": null, "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null,
+    "lng": null, "location_name": null, "timezone": null, "website": null,
+    "first_event_id": null, "first_event_code": null, "division_keys": [],
+    "parent_event_key": null, "playoff_type_string": "Double Elimination Bracket (8 Alliances)",
+    "remap_teams": null
   }
 ]`
 
@@ -76,7 +94,8 @@ const teamMatches177FinishedJSON = `[
       "blue": {"score": 54, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   }
 ]`
 
@@ -201,7 +220,12 @@ const event2024ctwatJSON = `{
   "event_type_string": "District",
   "week": 1,
   "webcasts": [],
-  "playoff_type": 10
+  "playoff_type": 10,
+  "district": {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+  "address": null, "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null,
+  "lng": null, "location_name": null, "timezone": null, "website": null, "first_event_id": null,
+  "first_event_code": null, "division_keys": [], "parent_event_key": null,
+  "playoff_type_string": "Double Elimination Bracket (8 Alliances)", "remap_teams": null
 }`
 
 // A 2024 status as the API really answers one mid-season: six numbers in

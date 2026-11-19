@@ -23,7 +23,9 @@ func otherSeason() int { return thisYear() - 1 }
 
 // statusWithSeason is a /status body naming a season.
 func statusWithSeason(year int) string {
-	return fmt.Sprintf(`{"current_season":%d,"max_season":%d,"is_datafeed_down":false}`, year, year)
+	return fmt.Sprintf(`{"current_season":%d,"max_season":%d,"is_datafeed_down":false,"down_events":[],`+
+		`"max_team_page":23,"ios":{"latest_app_version":1,"min_app_version":1},`+
+		`"android":{"latest_app_version":1,"min_app_version":1}}`, year, year)
 }
 
 // eventsFake serves /status naming season, plus an empty event list for that

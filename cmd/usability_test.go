@@ -189,10 +189,9 @@ func TestTeamCommandsAcceptBothTeamSpellings(t *testing.T) {
 	for _, arg := range []string{"177", "frc177"} {
 		t.Run(arg, func(t *testing.T) {
 			srv := newFakeTBA(t, map[string]any{
-				"/team/frc177":         teamFRC177JSON,
-				"/team/frc177/robots":  teamRobots177JSON,
-				"/team/frc177/awards":  teamAwards177JSON,
-				"/team/frc177/matches": "[]",
+				"/team/frc177":        teamFRC177JSON,
+				"/team/frc177/robots": teamRobots177JSON,
+				"/team/frc177/awards": teamAwards177JSON,
 			})
 			out, _, err := runCmd(t, srv, "team", "view", arg)
 			requireNoError(t, err, "")

@@ -22,7 +22,7 @@ import (
 func exportRoutes() map[string]any {
 	return map[string]any{
 		"/event/2024cthar":                 event2024ctharJSON,
-		"/event/2024cthar/teams":           teamsSimple2024ctharJSON,
+		"/event/2024cthar/teams":           "[" + teamFRC177JSON + "," + teamFRC1073JSON + "," + teamFRC5507JSON + "]",
 		"/event/2024cthar/teams/simple":    teamsSimple2024ctharJSON,
 		"/event/2024cthar/matches":         matches2024ctharJSON,
 		"/event/2024cthar/rankings":        rankings2024ctharJSON,
@@ -387,14 +387,18 @@ func TestEventExportScoreBreakdowns(t *testing.T) {
 // whose columns came from the first match would drop them.
 func TestEventExportScoreBreakdownColumnsAreTheUnionOverTheEvent(t *testing.T) {
 	routes := exportRoutes()
-	routes["/event/2024cthar/matches"] = `[
+	routes["/event/2024cthar/matches"] = offSpec("made-up flattened keys exercise the column sort", `[
 	  {"key": "2024cthar_qm1", "comp_level": "qm", "set_number": 1, "match_number": 1,
-	   "alliances": {"red": {"score": 1, "team_keys": []}, "blue": {"score": 2, "team_keys": []}},
-	   "score_breakdown": {"red": {"autoPoints": 5}, "blue": {"autoPoints": 6}}},
+	   "alliances": {"red": {"score": 1, "team_keys": [], "surrogate_team_keys": [], "dq_team_keys": []}, "blue": {"score": 2, "team_keys": [], "surrogate_team_keys": [], "dq_team_keys": []}},
+	   "score_breakdown": {"red": {"autoPoints": 5}, "blue": {"autoPoints": 6}},
+	   "event_key": "2024cthar", "winning_alliance": "", "time": null, "actual_time": null,
+	   "predicted_time": null, "post_result_time": null, "videos": []},
 	  {"key": "2024cthar_qm2", "comp_level": "qm", "set_number": 1, "match_number": 2,
-	   "alliances": {"red": {"score": 3, "team_keys": []}, "blue": {"score": 4, "team_keys": []}},
-	   "score_breakdown": {"red": {"grid.10": 1, "grid.2": 2, "foulPoints": 9}, "blue": {}}}
-	]`
+	   "alliances": {"red": {"score": 3, "team_keys": [], "surrogate_team_keys": [], "dq_team_keys": []}, "blue": {"score": 4, "team_keys": [], "surrogate_team_keys": [], "dq_team_keys": []}},
+	   "score_breakdown": {"red": {"grid.10": 1, "grid.2": 2, "foulPoints": 9}, "blue": {}},
+	   "event_key": "2024cthar", "winning_alliance": "", "time": null, "actual_time": null,
+	   "predicted_time": null, "post_result_time": null, "videos": []}
+	]`)
 	srv := newFakeTBA(t, routes)
 	dir := t.TempDir()
 
@@ -1224,9 +1228,9 @@ func TestEventExportSortsTeamsByNumber(t *testing.T) {
 func TestEventExportSortsAwardsByTypeThenTeam(t *testing.T) {
 	routes := exportRoutes()
 	routes["/event/2024cthar/awards"] = `[
-	  {"name": "Dean's List Finalist Award", "award_type": 4, "recipient_list": [{"team_key": "frc1073", "awardee": "Ada Lovelace"}]},
-	  {"name": "Dean's List Finalist Award", "award_type": 4, "recipient_list": [{"team_key": "frc177", "awardee": "Grace Hopper"}]},
-	  {"name": "District Event Winner", "award_type": 1, "recipient_list": [{"team_key": "frc230", "awardee": null}]}
+	  {"name": "Dean's List Finalist Award", "award_type": 4, "event_key": "2024cthar", "year": 2024, "recipient_list": [{"team_key": "frc1073", "awardee": "Ada Lovelace"}]},
+	  {"name": "Dean's List Finalist Award", "award_type": 4, "event_key": "2024cthar", "year": 2024, "recipient_list": [{"team_key": "frc177", "awardee": "Grace Hopper"}]},
+	  {"name": "District Event Winner", "award_type": 1, "event_key": "2024cthar", "year": 2024, "recipient_list": [{"team_key": "frc230", "awardee": null}]}
 	]`
 	srv := newFakeTBA(t, routes)
 	dir := t.TempDir()

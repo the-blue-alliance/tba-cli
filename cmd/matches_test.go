@@ -322,12 +322,14 @@ func TestEventMatchesUpcomingOrdersByTime(t *testing.T) {
    "time": 1711200000, "predicted_time": 1711260000, "actual_time": null, "winning_alliance": "",
    "alliances": {"red": {"score": -1, "team_keys": ["frc177"], "surrogate_team_keys": [], "dq_team_keys": []},
                  "blue": {"score": -1, "team_keys": ["frc230"], "surrogate_team_keys": [], "dq_team_keys": []}},
-   "score_breakdown": null, "videos": []},
+   "score_breakdown": null, "videos": [],
+   "post_result_time": null},
   {"key": "2024cthar_f1m1", "comp_level": "f", "set_number": 1, "match_number": 1, "event_key": "2024cthar",
    "time": 1711190000, "predicted_time": 1711190000, "actual_time": null, "winning_alliance": "",
    "alliances": {"red": {"score": -1, "team_keys": ["frc177"], "surrogate_team_keys": [], "dq_team_keys": []},
                  "blue": {"score": -1, "team_keys": ["frc230"], "surrogate_team_keys": [], "dq_team_keys": []}},
-   "score_breakdown": null, "videos": []}
+   "score_breakdown": null, "videos": [],
+   "post_result_time": null}
 ]`,
 	})
 	out, _, err := runCmd(t, srv, "event", "matches", "2024cthar", "--upcoming", "--format", "csv")

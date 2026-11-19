@@ -16,37 +16,58 @@ const (
 	searchTeam9999JSON = `{
   "key": "frc9999", "team_number": 9999, "nickname": "Bobcat",
   "name": "Bobcat Boosters & Ames High School",
-  "city": "Ames", "state_prov": "Iowa", "country": "USA", "rookie_year": 2018
+  "city": "Ames", "state_prov": "Iowa", "country": "USA", "rookie_year": 2018,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null, "website": null,
+  "motto": null
 }`
 	searchTeam177JSON = `{
   "key": "frc177", "team_number": 177, "nickname": "Bobcat Robotics",
   "name": "Gund Foundation/RTX & South Windsor High School",
-  "city": "South Windsor", "state_prov": "Connecticut", "country": "USA", "rookie_year": 1995
+  "city": "South Windsor", "state_prov": "Connecticut", "country": "USA", "rookie_year": 1995,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null, "website": null,
+  "motto": null
 }`
 	searchTeam1768JSON = `{
   "key": "frc1768", "team_number": 1768, "nickname": "Nashoba Robotics",
   "name": "Nashoba Regional High School",
-  "city": "Bolton", "state_prov": "Massachusetts", "country": "USA", "rookie_year": 2006
+  "city": "Bolton", "state_prov": "Massachusetts", "country": "USA", "rookie_year": 2006,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null, "website": null,
+  "motto": null
 }`
 	searchTeam50JSON = `{
   "key": "frc50", "team_number": 50, "nickname": "Bobcat Racers",
   "name": "Bozeman High School",
-  "city": "Bozeman", "state_prov": "Montana", "country": "USA", "rookie_year": 1997
+  "city": "Bozeman", "state_prov": "Montana", "country": "USA", "rookie_year": 1997,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null, "website": null,
+  "motto": null
 }`
 	searchTeam5000JSON = `{
   "key": "frc5000", "team_number": 5000, "nickname": "Red Bobcats",
   "name": "Hollis Brookline High School",
-  "city": "Hollis", "state_prov": "New Hampshire", "country": "USA", "rookie_year": 2013
+  "city": "Hollis", "state_prov": "New Hampshire", "country": "USA", "rookie_year": 2013,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null, "website": null,
+  "motto": null
 }`
 	searchTeam4000JSON = `{
   "key": "frc4000", "team_number": 4000, "nickname": "Steel Hawks",
   "name": "Bobcat Industries & The Windsor Regional High School Booster Club",
-  "city": "Windsor", "state_prov": "Connecticut", "country": "USA", "rookie_year": 2011
+  "city": "Windsor", "state_prov": "Connecticut", "country": "USA", "rookie_year": 2011,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null, "website": null,
+  "motto": null
 }`
 	searchTeam517JSON = `{
   "key": "frc517", "team_number": 517, "nickname": "Gathering Storm",
   "name": "Rockford High School",
-  "city": "Rockford", "state_prov": "Illinois", "country": "USA", "rookie_year": 2001
+  "city": "Rockford", "state_prov": "Illinois", "country": "USA", "rookie_year": 2001,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null, "website": null,
+  "motto": null
 }`
 )
 

@@ -84,7 +84,8 @@ func (c *watchClock) sleptFor() []time.Duration {
 // the shared helpers so that the watch tests own their own mutation.
 func watchSetBody(t *testing.T, srv *httptest.Server, path string, v any) {
 	t.Helper()
-	body := toJSONBytes(t, v)
+	body := toJSONBytes(t, watchWire(t, v))
+	checkFixture(t, path, body)
 	st := stateFor(t, srv)
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -92,6 +93,24 @@ func watchSetBody(t *testing.T, srv *httptest.Server, path string, v any) {
 }
 
 // --- fixtures ----------------------------------------------------------
+
+// watchWire turns built matches into what the API sends, which carries a
+// post_result_time the CLI's struct does not keep.
+func watchWire(t *testing.T, v any) any {
+	t.Helper()
+	ms, ok := v.([]api.Match)
+	if !ok {
+		return v
+	}
+	var wire []map[string]any
+	if err := json.Unmarshal(toJSONBytes(t, ms), &wire); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range wire {
+		m["post_result_time"] = nil
+	}
+	return wire
+}
 
 const watchEventKey = "2024cthar"
 const watchMatchesPath = "/event/2024cthar/matches"
@@ -110,9 +129,10 @@ func watchQual(number int, red, blue []string, redScore, blueScore int, winner s
 		EventKey:        watchEventKey,
 		WinningAlliance: winner,
 		Alliances: map[string]api.Alliance{
-			"red":  {Score: redScore, TeamKeys: red},
-			"blue": {Score: blueScore, TeamKeys: blue},
+			"red":  {Score: redScore, TeamKeys: red, SurrogateTeamKeys: []string{}, DQTeamKeys: []string{}},
+			"blue": {Score: blueScore, TeamKeys: blue, SurrogateTeamKeys: []string{}, DQTeamKeys: []string{}},
 		},
+		Videos: []api.Video{},
 	}
 	if predicted != 0 {
 		m.PredictedTime = watchEpoch(predicted)
@@ -147,10 +167,11 @@ func watchMatchesQM2Played() []api.Match {
 func watchRankingsV1() api.EventRankings {
 	return api.EventRankings{
 		Rankings: []api.Ranking{
-			{TeamKey: "frc177", Rank: 1, Record: &api.WLTRecord{Wins: 2}, MatchesPlayed: 2},
-			{TeamKey: "frc230", Rank: 2, Record: &api.WLTRecord{Wins: 1, Losses: 1}, MatchesPlayed: 2},
+			{TeamKey: "frc177", Rank: 1, Record: &api.WLTRecord{Wins: 2}, MatchesPlayed: 2, SortOrders: []float64{}, ExtraStats: []float64{}},
+			{TeamKey: "frc230", Rank: 2, Record: &api.WLTRecord{Wins: 1, Losses: 1}, MatchesPlayed: 2, SortOrders: []float64{}, ExtraStats: []float64{}},
 		},
-		SortOrderInfo: []api.SortOrderInfo{{Name: "Ranking Score", Precision: 2}},
+		SortOrderInfo:  []api.SortOrderInfo{{Name: "Ranking Score", Precision: 2}},
+		ExtraStatsInfo: []api.SortOrderInfo{},
 	}
 }
 
@@ -158,10 +179,11 @@ func watchRankingsV1() api.EventRankings {
 func watchRankingsV2() api.EventRankings {
 	return api.EventRankings{
 		Rankings: []api.Ranking{
-			{TeamKey: "frc230", Rank: 1, Record: &api.WLTRecord{Wins: 2, Losses: 1}, MatchesPlayed: 3},
-			{TeamKey: "frc177", Rank: 2, Record: &api.WLTRecord{Wins: 2, Losses: 1}, MatchesPlayed: 3},
+			{TeamKey: "frc230", Rank: 1, Record: &api.WLTRecord{Wins: 2, Losses: 1}, MatchesPlayed: 3, SortOrders: []float64{}, ExtraStats: []float64{}},
+			{TeamKey: "frc177", Rank: 2, Record: &api.WLTRecord{Wins: 2, Losses: 1}, MatchesPlayed: 3, SortOrders: []float64{}, ExtraStats: []float64{}},
 		},
-		SortOrderInfo: []api.SortOrderInfo{{Name: "Ranking Score", Precision: 2}},
+		SortOrderInfo:  []api.SortOrderInfo{{Name: "Ranking Score", Precision: 2}},
+		ExtraStatsInfo: []api.SortOrderInfo{},
 	}
 }
 
@@ -169,7 +191,7 @@ func watchServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return newFakeTBA(t, map[string]any{
 		"/event/2024cthar": event2024ctharJSON,
-		watchMatchesPath:   watchMatchesV1(),
+		watchMatchesPath:   watchWire(t, watchMatchesV1()),
 		watchRankingsPath:  watchRankingsV1(),
 	})
 }
@@ -848,10 +870,10 @@ func TestEventWatchHelpLeadsWithTheDefaults(t *testing.T) {
 func watchMarked() []api.Match {
 	out := watchMatchesV1()
 	out[1].Alliances["red"] = api.Alliance{
-		Score: -1, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"},
+		Score: -1, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"}, DQTeamKeys: []string{},
 	}
 	out[2].Alliances["blue"] = api.Alliance{
-		Score: -1, TeamKeys: watchOther2, DQTeamKeys: []string{"frc6153"},
+		Score: -1, TeamKeys: watchOther2, SurrogateTeamKeys: []string{}, DQTeamKeys: []string{"frc6153"},
 	}
 	return out
 }
@@ -883,7 +905,7 @@ func TestEventWatchPrintsTheLegendOnceWhenAPollIntroducesAMark(t *testing.T) {
 		marked := watchMarked()
 		marked[1] = watchQual(2, watchOther, watchOther2, 101, 99, "red", 1711131000)
 		marked[1].Alliances["red"] = api.Alliance{
-			Score: 101, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"},
+			Score: 101, TeamKeys: watchOther, SurrogateTeamKeys: []string{"frc2168"}, DQTeamKeys: []string{},
 		}
 		watchSetBody(t, srv, watchMatchesPath, marked)
 	}, "--format", "table", "--max-polls", "3")
@@ -978,7 +1000,7 @@ func TestEventWatchKeepsWatchingAnEndedEventWithAnUnplayedMatch(t *testing.T) {
 // the watch runs its course.
 func TestEventWatchKeepsWatchingWithoutTheEvent(t *testing.T) {
 	clk := fakeWatchClock(t, time.Date(2024, 3, 26, 9, 0, 0, 0, time.Local))
-	srv := newFakeTBA(t, map[string]any{watchMatchesPath: watchAllPlayed()})
+	srv := newFakeTBA(t, map[string]any{watchMatchesPath: watchWire(t, watchAllPlayed())})
 
 	_, errOut, err := clk.runWatchCmd(t, srv, "event", "watch", watchEventKey,
 		"--format", "table", "--max-polls", "2")

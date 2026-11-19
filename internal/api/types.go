@@ -175,12 +175,11 @@ type EventOPRs struct {
 }
 
 type APIStatus struct {
-	CurrentSeason    int         `json:"current_season"`
-	MaxSeason        int         `json:"max_season"`
-	IsDatafeedDown   bool        `json:"is_datafeed_down"`
-	ContBuildEnabled bool        `json:"contbuild_enabled"`
-	AndroidSettings  interface{} `json:"android"`
-	IOSSettings      interface{} `json:"ios"`
+	CurrentSeason   int         `json:"current_season"`
+	MaxSeason       int         `json:"max_season"`
+	IsDatafeedDown  bool        `json:"is_datafeed_down"`
+	AndroidSettings interface{} `json:"android"`
+	IOSSettings     interface{} `json:"ios"`
 }
 
 // DistrictEventPoints is one event's contribution to a team's district ranking.
@@ -213,8 +212,8 @@ type DistrictPointsDetail struct {
 
 // DistrictTiebreaker holds the values that break a district points tie.
 type DistrictTiebreaker struct {
-	HighestQualScores []int `json:"highest_qual_scores"`
-	QualWins          int   `json:"qual_wins"`
+	HighestMatchScores []int `json:"highest_match_scores"`
+	QualWins           int   `json:"qual_wins"`
 }
 
 // TeamEventStatus is a team's standing at one event. Every section is optional:

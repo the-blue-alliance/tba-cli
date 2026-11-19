@@ -51,12 +51,12 @@ func TestEventViewOmitsAbsentOptionalFields(t *testing.T) {
 
 func TestEventViewWebcastURLs(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
-		"/event/2024multi": `{"key":"2024multi","name":"Streamy Event","event_type_string":"Offseason",` +
+		"/event/2024multi": eventFixture(`{"key":"2024multi","name":"Streamy Event","event_type_string":"Offseason",` +
 			`"city":"Hartford","state_prov":"CT","country":"USA","location_name":"Somewhere",` +
 			`"start_date":"2024-09-07","end_date":"2024-09-07","week":null,"playoff_type":null,` +
 			`"webcasts":[{"type":"twitch","channel":"nefirst_red"},` +
 			`{"type":"youtube","channel":"dQw4w9WgXcQ"},` +
-			`{"type":"livestream","channel":"12345"}]}`,
+			`{"type":"livestream","channel":"12345"}]}`),
 	})
 	out, stderr, err := runCmd(t, srv, "event", "view", "2024multi", "--format", "table")
 	requireNoError(t, err, stderr)
@@ -94,12 +94,14 @@ func TestEventViewPlayoffTypeNames(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.playoff, func(t *testing.T) {
-			srv := newFakeTBA(t, map[string]any{
-				"/event/2024play": `{"key":"2024play","name":"Playoff Shapes","event_type_string":"Offseason",` +
-					`"city":"Hartford","state_prov":"CT","country":"USA","location_name":"Somewhere",` +
-					`"start_date":"2024-09-07","end_date":"2024-09-07","week":null,"webcasts":[],` +
-					`"playoff_type":` + tc.playoff + `}`,
-			})
+			var event any = eventFixture(`{"key":"2024play","name":"Playoff Shapes","event_type_string":"Offseason",` +
+				`"city":"Hartford","state_prov":"CT","country":"USA","location_name":"Somewhere",` +
+				`"start_date":"2024-09-07","end_date":"2024-09-07","week":null,"webcasts":[],` +
+				`"playoff_type":` + tc.playoff + `}`)
+			if tc.playoff == "42" {
+				event = offSpec("a playoff type newer than the CLI knows", event)
+			}
+			srv := newFakeTBA(t, map[string]any{"/event/2024play": event})
 			out, stderr, err := runCmd(t, srv, "event", "view", "2024play", "--format", "table")
 			requireNoError(t, err, stderr)
 			requireContains(t, out, "Playoff:   "+tc.want)

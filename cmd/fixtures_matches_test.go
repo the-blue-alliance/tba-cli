@@ -26,7 +26,8 @@ const matches2024ctharJSON = `[
       "blue": {"score": 127, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": {"red": {"totalPoints": 131}, "blue": {"totalPoints": 127}},
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024cthar_qm12",
@@ -43,7 +44,8 @@ const matches2024ctharJSON = `[
       "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
     },
     "score_breakdown": {"red": {"totalPoints": 88}, "blue": {"totalPoints": 61}},
-    "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}]
+    "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}],
+    "post_result_time": null
   },
   {
     "key": "2024cthar_sf13m1",
@@ -60,7 +62,8 @@ const matches2024ctharJSON = `[
       "blue": {"score": 118, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024cthar_qm2",
@@ -77,7 +80,8 @@ const matches2024ctharJSON = `[
       "blue": {"score": -1, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024cthar_qm7",
@@ -94,7 +98,8 @@ const matches2024ctharJSON = `[
       "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024cthar_qm3",
@@ -111,7 +116,8 @@ const matches2024ctharJSON = `[
       "blue": {"score": 77, "team_keys": ["frc1073", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   }
 ]`
 
@@ -132,7 +138,8 @@ const teamMatches177At2024ctharJSON = `[
       "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024cthar_sf13m1",
@@ -149,7 +156,8 @@ const teamMatches177At2024ctharJSON = `[
       "blue": {"score": -1, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   }
 ]`
 
@@ -172,7 +180,12 @@ const event2019ctwatJSON = `{
   "address": "1 Waterbury Ln, Waterbury, CT 06702, USA",
   "location_name": "Waterbury Arena",
   "webcasts": [],
-  "playoff_type": 0
+  "playoff_type": 0,
+  "district": {"abbreviation": "ne", "display_name": "New England", "key": "2019ne", "year": 2019, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "timezone": null, "website": null, "first_event_id": null, "first_event_code": null,
+  "division_keys": [], "parent_event_key": null,
+  "playoff_type_string": "Elimination Bracket (8 Alliances)", "remap_teams": null
 }`
 
 const matches2019ctwatJSON = `[
@@ -191,7 +204,8 @@ const matches2019ctwatJSON = `[
       "blue": {"score": 48, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2019ctwat_qf4m3",
@@ -208,7 +222,8 @@ const matches2019ctwatJSON = `[
       "blue": {"score": 62, "team_keys": ["frc3467", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2019ctwat_sf1m2",
@@ -225,7 +240,8 @@ const matches2019ctwatJSON = `[
       "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2019ctwat_f1m1",
@@ -242,7 +258,8 @@ const matches2019ctwatJSON = `[
       "blue": {"score": 79, "team_keys": ["frc3467", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   }
 ]`
 
@@ -265,7 +282,11 @@ const event2021ctwatJSON = `{
   "address": null,
   "location_name": null,
   "webcasts": [],
-  "playoff_type": null
+  "playoff_type": null,
+  "district": null, "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null,
+  "lng": null, "timezone": null, "website": null, "first_event_id": null,
+  "first_event_code": null, "division_keys": [], "parent_event_key": null,
+  "playoff_type_string": null, "remap_teams": null
 }`
 
 // One match with everything a detail view can show: a surrogate, a score
@@ -286,15 +307,14 @@ const matchViewQM12JSON = `{
     "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
   },
   "score_breakdown": {
-    "red": {"autoPoints": 20, "totalPoints": 88, "melody": true},
-    "blue": {"autoPoints": 10, "totalPoints": 61, "melody": false}
+    "red": {"autoPoints": 20, "totalPoints": 88, "melodyBonusAchieved": true},
+    "blue": {"autoPoints": 10, "totalPoints": 61, "melodyBonusAchieved": false}
   },
   "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}]
 }`
 
-// A 2026-shaped breakdown: recent seasons write an unfilled slot as the string
-// "None" rather than as a null, and carry the game's own constants -- the
-// thresholds a bonus is measured against -- alongside what the alliances did.
+// A 2026 breakdown: recent seasons write an unfilled slot as the string "None"
+// rather than as a null.
 const matchView2026JSON = `{
   "key": "2026cthar_qm7",
   "comp_level": "qm",
@@ -312,27 +332,24 @@ const matchView2026JSON = `{
     "red": {
       "totalPoints": 96,
       "rp": 3,
-      "autoPoints": 24,
-      "foulCount": 0,
+      "totalAutoPoints": 24,
+      "majorFoulCount": 0,
       "autoTowerRobot1": "None",
       "autoTowerRobot2": "None",
-      "endgameRobot1": "Parked",
-      "coopertitionThreshold": 12,
-      "ensembleBonusThreshold": 30
+      "endGameTowerRobot1": "Level1"
     },
     "blue": {
       "totalPoints": 74,
       "rp": 1,
-      "autoPoints": 12,
-      "foulCount": 0,
+      "totalAutoPoints": 12,
+      "majorFoulCount": 0,
       "autoTowerRobot1": "None",
       "autoTowerRobot2": "None",
-      "endgameRobot1": "None",
-      "coopertitionThreshold": 12,
-      "ensembleBonusThreshold": 30
+      "endGameTowerRobot1": "None"
     }
   },
-  "videos": []
+  "videos": [],
+  "predicted_time": null, "post_result_time": null
 }`
 
 // A semifinal, whose name depends on the event's bracket.
@@ -351,7 +368,8 @@ const matchViewSF13JSON = `{
     "blue": {"score": 118, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // A match that has not been played: both scores -1, no winner, no breakdown.
@@ -370,7 +388,8 @@ const matchViewUnplayedJSON = `{
     "blue": {"score": -1, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // A match whose video is hosted somewhere TBA knows but this CLI does not have
@@ -390,7 +409,8 @@ const matchViewTBAVideoJSON = `{
     "blue": {"score": 66, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": [{"type": "tba", "key": "abc123"}]
+  "videos": [{"type": "tba", "key": "abc123"}],
+  "post_result_time": null
 }`
 
 // A 2015 qualification match. That season scored both alliances the same in a
@@ -410,7 +430,8 @@ const match2015ctwatQM7JSON = `{
     "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // A team's whole 2024 season, as /team/frc177/matches/2024 returns it: two
@@ -434,7 +455,8 @@ const teamMatches177Season2024JSON = `[
       "blue": {"score": 70, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024ctwat_qm46",
@@ -451,7 +473,8 @@ const teamMatches177Season2024JSON = `[
       "blue": {"score": 83, "team_keys": ["frc177", "frc1124", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024cthar_qm12",
@@ -468,7 +491,8 @@ const teamMatches177Season2024JSON = `[
       "blue": {"score": 61, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": ["frc4055"], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   },
   {
     "key": "2024ctwat_qm5",
@@ -485,7 +509,8 @@ const teamMatches177Season2024JSON = `[
       "blue": {"score": 54, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
     "score_breakdown": null,
-    "videos": []
+    "videos": [],
+    "post_result_time": null
   }
 ]`
 
@@ -532,6 +557,7 @@ const matchViewBreakdown2024JSON = `{
       "foulPoints": 2,
       "g424Penalty": false,
       "melodyBonusAchieved": true,
+      "melodyBonusThreshold": 18,
       "micCenterStage": false,
       "micStageLeft": true,
       "rp": 5,
@@ -570,6 +596,7 @@ const matchViewBreakdown2024JSON = `{
       "foulPoints": 0,
       "g424Penalty": false,
       "melodyBonusAchieved": false,
+      "melodyBonusThreshold": 18,
       "micCenterStage": false,
       "micStageLeft": false,
       "rp": 1,
@@ -585,5 +612,6 @@ const matchViewBreakdown2024JSON = `{
       "trapCenterStage": false
     }
   },
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
