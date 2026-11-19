@@ -603,8 +603,8 @@ func eventDistrictPointsTable(points api.EventDistrictPoints, withTiebreakers bo
 		}
 		if withTiebreakers {
 			tb := points.Tiebreakers[key]
-			scores := make([]string, len(tb.HighestQualScores))
-			for n, v := range tb.HighestQualScores {
+			scores := make([]string, len(tb.HighestMatchScores))
+			for n, v := range tb.HighestMatchScores {
 				scores[n] = strconv.Itoa(v)
 			}
 			row = append(row, strings.Join(scores, ", "), strconv.Itoa(tb.QualWins))

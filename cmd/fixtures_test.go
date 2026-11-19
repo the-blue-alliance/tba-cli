@@ -508,10 +508,10 @@ const districtPoints2024ctharJSON = `{
     "frc230": {"qual_points": 18, "alliance_points": 16, "elim_points": 30, "award_points": 0, "total": 64}
   },
   "tiebreakers": {
-    "frc5507": {"highest_qual_scores": [55, 51, 48], "qual_wins": 4},
-    "frc177": {"highest_qual_scores": [88, 80, 76], "qual_wins": 10},
-    "frc1073": {"highest_qual_scores": [84, 78, 72], "qual_wins": 9},
-    "frc230": {"highest_qual_scores": [80, 77, 70], "qual_wins": 8}
+    "frc5507": {"highest_match_scores": [55, 51, 48], "qual_wins": 4},
+    "frc177": {"highest_match_scores": [88, 80, 76], "qual_wins": 10},
+    "frc1073": {"highest_match_scores": [84, 78, 72], "qual_wins": 9},
+    "frc230": {"highest_match_scores": [80, 77, 70], "qual_wins": 8}
   }
 }`
 
@@ -938,7 +938,6 @@ const apiStatusJSON = `{
   "max_season": 2024,
   "is_datafeed_down": false,
   "down_events": [],
-  "contbuild_enabled": true,
   "ios": {"latest_app_version": 1, "min_app_version": 1},
   "android": {"latest_app_version": 1, "min_app_version": 1}
 }`
