@@ -295,6 +295,8 @@ const compare2024JSON = `{
       "foulPoints": 2,
       "g424Penalty": false,
       "melodyBonusAchieved": true,
+      "melodyBonusThreshold": 18,
+      "ensembleBonusStagePointsThreshold": 10,
       "rp": 5,
       "techFoulCount": 0,
       "teleopPoints": 57,
@@ -318,6 +320,8 @@ const compare2024JSON = `{
       "foulPoints": 0,
       "g424Penalty": false,
       "melodyBonusAchieved": false,
+      "melodyBonusThreshold": 18,
+      "ensembleBonusStagePointsThreshold": 10,
       "rp": 1,
       "techFoulCount": 0,
       "teleopPoints": 44,
@@ -325,7 +329,8 @@ const compare2024JSON = `{
       "trapCenterStage": false
     }
   },
-  "videos": []
+  "videos": [],
+  "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
 }`
 
 // labelsOf is the order a breakdown comes out in.
@@ -408,41 +413,54 @@ func TestCompareBreakdownsDropsRowsNeitherAllianceScored(t *testing.T) {
 }
 
 // compare2026JSON is a recent season's shape: an unfilled slot is the string
-// "None", and the game's own constants ride along with what was scored.
+// "None".
 const compare2026JSON = `{
-  "key": "2026cthar_qm7",
+  "key": "2026cthar_qm7", "comp_level": "qm", "set_number": 1, "match_number": 7,
+  "event_key": "2026cthar", "winning_alliance": "red",
+  "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null,
+  "alliances": {
+    "red": {"score": 96, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
+    "blue": {"score": 74, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
+  },
   "score_breakdown": {
     "red": {
-      "totalPoints": 96, "rp": 3, "autoPoints": 24, "foulCount": 0,
-      "autoTowerRobot1": "None", "endgameRobot1": "Parked",
-      "coopertitionThreshold": 12, "ensembleBonusThreshold": 30
+      "totalPoints": 96, "rp": 3, "totalAutoPoints": 24, "majorFoulCount": 0,
+      "autoTowerRobot1": "None", "endGameTowerRobot1": "Level1"
     },
     "blue": {
-      "totalPoints": 74, "rp": 1, "autoPoints": 12, "foulCount": 0,
-      "autoTowerRobot1": "None", "endgameRobot1": "None",
-      "coopertitionThreshold": 12, "ensembleBonusThreshold": 30
+      "totalPoints": 74, "rp": 1, "totalAutoPoints": 12, "majorFoulCount": 0,
+      "autoTowerRobot1": "None", "endGameTowerRobot1": "None"
     }
-  }
+  },
+  "videos": []
 }`
 
 // "None" on both sides is the same non-event as a pair of zeroes, and a
 // threshold is the season's rulebook rather than anything the alliances did.
 func TestCompareBreakdownsDropsNoneRowsAndThresholds(t *testing.T) {
 	rows := frc.CompareBreakdowns(mustMatch(t, compare2026JSON), false)
-	for _, key := range []string{"autoTowerRobot1", "coopertitionThreshold", "ensembleBonusThreshold"} {
+	if _, ok := rowFor(rows, "autoTowerRobot1"); ok {
+		t.Errorf("autoTowerRobot1 should have been dropped from the default view: %v", labelsOf(rows))
+	}
+	// One side climbed and the other did not, so the row is the match.
+	if row, ok := rowFor(rows, "endGameTowerRobot1"); !ok || row.Red != "Level1" || row.Blue != "None" {
+		t.Errorf("endGameTowerRobot1 = %v, want it kept as (Level1, None)", row)
+	}
+	rows = frc.CompareBreakdowns(mustMatch(t, compare2024JSON), false)
+	for _, key := range []string{"melodyBonusThreshold", "ensembleBonusStagePointsThreshold"} {
 		if _, ok := rowFor(rows, key); ok {
 			t.Errorf("%s should have been dropped from the default view: %v", key, labelsOf(rows))
 		}
-	}
-	// One side parked and the other did not, so the row is the match.
-	if row, ok := rowFor(rows, "endgameRobot1"); !ok || row.Red != "Parked" || row.Blue != "None" {
-		t.Errorf("endgameRobot1 = %v, want it kept as (Parked, None)", row)
 	}
 }
 
 func TestCompareBreakdownsFullKeepsNoneRowsAndThresholds(t *testing.T) {
 	rows := frc.CompareBreakdowns(mustMatch(t, compare2026JSON), true)
-	for _, key := range []string{"autoTowerRobot1", "coopertitionThreshold", "ensembleBonusThreshold"} {
+	if _, ok := rowFor(rows, "autoTowerRobot1"); !ok {
+		t.Errorf("--full should have kept autoTowerRobot1: %v", labelsOf(rows))
+	}
+	rows = frc.CompareBreakdowns(mustMatch(t, compare2024JSON), true)
+	for _, key := range []string{"melodyBonusThreshold", "ensembleBonusStagePointsThreshold"} {
 		if _, ok := rowFor(rows, key); !ok {
 			t.Errorf("--full should have kept %s: %v", key, labelsOf(rows))
 		}
@@ -453,7 +471,7 @@ func TestCompareBreakdownsFullKeepsNoneRowsAndThresholds(t *testing.T) {
 // points; the game's own detail starts after them.
 func TestPointsBandLen(t *testing.T) {
 	rows := frc.CompareBreakdowns(mustMatch(t, compare2026JSON), false)
-	// Total Points, RP, Auto Points -- then Endgame Robot 1.
+	// Total Points, RP, Total Auto Points -- then End Game Tower Robot 1.
 	if got := frc.PointsBandLen(rows); got != 3 {
 		t.Errorf("PointsBandLen = %d, want 3 (%v)", got, labelsOf(rows))
 	}
@@ -465,8 +483,8 @@ func TestPointsBandLen(t *testing.T) {
 // --full is for the moment you want the row that says nothing happened.
 func TestCompareBreakdownsFullKeepsEverything(t *testing.T) {
 	rows := frc.CompareBreakdowns(mustMatch(t, compare2024JSON), true)
-	if len(rows) != 21 {
-		t.Errorf("got %d rows, want all 21: %v", len(rows), labelsOf(rows))
+	if len(rows) != 23 {
+		t.Errorf("got %d rows, want all 23: %v", len(rows), labelsOf(rows))
 	}
 	for _, key := range []string{"adjustPoints", "trapCenterStage", "techFoulCount"} {
 		if _, ok := rowFor(rows, key); !ok {

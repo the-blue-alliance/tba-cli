@@ -67,7 +67,11 @@ const event2007ctJSON = `{
   "week": 4,
   "location_name": "Connecticut Convention Center",
   "webcasts": [],
-  "playoff_type": null
+  "playoff_type": null,
+  "address": null, "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null,
+  "lng": null, "timezone": null, "website": null, "first_event_id": null,
+  "first_event_code": null, "division_keys": [], "parent_event_key": null,
+  "playoff_type_string": null, "remap_teams": null
 }`
 
 const teamAllEvents177JSON = "[" + event2007ctJSON + "," + event2024ctharJSON + "," + event2024necmpJSON + "]"

@@ -1,5 +1,10 @@
 package cmd
 
+import (
+	"encoding/json"
+	"strconv"
+)
+
 // Fixtures use the real field names returned by The Blue Alliance API v3.
 
 const teamFRC177JSON = `{
@@ -15,7 +20,8 @@ const teamFRC177JSON = `{
   "postal_code": "06074",
   "website": "http://www.bobcatrobotics.org",
   "rookie_year": 1995,
-  "motto": null
+  "motto": null,
+  "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null, "location_name": null
 }`
 
 const teamFRC1073JSON = `{
@@ -28,7 +34,9 @@ const teamFRC1073JSON = `{
   "country": "USA",
   "website": "https://www.theforceteam.com",
   "rookie_year": 2003,
-  "motto": null
+  "motto": null,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null
 }`
 
 const teamFRC5507JSON = `{
@@ -41,7 +49,9 @@ const teamFRC5507JSON = `{
   "country": "USA",
   "website": "https://www.frc5507.com",
   "rookie_year": 2015,
-  "motto": null
+  "motto": null,
+  "school_name": null, "address": null, "postal_code": null, "gmaps_place_id": null,
+  "gmaps_url": null, "lat": null, "lng": null, "location_name": null
 }`
 
 const event2024ctharJSON = `{
@@ -53,7 +63,8 @@ const event2024ctharJSON = `{
     "abbreviation": "ne",
     "display_name": "New England",
     "key": "2024ne",
-    "year": 2024
+    "year": 2024,
+    "official_advancement_counts": {"dcmp": 96, "cmp": 31}
   },
   "city": "Hartford",
   "state_prov": "CT",
@@ -67,7 +78,11 @@ const event2024ctharJSON = `{
   "address": "55 Forest St, Hartford, CT 06105, USA",
   "location_name": "Hartford Public High School",
   "webcasts": [{"type": "twitch", "channel": "nefirst_red"}],
-  "playoff_type": 10
+  "playoff_type": 10,
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "timezone": null, "website": null, "first_event_id": null, "first_event_code": null,
+  "division_keys": [], "parent_event_key": null,
+  "playoff_type_string": "Double Elimination Bracket (8 Alliances)", "remap_teams": null
 }`
 
 const event2024necmpJSON = `{
@@ -87,7 +102,12 @@ const event2024necmpJSON = `{
   "address": "1277 Main St, Springfield, MA 01103, USA",
   "location_name": "MassMutual Center",
   "webcasts": [],
-  "playoff_type": 10
+  "playoff_type": 10,
+  "district": {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "timezone": null, "website": null, "first_event_id": null, "first_event_code": null,
+  "division_keys": [], "parent_event_key": null,
+  "playoff_type_string": "Double Elimination Bracket (8 Alliances)", "remap_teams": null
 }`
 
 const match2024ctharQM1JSON = `{
@@ -115,7 +135,8 @@ const match2024ctharQM1JSON = `{
     }
   },
   "score_breakdown": {"red": {"totalPoints": 88}, "blue": {"totalPoints": 61}},
-  "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}]
+  "videos": [{"type": "youtube", "key": "dQw4w9WgXcQ"}],
+  "post_result_time": null
 }`
 
 const match2024ctharQM2JSON = `{
@@ -130,7 +151,8 @@ const match2024ctharQM2JSON = `{
     "blue": {"score": 72, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
 }`
 
 const rankings2024ctharJSON = `{
@@ -186,7 +208,8 @@ const rankings2015ctwatJSON = `{
       "qual_average": 78.5,
       "matches_played": 8,
       "dq": 0,
-      "sort_orders": [78.5, 20.0, 0.0, 40.0, 0.0, 18.5]
+      "sort_orders": [78.5, 20.0, 0.0, 40.0, 0.0, 18.5],
+      "extra_stats": []
     },
     {
       "team_key": "frc1073",
@@ -195,7 +218,8 @@ const rankings2015ctwatJSON = `{
       "qual_average": 71.25,
       "matches_played": 8,
       "dq": 1,
-      "sort_orders": [71.25, 16.0, 0.0, 40.0, 0.0, 15.25]
+      "sort_orders": [71.25, 16.0, 0.0, 40.0, 0.0, 15.25],
+      "extra_stats": []
     }
   ],
   "sort_order_info": [
@@ -230,6 +254,7 @@ const alliances2024ctharJSON = `[
     "picks": ["frc177", "frc1073", "frc5507"],
     "backup": {"in": "frc2168", "out": "frc5507"},
     "status": {
+      "playoff_type": 10,
       "playoff_average": null,
       "level": "f",
       "double_elim_round": "Finals",
@@ -239,11 +264,11 @@ const alliances2024ctharJSON = `[
     }
   },
   {
-    "name": null,
     "declines": ["frc558"],
     "picks": ["frc230", "frc195", "frc1071"],
     "backup": null,
     "status": {
+      "playoff_type": 10,
       "playoff_average": null,
       "level": "f",
       "double_elim_round": "Finals",
@@ -258,6 +283,7 @@ const alliances2024ctharJSON = `[
     "picks": ["frc3467", "frc6153", "frc2168"],
     "backup": null,
     "status": {
+      "playoff_type": 10,
       "playoff_average": null,
       "level": "sf",
       "double_elim_round": "Round 4",
@@ -269,7 +295,7 @@ const alliances2024ctharJSON = `[
 ]`
 
 // A pre-2023 bracket: quarter/semi/final levels and no double_elim_round. The
-// last alliance never played, so its status is null.
+// last alliance never played, so it has no status.
 const alliances2019ctharJSON = `[
   {
     "name": "Alliance 1",
@@ -277,6 +303,7 @@ const alliances2019ctharJSON = `[
     "picks": ["frc177", "frc1073", "frc5507"],
     "backup": null,
     "status": {
+      "playoff_type": 0,
       "playoff_average": 0.0,
       "level": "f",
       "record": {"wins": 5, "losses": 2, "ties": 0},
@@ -290,6 +317,7 @@ const alliances2019ctharJSON = `[
     "picks": ["frc230", "frc195", "frc558"],
     "backup": {"in": "frc1071", "out": "frc558"},
     "status": {
+      "playoff_type": 0,
       "playoff_average": 0.0,
       "level": "qf",
       "record": {"wins": 1, "losses": 2, "ties": 0},
@@ -301,8 +329,7 @@ const alliances2019ctharJSON = `[
     "name": "Alliance 8",
     "declines": [],
     "picks": ["frc3467", "frc6153"],
-    "backup": null,
-    "status": null
+    "backup": null
   }
 ]`
 
@@ -573,7 +600,8 @@ const matchesPredicted2024ctharJSON = `[
       "red": {"score": -1, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
       "blue": {"score": -1, "team_keys": ["frc230", "frc1071", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
-    "score_breakdown": null, "videos": []
+    "score_breakdown": null, "videos": [],
+    "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
   },
   {
     "key": "2024cthar_qm2", "comp_level": "qm", "set_number": 1, "match_number": 2,
@@ -582,7 +610,8 @@ const matchesPredicted2024ctharJSON = `[
       "red": {"score": -1, "team_keys": ["frc558", "frc3467", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []},
       "blue": {"score": -1, "team_keys": ["frc195", "frc1124", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
-    "score_breakdown": null, "videos": []
+    "score_breakdown": null, "videos": [],
+    "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
   },
   {
     "key": "2024cthar_qm10", "comp_level": "qm", "set_number": 1, "match_number": 10,
@@ -591,7 +620,8 @@ const matchesPredicted2024ctharJSON = `[
       "red": {"score": -1, "team_keys": ["frc177", "frc195", "frc6153"], "surrogate_team_keys": [], "dq_team_keys": []},
       "blue": {"score": -1, "team_keys": ["frc1073", "frc558", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
-    "score_breakdown": null, "videos": []
+    "score_breakdown": null, "videos": [],
+    "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
   },
   {
     "key": "2024cthar_qm11", "comp_level": "qm", "set_number": 1, "match_number": 11,
@@ -600,7 +630,8 @@ const matchesPredicted2024ctharJSON = `[
       "red": {"score": -1, "team_keys": ["frc5507", "frc1071", "frc1124"], "surrogate_team_keys": [], "dq_team_keys": []},
       "blue": {"score": -1, "team_keys": ["frc230", "frc2168", "frc3467"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
-    "score_breakdown": null, "videos": []
+    "score_breakdown": null, "videos": [],
+    "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
   },
   {
     "key": "2024cthar_sf1m1", "comp_level": "sf", "set_number": 1, "match_number": 1,
@@ -609,7 +640,8 @@ const matchesPredicted2024ctharJSON = `[
       "red": {"score": -1, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []},
       "blue": {"score": -1, "team_keys": ["frc3467", "frc6153", "frc2168"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
-    "score_breakdown": null, "videos": []
+    "score_breakdown": null, "videos": [],
+    "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
   },
   {
     "key": "2024cthar_sf3m1", "comp_level": "sf", "set_number": 3, "match_number": 1,
@@ -618,7 +650,8 @@ const matchesPredicted2024ctharJSON = `[
       "red": {"score": -1, "team_keys": ["frc230", "frc195", "frc1071"], "surrogate_team_keys": [], "dq_team_keys": []},
       "blue": {"score": -1, "team_keys": ["frc558", "frc1124", "frc4055"], "surrogate_team_keys": [], "dq_team_keys": []}
     },
-    "score_breakdown": null, "videos": []
+    "score_breakdown": null, "videos": [],
+    "time": null, "actual_time": null, "predicted_time": null, "post_result_time": null
   }
 ]`
 
@@ -642,8 +675,8 @@ const insights2024ctharJSON = `{
 }`
 
 const districts2024JSON = `[
-  {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024},
-  {"abbreviation": "fim", "display_name": "FIRST In Michigan", "key": "2024fim", "year": 2024}
+  {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+  {"abbreviation": "fim", "display_name": "FIRST In Michigan", "key": "2024fim", "year": 2024, "official_advancement_counts": {"dcmp": 160, "cmp": 86}}
 ]`
 
 const districtRankings2024neJSON = `[
@@ -826,6 +859,7 @@ const teamMedia177JSON = `[
   {
     "type": "imgur",
     "foreign_key": "aBcDeFg",
+    "team_keys": ["frc177"],
     "details": {},
     "preferred": true,
     "direct_url": "https://i.imgur.com/aBcDeFg.jpg",
@@ -834,6 +868,7 @@ const teamMedia177JSON = `[
   {
     "type": "youtube",
     "foreign_key": "dQw4w9WgXcQ",
+    "team_keys": ["frc177"],
     "details": {},
     "preferred": false,
     "direct_url": "",
@@ -847,8 +882,8 @@ const teamRobots177JSON = `[
 ]`
 
 const teamDistricts177JSON = `[
-  {"abbreviation": "ne", "display_name": "New England", "key": "2023ne", "year": 2023},
-  {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024}
+  {"abbreviation": "ne", "display_name": "New England", "key": "2023ne", "year": 2023, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+  {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}}
 ]`
 
 // A season's leaderboards as the API sends them: a board about teams whose
@@ -938,6 +973,7 @@ const apiStatusJSON = `{
   "max_season": 2024,
   "is_datafeed_down": false,
   "down_events": [],
+  "max_team_page": 23,
   "ios": {"latest_app_version": 1, "min_app_version": 1},
   "android": {"latest_app_version": 1, "min_app_version": 1}
 }`
@@ -967,7 +1003,10 @@ const event2024casjJSON = `{
   "website": "https://cafirst.org/frc/siliconvalley/",
   "first_event_code": "CASJ",
   "webcasts": [{"type": "twitch", "channel": "firstinspires9"}],
-  "playoff_type": 10
+  "playoff_type": 10,
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "first_event_id": null, "division_keys": [], "parent_event_key": null,
+  "playoff_type_string": "Double Elimination Bracket (8 Alliances)", "remap_teams": null
 }`
 
 const event2024isde3JSON = `{
@@ -979,7 +1018,8 @@ const event2024isde3JSON = `{
     "abbreviation": "isr",
     "display_name": "FIRST Israel",
     "key": "2024isr",
-    "year": 2024
+    "year": 2024,
+    "official_advancement_counts": {"dcmp": 45, "cmp": 11}
   },
   "city": "Tel Aviv-Yafo",
   "state_prov": "",
@@ -994,7 +1034,11 @@ const event2024isde3JSON = `{
   "location_name": "Shlomo Group Arena",
   "timezone": "Asia/Jerusalem",
   "webcasts": [],
-  "playoff_type": 10
+  "playoff_type": 10,
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "website": null, "first_event_id": null, "first_event_code": null, "division_keys": [],
+  "parent_event_key": null, "playoff_type_string": "Double Elimination Bracket (8 Alliances)",
+  "remap_teams": null
 }`
 
 const event2024milJSON = `{
@@ -1016,7 +1060,11 @@ const event2024milJSON = `{
   "location_name": "George R. Brown Convention Center",
   "timezone": "America/Chicago",
   "webcasts": [{"type": "youtube", "channel": "abc123XYZ"}],
-  "playoff_type": 10
+  "playoff_type": 10,
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "website": null, "first_event_id": null, "first_event_code": null, "division_keys": [],
+  "parent_event_key": null, "playoff_type_string": "Double Elimination Bracket (8 Alliances)",
+  "remap_teams": null
 }`
 
 const event2024iriJSON = `{
@@ -1038,7 +1086,11 @@ const event2024iriJSON = `{
   "location_name": "Lawrence North High School",
   "timezone": "America/Indiana/Indianapolis",
   "webcasts": [],
-  "playoff_type": 0
+  "playoff_type": 0,
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "website": null, "first_event_id": null, "first_event_code": null, "division_keys": [],
+  "parent_event_key": null, "playoff_type_string": "Elimination Bracket (8 Alliances)",
+  "remap_teams": null
 }`
 
 const event2021nhflaJSON = `{
@@ -1060,7 +1112,10 @@ const event2021nhflaJSON = `{
   "location_name": null,
   "timezone": null,
   "webcasts": [],
-  "playoff_type": null
+  "playoff_type": null,
+  "postal_code": null, "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null,
+  "website": null, "first_event_id": null, "first_event_code": null, "division_keys": [],
+  "parent_event_key": null, "playoff_type_string": null, "remap_teams": null
 }`
 
 // events2024JSON is deliberately out of calendar order, so that tests see
@@ -1070,3 +1125,41 @@ const events2024JSON = "[" + event2024milJSON + "," + event2024ctharJSON + "," +
 	event2024iriJSON + "]"
 
 const teamEvents177JSON = "[" + event2024ctharJSON + "," + event2024necmpJSON + "]"
+
+// eventFixture lays a partial event over a complete one, for tests that care
+// about a few fields but still have to serve what the API serves.
+func eventFixture(fields string) string {
+	event, over := map[string]any{}, map[string]any{}
+	if err := json.Unmarshal([]byte(baseEventJSON), &event); err != nil {
+		panic(err)
+	}
+	if err := json.Unmarshal([]byte(fields), &over); err != nil {
+		panic(err)
+	}
+	// The code and year follow the key unless the fields say otherwise.
+	if key, ok := over["key"].(string); ok && len(key) > 4 {
+		event["event_code"] = key[4:]
+		if y, err := strconv.Atoi(key[:4]); err == nil {
+			event["year"] = y
+		}
+	}
+	for k, v := range over {
+		event[k] = v
+	}
+	b, err := json.Marshal(event)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+const baseEventJSON = `{
+  "key": "2024test", "name": "Test Event", "event_code": "test", "event_type": 99,
+  "district": null, "city": null, "state_prov": null, "country": null,
+  "start_date": "2024-09-07", "end_date": "2024-09-07", "year": 2024, "short_name": null,
+  "event_type_string": "Offseason", "week": null, "address": null, "postal_code": null,
+  "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null, "location_name": null,
+  "timezone": null, "website": null, "first_event_id": null, "first_event_code": null,
+  "webcasts": [], "division_keys": [], "parent_event_key": null, "playoff_type": null,
+  "playoff_type_string": null, "remap_teams": null
+}`

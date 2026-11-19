@@ -28,9 +28,9 @@ func TestEventViewTable(t *testing.T) {
 
 func TestEventViewWeekNotAvailable(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{
-		"/event/2024cmptx": `{"key":"2024cmptx","name":"Einstein Field","event_type_string":"Championship Finals",` +
+		"/event/2024cmptx": eventFixture(`{"key":"2024cmptx","name":"Einstein Field","event_type":4,"event_type_string":"Championship Finals",` +
 			`"city":"Houston","state_prov":"TX","country":"USA","location_name":"George R. Brown Convention Center",` +
-			`"start_date":"2024-04-17","end_date":"2024-04-20","week":null}`,
+			`"start_date":"2024-04-17","end_date":"2024-04-20","week":null}`),
 	})
 	out, _, err := runCmd(t, srv, "event", "view", "2024cmptx", "--format", "table")
 	requireNoError(t, err, "")

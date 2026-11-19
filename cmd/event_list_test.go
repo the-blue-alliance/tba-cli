@@ -136,12 +136,33 @@ func TestEventListTypeFilter(t *testing.T) {
 func TestEventListDcmpIncludesDivisions(t *testing.T) {
 	srv := newFakeTBA(t, map[string]any{"/events/2024": `[
 		{"key":"2024micmp","name":"FIM Championship","event_type":2,"event_type_string":"District Championship",
-		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6},
+		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6,
+		 "event_code": "micmp",
+		 "district": {"abbreviation": "fim", "display_name": "FIRST In Michigan", "key": "2024fim", "year": 2024, "official_advancement_counts": {"dcmp": 160, "cmp": 86}},
+		 "year": 2024, "short_name": null, "address": null, "postal_code": null,
+		 "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null, "location_name": null,
+		 "timezone": null, "website": null, "first_event_id": null, "first_event_code": null,
+		 "webcasts": [], "division_keys": [], "parent_event_key": null, "playoff_type": null,
+		 "playoff_type_string": null, "remap_teams": null},
 		{"key":"2024micmp1","name":"FIM Championship - APTIV Division","event_type":5,
 		 "event_type_string":"District Championship Division",
-		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6},
+		 "start_date":"2024-04-10","end_date":"2024-04-13","city":"Detroit","state_prov":"MI","country":"USA","week":6,
+		 "event_code": "micmp1",
+		 "district": {"abbreviation": "fim", "display_name": "FIRST In Michigan", "key": "2024fim", "year": 2024, "official_advancement_counts": {"dcmp": 160, "cmp": 86}},
+		 "year": 2024, "short_name": null, "address": null, "postal_code": null,
+		 "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null, "location_name": null,
+		 "timezone": null, "website": null, "first_event_id": null, "first_event_code": null,
+		 "webcasts": [], "division_keys": [], "parent_event_key": null, "playoff_type": null,
+		 "playoff_type_string": null, "remap_teams": null},
 		{"key":"2024cthar","name":"NE District Hartford Event","event_type":1,"event_type_string":"District",
-		 "start_date":"2024-03-28","end_date":"2024-03-30","city":"Hartford","state_prov":"CT","country":"USA","week":3}
+		 "start_date":"2024-03-28","end_date":"2024-03-30","city":"Hartford","state_prov":"CT","country":"USA","week":3,
+		 "event_code": "cthar",
+		 "district": {"abbreviation": "ne", "display_name": "New England", "key": "2024ne", "year": 2024, "official_advancement_counts": {"dcmp": 96, "cmp": 31}},
+		 "year": 2024, "short_name": null, "address": null, "postal_code": null,
+		 "gmaps_place_id": null, "gmaps_url": null, "lat": null, "lng": null, "location_name": null,
+		 "timezone": null, "website": null, "first_event_id": null, "first_event_code": null,
+		 "webcasts": [], "division_keys": [], "parent_event_key": null, "playoff_type": null,
+		 "playoff_type_string": null, "remap_teams": null}
 	]`})
 
 	requireKeys(t, listedKeys(t, srv, "--type", "dcmp"), "2024micmp", "2024micmp1")
@@ -222,8 +243,8 @@ func TestEventListRejectsAYearBeforeTheFirstSeason(t *testing.T) {
 
 func TestEventListDistrictFilterIgnoresCase(t *testing.T) {
 	srv := eventListServer(t)
-	requireKeys(t, listedKeys(t, srv, "--district", "ne"), "2024cthar")
-	requireKeys(t, listedKeys(t, srv, "--district", "NE"), "2024cthar")
+	requireKeys(t, listedKeys(t, srv, "--district", "ne"), "2024cthar", "2024necmp")
+	requireKeys(t, listedKeys(t, srv, "--district", "NE"), "2024cthar", "2024necmp")
 	requireKeys(t, listedKeys(t, srv, "--district", "isr"), "2024isde3")
 	requireKeys(t, listedKeys(t, srv, "--district", "fim"))
 }
@@ -260,7 +281,8 @@ func TestEventListFiltersCombine(t *testing.T) {
 	srv := eventListServer(t)
 	requireKeys(t, listedKeys(t, srv, "--type", "district", "--country", "USA"), "2024cthar")
 	requireKeys(t, listedKeys(t, srv, "--type", "district", "--week", "4"), "2024cthar")
-	requireKeys(t, listedKeys(t, srv, "--district", "ne", "--state", "MA"))
+	requireKeys(t, listedKeys(t, srv, "--district", "ne", "--state", "MA"), "2024necmp")
+	requireKeys(t, listedKeys(t, srv, "--district", "ne", "--state", "NY"))
 	requireKeys(t, listedKeys(t, srv, "--team", "177", "--type", "dcmp"), "2024necmp")
 	requireKeys(t, listedKeys(t, srv,
 		"--type", "district,dcmp,regional", "--country", "USA", "--state", "CT", "--district", "ne"),
@@ -315,7 +337,7 @@ func TestEventListFiltersWorkWithColumnSelection(t *testing.T) {
 	out, stderr, err := runCmd(t, srv,
 		"event", "list", "--year", "2024", "--district", "ne", "--columns", "key,week,district", "--format", "csv")
 	requireNoError(t, err, stderr)
-	if out != "Key,Week,District\n2024cthar,4,ne\n" {
+	if out != "Key,Week,District\n2024cthar,4,ne\n2024necmp,7,ne\n" {
 		t.Errorf("csv = %q", out)
 	}
 }

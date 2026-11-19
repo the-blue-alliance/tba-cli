@@ -47,6 +47,9 @@ var (
 // or any value that will be marshalled to JSON. Unknown paths get a 404 with a
 // TBA-shaped error body. Every request is recorded so tests can assert on
 // headers such as X-TBA-Auth-Key, User-Agent and If-None-Match.
+//
+// Every body must be a valid response for the spec path its route stands in
+// for, and every request must name a spec path; see spec_contract_test.go.
 func newFakeTBA(t *testing.T, routes map[string]any) *httptest.Server {
 	t.Helper()
 
@@ -57,7 +60,15 @@ func newFakeTBA(t *testing.T, routes map[string]any) *httptest.Server {
 		delays:   make(map[string]time.Duration),
 	}
 	for path, v := range routes {
+		if o, ok := v.(offSpecBody); ok {
+			if o.reason == "" {
+				t.Fatalf("offSpec fixture for %s needs a reason", path)
+			}
+			st.bodies[path] = toJSONBytes(t, o.body)
+			continue
+		}
 		st.bodies[path] = toJSONBytes(t, v)
+		checkFixture(t, path, st.bodies[path])
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,6 +123,11 @@ func newFakeTBA(t *testing.T, routes map[string]any) *httptest.Server {
 		fakeRegistryMu.Lock()
 		delete(fakeRegistry, srv.URL)
 		fakeRegistryMu.Unlock()
+	})
+	t.Cleanup(func() {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		checkRequestPaths(t, st.requests)
 	})
 
 	return srv

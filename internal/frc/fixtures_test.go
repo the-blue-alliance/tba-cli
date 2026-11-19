@@ -2,9 +2,11 @@ package frc_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/the-blue-alliance/tba-cli/internal/api"
+	"github.com/the-blue-alliance/tba-cli/internal/apispec"
 )
 
 // The fixtures below are shaped exactly like The Blue Alliance API v3's
@@ -79,7 +81,8 @@ const doubleElimSF13JSON = `{
     "blue": {"score": 118, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": {"red": {"totalPoints": 102}, "blue": {"totalPoints": 118}},
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // The second match of a 2024 finals series.
@@ -98,7 +101,8 @@ const doubleElimFinal2JSON = `{
     "blue": {"score": 127, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": {"red": {"totalPoints": 131}, "blue": {"totalPoints": 127}},
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // A 2019 quarterfinal, from the era of best-of-three bracket sets.
@@ -117,7 +121,8 @@ const legacyQF2019JSON = `{
     "blue": {"score": 62, "team_keys": ["frc177", "frc1073", "frc5507"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": {"red": {"totalPoints": 55}, "blue": {"totalPoints": 62}},
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // A 2019 semifinal, likewise a best-of-three set.
@@ -136,7 +141,8 @@ const legacySF2019JSON = `{
     "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // A 2018 octofinal, the only era with an "ef" level at a district event.
@@ -155,7 +161,8 @@ const legacyEF2018JSON = `{
     "blue": {"score": 288, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // A 2015 qualification match. That season had a coopertition scoring model in
@@ -176,7 +183,8 @@ const qual2015TieJSON = `{
     "blue": {"score": 44, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
 // An Einstein round robin semifinal: one set, fifteen matches.
@@ -195,11 +203,14 @@ const roundRobin2019JSON = `{
     "blue": {"score": 76, "team_keys": ["frc230", "frc195", "frc558"], "surrogate_team_keys": [], "dq_team_keys": []}
   },
   "score_breakdown": null,
-  "videos": []
+  "videos": [],
+  "post_result_time": null
 }`
 
+// mustMatch decodes a match fixture, which must be a valid Match in the spec.
 func mustMatch(t *testing.T, raw string) api.Match {
 	t.Helper()
+	requireSpec(t, apispec.SchemaPointer("Match"), raw)
 	var m api.Match
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		t.Fatalf("decoding fixture: %v", err)
@@ -210,3 +221,24 @@ func mustMatch(t *testing.T, raw string) api.Match {
 func intPtr(n int) *int { return &n }
 
 func epoch(n int64) *int64 { return &n }
+
+// requireSpec fails the test unless raw is valid against the spec schema at ptr.
+func requireSpec(t *testing.T, ptr, raw string) {
+	t.Helper()
+	s, err := apispec.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	problems, err := s.Check(ptr, []byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range problems {
+		// The 2022+ breakdown schemas overlap, so score_breakdown's oneOf
+		// always matches several; see cmd/spec_contract_test.go.
+		if p.Instance == "/score_breakdown" && strings.HasPrefix(p.Message, "'oneOf' failed, subschemas") {
+			continue
+		}
+		t.Errorf("fixture does not match %s: %s", ptr, p)
+	}
+}
